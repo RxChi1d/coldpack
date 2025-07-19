@@ -1,0 +1,386 @@
+"""Multi-format extractor using py7zz with intelligent directory structure detection."""
+
+from pathlib import Path
+from typing import Union
+
+import py7zz  # type: ignore
+from loguru import logger
+
+from ..config.constants import SUPPORTED_INPUT_FORMATS
+from ..utils.filesystem import safe_file_operations
+
+
+class ExtractionError(Exception):
+    """Base exception for extraction operations."""
+
+    pass
+
+
+class UnsupportedFormatError(ExtractionError):
+    """Raised when the archive format is not supported."""
+
+    pass
+
+
+class MultiFormatExtractor:
+    """Multi-format extractor with intelligent directory structure handling."""
+
+    def __init__(self) -> None:
+        """Initialize the extractor."""
+        logger.debug("MultiFormatExtractor initialized")
+
+    def extract(
+        self,
+        source: Union[str, Path],
+        output_dir: Union[str, Path],
+        preserve_structure: bool = True,
+    ) -> Path:
+        """Extract archive to output directory with intelligent structure detection.
+
+        Args:
+            source: Path to source archive or directory
+            output_dir: Directory to extract to
+            preserve_structure: Whether to preserve archive structure
+
+        Returns:
+            Path to the extracted content directory
+
+        Raises:
+            FileNotFoundError: If source doesn't exist
+            UnsupportedFormatError: If format is not supported
+            ExtractionError: If extraction fails
+        """
+        source_path = Path(source)
+        output_path = Path(output_dir)
+
+        if not source_path.exists():
+            raise FileNotFoundError(f"Source not found: {source_path}")
+
+        # Handle directory input (no extraction needed)
+        if source_path.is_dir():
+            return self._handle_directory_input(source_path, output_path)
+
+        # Handle archive files
+        return self._extract_archive(source_path, output_path, preserve_structure)
+
+    def _handle_directory_input(self, source_dir: Path, output_dir: Path) -> Path:
+        """Handle directory input by returning the source path.
+
+        Args:
+            source_dir: Source directory path
+            output_dir: Output directory path (unused for directories)
+
+        Returns:
+            Path to the source directory
+        """
+        logger.info(f"Source is directory, using directly: {source_dir}")
+        return source_dir
+
+    def _extract_archive(
+        self, archive_path: Path, output_dir: Path, preserve_structure: bool
+    ) -> Path:
+        """Extract archive file using py7zz.
+
+        Args:
+            archive_path: Path to archive file
+            output_dir: Directory to extract to
+            preserve_structure: Whether to preserve archive structure
+
+        Returns:
+            Path to extracted content
+
+        Raises:
+            UnsupportedFormatError: If format is not supported
+            ExtractionError: If extraction fails
+        """
+        # Check if format is supported
+        if not self._is_supported_format(archive_path):
+            raise UnsupportedFormatError(
+                f"Unsupported format: {archive_path.suffix}. "
+                f"Supported formats: {', '.join(SUPPORTED_INPUT_FORMATS)}"
+            )
+
+        # Ensure output directory exists
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            # Check archive structure to determine extraction strategy
+            has_single_root = self._check_archive_structure(archive_path)
+
+            if has_single_root and preserve_structure:
+                # Archive has single root directory, extract directly
+                return self._extract_with_structure(archive_path, output_dir)
+            else:
+                # Archive has multiple root items or flat structure
+                return self._extract_to_named_directory(archive_path, output_dir)
+
+        except Exception as e:
+            raise ExtractionError(f"Failed to extract {archive_path}: {e}") from e
+
+    def _is_supported_format(self, file_path: Path) -> bool:
+        """Check if file format is supported.
+
+        Args:
+            file_path: Path to the file
+
+        Returns:
+            True if format is supported
+        """
+        # Check single extension
+        if file_path.suffix.lower() in SUPPORTED_INPUT_FORMATS:
+            return True
+
+        # Check compound extensions (e.g., .tar.gz)
+        if len(file_path.suffixes) >= 2:
+            compound_suffix = "".join(file_path.suffixes[-2:]).lower()
+            if compound_suffix in SUPPORTED_INPUT_FORMATS:
+                return True
+
+        return False
+
+    def _check_archive_structure(self, archive_path: Path) -> bool:
+        """Check if archive has a single root directory structure.
+
+        Args:
+            archive_path: Path to the archive
+
+        Returns:
+            True if archive has single root directory matching the archive name
+
+        Raises:
+            ExtractionError: If structure cannot be determined
+        """
+        try:
+            logger.debug(f"Checking archive structure: {archive_path}")
+
+            with py7zz.SevenZipFile(archive_path, "r") as archive:
+                file_list = archive.namelist()
+
+                if not file_list:
+                    logger.warning(f"Archive is empty: {archive_path}")
+                    return False
+
+                # Extract first-level items (no path separators)
+                first_level_items = set()
+                for item in file_list:
+                    # Normalize path separators
+                    normalized_path = item.replace("\\", "/")
+
+                    # Get first component
+                    parts = normalized_path.split("/")
+                    if parts[0]:  # Skip empty parts
+                        first_level_items.add(parts[0])
+
+                # Check if there's exactly one first-level item
+                if len(first_level_items) == 1:
+                    root_name = next(iter(first_level_items))
+                    archive_name = archive_path.stem
+
+                    # Check if root directory name matches archive name
+                    if root_name == archive_name:
+                        # Verify it's actually a directory (has subdirectories/files)
+                        has_subdirectories = any(
+                            item.replace("\\", "/").startswith(f"{root_name}/")
+                            for item in file_list
+                        )
+
+                        if has_subdirectories:
+                            logger.debug(
+                                f"Archive has matching single root directory: {root_name}"
+                            )
+                            return True
+
+                logger.debug(f"Archive structure: {len(first_level_items)} root items")
+                return False
+
+        except Exception as e:
+            logger.error(f"Failed to check archive structure: {e}")
+            # On error, assume no single root (safer to create directory)
+            return False
+
+    def _extract_with_structure(self, archive_path: Path, output_dir: Path) -> Path:
+        """Extract archive preserving its internal structure.
+
+        Args:
+            archive_path: Path to the archive
+            output_dir: Output directory
+
+        Returns:
+            Path to the extracted root directory
+        """
+        logger.info(f"Extracting with preserved structure: {archive_path}")
+
+        with safe_file_operations() as safe_ops:
+            try:
+                with py7zz.SevenZipFile(archive_path, "r") as archive:
+                    archive.extractall(output_dir)
+
+                # Find the extracted root directory
+                archive_name = archive_path.stem
+                extracted_root = output_dir / archive_name
+
+                if extracted_root.exists() and extracted_root.is_dir():
+                    logger.success(f"Extracted to: {extracted_root}")
+                    return extracted_root
+                else:
+                    # Fallback: find the first directory in output
+                    for item in output_dir.iterdir():
+                        if item.is_dir():
+                            logger.success(f"Extracted to: {item}")
+                            return item
+
+                    raise ExtractionError("No directory found after extraction")
+
+            except Exception as e:
+                raise ExtractionError(f"Extraction failed: {e}") from e
+
+    def _extract_to_named_directory(self, archive_path: Path, output_dir: Path) -> Path:
+        """Extract archive to a directory named after the archive.
+
+        Args:
+            archive_path: Path to the archive
+            output_dir: Output directory
+
+        Returns:
+            Path to the created target directory
+        """
+        archive_name = archive_path.stem
+        target_dir = output_dir / archive_name
+
+        logger.info(f"Extracting to named directory: {target_dir}")
+
+        with safe_file_operations() as safe_ops:
+            try:
+                # Create target directory
+                target_dir.mkdir(parents=True, exist_ok=True)
+                safe_ops.track_directory(target_dir)
+
+                # Extract to target directory
+                with py7zz.SevenZipFile(archive_path, "r") as archive:
+                    archive.extractall(target_dir)
+
+                # Verify extraction
+                if not any(target_dir.iterdir()):
+                    raise ExtractionError("Target directory is empty after extraction")
+
+                logger.success(f"Extracted to: {target_dir}")
+                return target_dir
+
+            except Exception as e:
+                raise ExtractionError(
+                    f"Extraction to named directory failed: {e}"
+                ) from e
+
+    def get_archive_info(self, archive_path: Union[str, Path]) -> dict:
+        """Get information about an archive without extracting it.
+
+        Args:
+            archive_path: Path to the archive
+
+        Returns:
+            Dictionary with archive information
+
+        Raises:
+            FileNotFoundError: If archive doesn't exist
+            UnsupportedFormatError: If format is not supported
+            ExtractionError: If info cannot be obtained
+        """
+        archive_obj = Path(archive_path)
+
+        if not archive_obj.exists():
+            raise FileNotFoundError(f"Archive not found: {archive_obj}")
+
+        if not self._is_supported_format(archive_obj):
+            raise UnsupportedFormatError(f"Unsupported format: {archive_obj.suffix}")
+
+        try:
+            with py7zz.SevenZipFile(archive_obj, "r") as archive:
+                file_list = archive.namelist()
+
+                # Calculate basic statistics
+                file_count = len(file_list)
+                has_single_root = self._check_archive_structure(archive_obj)
+
+                # Get archive size
+                archive_size = archive_obj.stat().st_size
+
+                return {
+                    "path": str(archive_obj),
+                    "format": archive_obj.suffix,
+                    "size": archive_size,
+                    "file_count": file_count,
+                    "has_single_root": has_single_root,
+                    "root_name": archive_obj.stem if has_single_root else None,
+                    "files": file_list[:10]
+                    if file_count <= 10
+                    else file_list[:10] + ["..."],
+                }
+
+        except Exception as e:
+            raise ExtractionError(f"Failed to get archive info: {e}") from e
+
+    def validate_archive(self, archive_path: Union[str, Path]) -> bool:
+        """Validate archive integrity without extracting.
+
+        Args:
+            archive_path: Path to the archive
+
+        Returns:
+            True if archive is valid
+
+        Raises:
+            FileNotFoundError: If archive doesn't exist
+            UnsupportedFormatError: If format is not supported
+        """
+        archive_obj = Path(archive_path)
+
+        if not archive_obj.exists():
+            raise FileNotFoundError(f"Archive not found: {archive_obj}")
+
+        if not self._is_supported_format(archive_obj):
+            raise UnsupportedFormatError(f"Unsupported format: {archive_obj.suffix}")
+
+        try:
+            logger.debug(f"Validating archive: {archive_obj}")
+
+            with py7zz.SevenZipFile(archive_obj, "r") as archive:
+                # Try to read the file list - this will fail if archive is corrupted
+                file_list = archive.namelist()
+
+                # Basic validation: archive should have files
+                if not file_list:
+                    logger.warning(f"Archive is empty: {archive_obj}")
+                    return False
+
+                logger.debug(f"Archive validation passed: {len(file_list)} files")
+                return True
+
+        except Exception as e:
+            logger.error(f"Archive validation failed: {e}")
+            return False
+
+
+def extract_archive(source: Union[str, Path], output_dir: Union[str, Path]) -> Path:
+    """Convenience function to extract an archive.
+
+    Args:
+        source: Path to source archive or directory
+        output_dir: Directory to extract to
+
+    Returns:
+        Path to extracted content
+
+    Raises:
+        ExtractionError: If extraction fails
+    """
+    extractor = MultiFormatExtractor()
+    return extractor.extract(source, output_dir)
+
+
+def get_supported_formats() -> set[str]:
+    """Get set of supported archive formats.
+
+    Returns:
+        Set of supported file extensions
+    """
+    return SUPPORTED_INPUT_FORMATS.copy()
