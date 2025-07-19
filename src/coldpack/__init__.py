@@ -10,7 +10,19 @@ from .core.extractor import MultiFormatExtractor
 from .core.repairer import ArchiveRepairer
 from .core.verifier import ArchiveVerifier
 
-__version__ = "0.1.0"
+# Dynamic version detection using hatch-vcs
+try:
+    # Standard way for installed packages
+    from importlib.metadata import version
+    __version__ = version("coldpack")
+except ImportError:
+    # Fallback for Python < 3.8 (though we require 3.9+)
+    try:
+        from importlib_metadata import version
+        __version__ = version("coldpack")
+    except (ImportError, Exception):
+        # Final fallback for development/edge cases
+        __version__ = "0.0.0+unknown"
 __author__ = "coldpack contributors"
 __license__ = "BSD-3-Clause"
 
