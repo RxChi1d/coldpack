@@ -1,0 +1,28 @@
+repos:
+  # Standard file checks (trailing whitespace, file endings, etc.)
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+
+  # Ruff linting and formatting
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.3  # Match version from pyproject.toml dev dependencies
+    hooks:
+      - id: ruff
+        args: [ --fix ]  # Auto-fix lint issues
+        types_or: [ python, pyi ]
+      - id: ruff-format
+        types_or: [ python, pyi ]
+
+  # MyPy type checking
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.14.1  # Match version from pyproject.toml dev dependencies
+    hooks:
+      - id: mypy
+        args: [--ignore-missing-imports]
+        types_or: [ python, pyi ]

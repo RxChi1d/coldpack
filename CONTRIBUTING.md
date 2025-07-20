@@ -14,17 +14,31 @@ Thank you for your interest in contributing to coldpack! This document provides 
    ```bash
    # Install uv (if not already installed)
    curl -LsSf https://astral.sh/uv/install.sh | sh
-   
+
    # Create virtual environment and install dependencies
    uv sync --dev
-   
+
    # Activate virtual environment
    source .venv/bin/activate  # Unix/macOS
    # or .venv\Scripts\activate  # Windows
    ```
 
-3. **Run Quality Checks**
+3. **Install Pre-commit Hooks**
    ```bash
+   # Install and set up pre-commit hooks
+   uv run pre-commit install
+
+   # Run initial check on all files
+   uv run pre-commit run --all-files
+   ```
+
+4. **Run Quality Checks (Automated)**
+   ```bash
+   # Pre-commit hooks will run automatically on commit
+   # To run manually before committing:
+   uv run pre-commit run --all-files
+
+   # Manual quality checks (backup method):
    uv run ruff format .        # Format code
    uv run ruff check --fix .   # Lint and fix issues
    uv run mypy src/            # Type checking
@@ -47,7 +61,11 @@ Thank you for your interest in contributing to coldpack! This document provides 
 
 3. **Test Your Changes**
    ```bash
-   # Run the complete quality check pipeline
+   # Option 1: Automated via pre-commit (recommended)
+   git add .
+   git commit -m "your message"  # Hooks run automatically
+
+   # Option 2: Manual quality checks
    uv run ruff format .
    uv run ruff check --fix .
    uv run mypy src/
@@ -174,13 +192,13 @@ git commit -m "docs(readme): add installation troubleshooting"
 ## Pull Request Process
 
 1. **PR Title Convention**
-   
+
    **IMPORTANT**: PR titles are used for release notes generation and must follow the same convention as commit messages:
-   
+
    ```
    <type>(<scope>): <description>
    ```
-   
+
    **Examples:**
    ```
    feat: add async archive operations with progress callbacks
@@ -188,15 +206,16 @@ git commit -m "docs(readme): add installation troubleshooting"
    docs: add comprehensive cold storage workflow guide
    perf: optimize memory usage for large archive processing
    ```
-   
+
    **Why this matters:**
    - PR titles appear directly in release notes
    - Automatic labeling based on PR title
    - Semantic version determination (feat = minor, fix = patch)
 
 2. **Pre-submission Checklist**
+   - [ ] Pre-commit hooks are installed: `uv run pre-commit install`
    - [ ] PR title follows conventional format
-   - [ ] All quality checks pass locally
+   - [ ] All quality checks pass (automatically via pre-commit or manually)
    - [ ] Tests are added for new functionality
    - [ ] Documentation is updated if needed
    - [ ] Commit messages follow convention
