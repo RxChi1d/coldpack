@@ -74,7 +74,7 @@ def archive(
         ..., help="Source file, directory, or archive to process"
     ),
     output: Optional[Path] = typer.Option(
-        None, "-o", "--output", help="Output directory (default: current directory)"
+        None, "-o", "--output-dir", help="Output directory (default: current directory)"
     ),
     name: Optional[str] = typer.Option(
         None, "-n", "--name", help="Archive name (default: source name)"
@@ -172,7 +172,7 @@ def archive(
 def extract(
     archive: Path = typer.Argument(..., help="Archive file to extract"),
     output: Optional[Path] = typer.Option(
-        None, "-o", "--output", help="Output directory (default: current directory)"
+        None, "-o", "--output-dir", help="Output directory (default: current directory)"
     ),
     verbose: bool = typer.Option(False, "-v", "--verbose", help="Verbose output"),
 ) -> None:

@@ -42,10 +42,10 @@ pip install coldpack
 
 ```bash
 # Archive a directory
-cpack archive /path/to/source --output /path/to/output
+cpack archive /path/to/source --output-dir /path/to/output
 
 # Archive an existing archive file
-cpack archive archive.zip --output /path/to/output
+cpack archive archive.zip --output-dir /path/to/output
 
 # Custom compression level
 cpack archive /path/to/source --compression-level 22 --ultra
@@ -55,10 +55,10 @@ cpack archive /path/to/source --compression-level 22 --ultra
 
 ```bash
 # Extract cold storage archive
-cpack extract archive.tar.zst --output /path/to/extract
+cpack extract archive.tar.zst --output-dir /path/to/extract
 
 # Extract any supported format
-cpack extract archive.7z --output /path/to/extract
+cpack extract archive.7z --output-dir /path/to/extract
 ```
 
 ### Verify Archive Integrity

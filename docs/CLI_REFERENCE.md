@@ -29,7 +29,7 @@ cpack archive [OPTIONS] SOURCE
 
 #### Options
 ```bash
---output, -o DIRECTORY          # Output directory (default: ./archives)
+--output-dir, -o DIRECTORY      # Output directory (default: ./archives)
 --archive-name, -n NAME         # Custom archive name (default: source name)
 --compression-level, -l LEVEL   # Compression level 1-22 (default: 19)
 --threads, -t COUNT             # Number of threads (default: auto)
@@ -88,7 +88,7 @@ cpack extract [OPTIONS] ARCHIVE
 
 #### Options
 ```bash
---output, -o DIRECTORY          # Output directory (default: ./extracted)
+--output-dir, -o DIRECTORY      # Output directory (default: ./extracted)
 --verify                        # Verify before extraction (for .tar.zst)
 --force                         # Overwrite existing files
 --preserve-structure            # Preserve original directory structure
