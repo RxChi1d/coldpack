@@ -1,13 +1,13 @@
 version: 2
 updates:
   # Python dependencies
-  - package-ecosystem: "pip"
+  - package-ecosystem: "uv"
     directory: "/"
     schedule:
-      interval: "monthly"
+      interval: "weekly"
       day: "monday"
       time: "02:00"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
     reviewers:
       - "rxchi1d"
     assignees:
@@ -18,30 +18,43 @@ updates:
     labels:
       - "dependencies"
       - "python"
+    # 優先處理安全性更新和直接依賴
+    allow:
+      - dependency-type: "direct"
+    # 忽略非關鍵的 patch 版本更新（減少 PR 數量）
     ignore:
-      # Ignore Python version updates below 3.9 (coldpack minimum requirement)
-      - dependency-name: "python"
-        versions: ["< 3.9"]
+      - dependency-name: "*"
+        update-types: ["version-update:semver-patch"]
     groups:
-      development-dependencies:
-        dependency-type: "development"
-        patterns:
-          - "pytest*"
-          - "ruff*"
-          - "mypy*"
-          - "*-dev"
-          - "*-test*"
-      production-dependencies:
-        dependency-type: "production"
+      # 核心依賴：主要功能套件
+      core-dependencies:
         patterns:
           - "py7zz"
           - "zstandard"
           - "blake3"
+          - "par2cmdline-turbo"
+      # CLI 依賴：使用者介面相關
+      cli-dependencies:
+        patterns:
           - "typer"
           - "rich"
           - "pydantic"
           - "loguru"
-          - "par2cmdline-turbo"
+      # 開發依賴：測試與程式碼品質
+      dev-dependencies:
+        patterns:
+          - "pytest*"
+          - "ruff*"
+          - "mypy*"
+          - "build"
+          - "twine"
+          - "*-cov"
+          - "*-asyncio"
+      # 建置依賴：專案建置工具
+      build-dependencies:
+        patterns:
+          - "hatchling"
+          - "hatch-*"
 
   # GitHub Actions
   - package-ecosystem: "github-actions"
