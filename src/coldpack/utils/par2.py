@@ -4,7 +4,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from loguru import logger
 
@@ -77,7 +77,7 @@ class PAR2Manager:
 
         return None
 
-    def create_recovery_files(self, file_path: Union[str, Path]) -> List[Path]:
+    def create_recovery_files(self, file_path: Union[str, Path]) -> list[Path]:
         """Create PAR2 recovery files for a file.
 
         Args:
@@ -97,7 +97,6 @@ class PAR2Manager:
 
         # PAR2 base name (without .par2 extension)
         par2_base = str(file_obj)
-        par2_main_file = f"{par2_base}.par2"
 
         # Build par2 create command
         cmd = [
@@ -159,10 +158,10 @@ class PAR2Manager:
                 except OSError:
                     pass
 
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as e:
             raise PAR2Error(
                 "PAR2 creation timed out (file too large or system too slow)"
-            )
+            ) from e
         except subprocess.SubprocessError as e:
             raise PAR2Error(f"PAR2 command execution failed: {e}") from e
         except Exception as e:
@@ -214,8 +213,8 @@ class PAR2Manager:
                 )
                 return False
 
-        except subprocess.TimeoutExpired:
-            raise PAR2Error("PAR2 verification timed out")
+        except subprocess.TimeoutExpired as e:
+            raise PAR2Error("PAR2 verification timed out") from e
         except subprocess.SubprocessError as e:
             raise PAR2Error(f"PAR2 verification command failed: {e}") from e
 
@@ -265,12 +264,12 @@ class PAR2Manager:
                 )
                 return False
 
-        except subprocess.TimeoutExpired:
-            raise PAR2Error("PAR2 repair timed out")
+        except subprocess.TimeoutExpired as e:
+            raise PAR2Error("PAR2 repair timed out") from e
         except subprocess.SubprocessError as e:
             raise PAR2Error(f"PAR2 repair command failed: {e}") from e
 
-    def _find_par2_files(self, original_file: Path) -> List[Path]:
+    def _find_par2_files(self, original_file: Path) -> list[Path]:
         """Find all PAR2 files created for an original file.
 
         Args:
@@ -330,7 +329,7 @@ def check_par2_availability() -> bool:
         True if PAR2 is available
     """
     try:
-        manager = PAR2Manager()
+        PAR2Manager()
         return True
     except PAR2NotFoundError:
         return False

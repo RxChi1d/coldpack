@@ -1,7 +1,7 @@
 """Rich progress display system and progress tracking utilities."""
 
 import time
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Optional
 
 from loguru import logger
 from rich.console import Console
@@ -80,9 +80,9 @@ class ProgressTracker:
         self.show_speed = show_speed
         self.show_eta = show_eta
         self._progress: Optional[Progress] = None
-        self._tasks: Dict[str, TaskID] = {}
-        self._start_times: Dict[str, float] = {}
-        self._last_update: Dict[str, float] = {}
+        self._tasks: dict[str, TaskID] = {}
+        self._start_times: dict[str, float] = {}
+        self._last_update: dict[str, float] = {}
 
     def __enter__(self) -> "ProgressTracker":
         """Enter context manager."""
@@ -366,7 +366,7 @@ class SimpleProgressBar:
 
 
 def display_operation_summary(
-    operations: Dict[str, Any], console: Optional[Console] = None
+    operations: dict[str, Any], console: Optional[Console] = None
 ) -> None:
     """Display a summary of completed operations.
 

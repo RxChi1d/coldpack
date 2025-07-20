@@ -1,5 +1,6 @@
 """Zstandard compression utilities with dynamic parameter optimization."""
 
+import contextlib
 import os
 from pathlib import Path
 from typing import Any, Optional, Union
@@ -93,10 +94,8 @@ class ZstdCompressor:
         except Exception as e:
             # Clean up partial output file
             if output_file.exists():
-                try:
+                with contextlib.suppress(OSError):
                     output_file.unlink()
-                except OSError:
-                    pass
             raise CompressionError(f"Compression failed: {e}") from e
 
     def compress_data(self, data: bytes) -> bytes:
@@ -173,10 +172,8 @@ class ZstdDecompressor:
         except Exception as e:
             # Clean up partial output file
             if output_file.exists():
-                try:
+                with contextlib.suppress(OSError):
                     output_file.unlink()
-                except OSError:
-                    pass
             raise CompressionError(f"Decompression failed: {e}") from e
 
     def decompress_data(self, data: bytes) -> bytes:

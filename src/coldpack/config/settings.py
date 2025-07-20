@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -56,7 +56,7 @@ class ArchiveMetadata(BaseModel):
     original_size: int = Field(default=0, ge=0)
     compressed_size: int = Field(default=0, ge=0)
     compression_ratio: float = Field(default=0.0, ge=0.0, le=1.0)
-    verification_hashes: Dict[str, str] = Field(default_factory=dict)
+    verification_hashes: dict[str, str] = Field(default_factory=dict)
     par2_files: list[str] = Field(default_factory=list)
 
     @property

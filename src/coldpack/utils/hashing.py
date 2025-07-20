@@ -2,7 +2,7 @@
 
 import hashlib
 from pathlib import Path
-from typing import Callable, Dict, Optional, Union
+from typing import Callable, Optional, Union
 
 import blake3
 from loguru import logger
@@ -39,7 +39,7 @@ class DualHasher:
         self.blake3_hasher.update(data)
         self._bytes_processed += len(data)
 
-    def finalize(self) -> Dict[str, str]:
+    def finalize(self) -> dict[str, str]:
         """Finalize hashing and return both hash values.
 
         Returns:
@@ -59,7 +59,7 @@ class DualHasher:
 def compute_file_hashes(
     file_path: Union[str, Path],
     progress_callback: Optional[Callable[[float, int, int], None]] = None,
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """Compute SHA-256 and BLAKE3 hashes for a file using streaming.
 
     Args:
@@ -147,8 +147,8 @@ def write_hash_file(
 
 
 def generate_hash_files(
-    file_path: Union[str, Path], hashes: Dict[str, str]
-) -> Dict[str, Path]:
+    file_path: Union[str, Path], hashes: dict[str, str]
+) -> dict[str, Path]:
     """Generate hash files for all computed hashes.
 
     Args:

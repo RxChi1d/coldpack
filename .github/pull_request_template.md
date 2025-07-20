@@ -1,4 +1,4 @@
-<!-- 
+<!--
 🚨 IMPORTANT: PR Title Convention
 Your PR title must follow conventional commits format:
 <type>(<scope>): <description>

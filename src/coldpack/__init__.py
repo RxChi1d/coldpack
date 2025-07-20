@@ -14,11 +14,13 @@ from .core.verifier import ArchiveVerifier
 try:
     # Standard way for installed packages
     from importlib.metadata import version
+
     __version__ = version("coldpack")
 except ImportError:
     # Fallback for Python < 3.8 (though we require 3.9+)
     try:
         from importlib_metadata import version
+
         __version__ = version("coldpack")
     except (ImportError, Exception):
         # Final fallback for development/edge cases

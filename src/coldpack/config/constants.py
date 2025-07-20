@@ -1,6 +1,5 @@
 """Constants and default values for coldpack."""
 
-
 # Compression defaults
 DEFAULT_COMPRESSION_LEVEL = 19
 DEFAULT_THREADS = 0  # Auto-detect

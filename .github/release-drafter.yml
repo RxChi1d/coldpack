@@ -60,7 +60,7 @@ autolabeler:
   - label: 'feat'
     title:
       - '/^feat(\(.+\))?: .+/'
-  - label: 'fix'  
+  - label: 'fix'
     title:
       - '/^fix(\(.+\))?: .+/'
   - label: 'docs'

@@ -210,7 +210,7 @@ class MultiFormatExtractor:
         """
         logger.info(f"Extracting with preserved structure: {archive_path}")
 
-        with safe_file_operations() as safe_ops:
+        with safe_file_operations():
             try:
                 with py7zz.SevenZipFile(archive_path, "r") as archive:
                     archive.extractall(output_dir)

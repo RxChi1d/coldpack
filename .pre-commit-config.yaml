@@ -9,20 +9,40 @@ repos:
       - id: check-toml
       - id: check-merge-conflict
 
-  # Ruff linting and formatting
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.12.3  # Match version from pyproject.toml dev dependencies
+  # Fast linting and formatting (pre-commit only)
+  - repo: local
     hooks:
-      - id: ruff
-        args: [ --fix ]  # Auto-fix lint issues
-        types_or: [ python, pyi ]
-      - id: ruff-format
-        types_or: [ python, pyi ]
+      - id: ruff-check
+        name: ruff check
+        entry: uv run ruff check . --output-format=github
+        language: system
+        types: [python]
+        pass_filenames: false
+        stages: [pre-commit]
 
-  # MyPy type checking
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.14.1  # Match version from pyproject.toml dev dependencies
+      - id: ruff-format-check
+        name: ruff format check
+        entry: uv run ruff format --check --diff .
+        language: system
+        types: [python]
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: mypy-check
+        name: mypy type check
+        entry: uv run mypy src/
+        language: system
+        types: [python]
+        pass_filenames: false
+        stages: [pre-commit]
+
+  # Test suite (pre-push only)
+  - repo: local
     hooks:
-      - id: mypy
-        args: [--ignore-missing-imports]
-        types_or: [ python, pyi ]
+      - id: pytest
+        name: pytest test suite
+        entry: uv run pytest -v --tb=short
+        language: system
+        types: [python]
+        pass_filenames: false
+        stages: [pre-push]

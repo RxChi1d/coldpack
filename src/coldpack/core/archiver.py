@@ -3,7 +3,7 @@
 import subprocess
 import tarfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 from loguru import logger
 
@@ -39,7 +39,7 @@ class ArchiveResult:
         success: bool,
         metadata: Optional[ArchiveMetadata] = None,
         message: str = "",
-        created_files: Optional[List[Path]] = None,
+        created_files: Optional[list[Path]] = None,
         error_details: Optional[str] = None,
     ):
         """Initialize archive result.
@@ -470,7 +470,7 @@ class ColdStorageArchiver:
 
     def _generate_hash_files(
         self, archive_path: Path, safe_ops: Any
-    ) -> Dict[str, Path]:
+    ) -> dict[str, Path]:
         """Generate dual hash files.
 
         Args:
@@ -500,7 +500,7 @@ class ColdStorageArchiver:
             raise ArchivingError(f"Hash file generation failed: {e}") from e
 
     def _verify_hash_files(
-        self, archive_path: Path, hash_files: Dict[str, Path]
+        self, archive_path: Path, hash_files: dict[str, Path]
     ) -> None:
         """Verify hash files against archive.
 
@@ -520,7 +520,7 @@ class ColdStorageArchiver:
         except Exception as e:
             raise ArchivingError(f"Hash verification failed: {e}") from e
 
-    def _generate_par2_files(self, archive_path: Path, safe_ops: Any) -> List[Path]:
+    def _generate_par2_files(self, archive_path: Path, safe_ops: Any) -> list[Path]:
         """Generate PAR2 recovery files.
 
         Args:
@@ -549,7 +549,7 @@ class ColdStorageArchiver:
             raise ArchivingError(f"PAR2 generation failed: {e}") from e
 
     def _perform_final_verification(
-        self, archive_path: Path, hash_files: Dict[str, Path], par2_files: List[Path]
+        self, archive_path: Path, hash_files: dict[str, Path], par2_files: list[Path]
     ) -> None:
         """Perform final 5-layer verification.
 
@@ -582,8 +582,8 @@ class ColdStorageArchiver:
         source_path: Path,
         archive_path: Path,
         extracted_dir: Path,
-        hash_files: Dict[str, Path],
-        par2_files: List[Path],
+        hash_files: dict[str, Path],
+        par2_files: list[Path],
     ) -> ArchiveMetadata:
         """Create archive metadata.
 

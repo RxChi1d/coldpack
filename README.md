@@ -92,7 +92,7 @@ cpack formats
 
 ### Input Formats (11 supported)
 - `.7z` - 7-Zip archives
-- `.zip` - ZIP archives  
+- `.zip` - ZIP archives
 - `.rar` - RAR archives
 - `.tar` - TAR archives
 - `.tar.gz`, `.tgz` - Gzip compressed TAR
@@ -273,7 +273,7 @@ BSD-3-Clause License. See [LICENSE](LICENSE) for details.
 ## Support
 
 - Documentation: [CLI Reference](docs/CLI_REFERENCE.md)
-- Examples: [Usage Examples](docs/EXAMPLES.md) 
+- Examples: [Usage Examples](docs/EXAMPLES.md)
 - Issues: [GitHub Issues](https://github.com/rxchi1d/coldpack/issues)
 
 ---

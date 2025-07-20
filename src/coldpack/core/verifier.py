@@ -3,7 +3,7 @@
 import subprocess
 import tarfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 from loguru import logger
 
@@ -25,7 +25,7 @@ class VerificationResult:
         layer: str,
         success: bool,
         message: str = "",
-        details: Optional[Dict] = None,
+        details: Optional[dict] = None,
     ):
         """Initialize verification result.
 
@@ -60,9 +60,9 @@ class ArchiveVerifier:
     def verify_complete(
         self,
         archive_path: Union[str, Path],
-        hash_files: Optional[Dict[str, Path]] = None,
+        hash_files: Optional[dict[str, Path]] = None,
         par2_file: Optional[Path] = None,
-    ) -> List[VerificationResult]:
+    ) -> list[VerificationResult]:
         """Perform complete 5-layer verification.
 
         Args:
@@ -205,17 +205,21 @@ class ArchiveVerifier:
 
             # Method 1: Use tarfile with zstd decompression stream
             try:
-                with open(archive_obj, "rb") as f:
-                    assert self.decompressor._context is not None
-                    with self.decompressor._context.stream_reader(f) as reader:
-                        with tarfile.open(fileobj=reader, mode="r|") as tar:
-                            # Try to read tar info - this will fail if structure is invalid
-                            members = []
-                            for member in tar:
-                                members.append(member.name)
-                                # Limit check to avoid memory issues
-                                if len(members) > 1000:
-                                    break
+                if self.decompressor._context is None:
+                    raise ValueError("Decompressor context not initialized")
+
+                with (
+                    open(archive_obj, "rb") as f,
+                    self.decompressor._context.stream_reader(f) as reader,
+                    tarfile.open(fileobj=reader, mode="r|") as tar,
+                ):
+                    # Try to read tar info - this will fail if structure is invalid
+                    members = []
+                    for member in tar:
+                        members.append(member.name)
+                        # Limit check to avoid memory issues
+                        if len(members) > 1000:
+                            break
 
                 return VerificationResult(
                     "tar_header",
@@ -271,7 +275,7 @@ class ArchiveVerifier:
             )
 
     def verify_hash_files(
-        self, archive_path: Union[str, Path], hash_files: Dict[str, Path]
+        self, archive_path: Union[str, Path], hash_files: dict[str, Path]
     ) -> VerificationResult:
         """Verify hash files against the archive.
 
@@ -363,7 +367,7 @@ class ArchiveVerifier:
                 "par2_recovery", False, f"PAR2 verification error: {e}"
             )
 
-    def get_verification_summary(self, results: List[VerificationResult]) -> Dict:
+    def get_verification_summary(self, results: list[VerificationResult]) -> dict:
         """Get summary of verification results.
 
         Args:
@@ -413,9 +417,9 @@ class ArchiveVerifier:
 
 def verify_archive(
     archive_path: Union[str, Path],
-    hash_files: Optional[Dict[str, Path]] = None,
+    hash_files: Optional[dict[str, Path]] = None,
     par2_file: Optional[Path] = None,
-) -> List[VerificationResult]:
+) -> list[VerificationResult]:
     """Convenience function for complete archive verification.
 
     Args:

@@ -2,7 +2,7 @@
 
 import sys
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, Optional
 
 import typer
 from loguru import logger
@@ -70,36 +70,31 @@ def main(
 
 @app.command()
 def archive(
-    source: Path = typer.Argument(
-        ..., help="Source file, directory, or archive to process"
-    ),
-    output: Optional[Path] = typer.Option(
-        None, "-o", "--output-dir", help="Output directory (default: current directory)"
-    ),
-    name: Optional[str] = typer.Option(
-        None, "-n", "--name", help="Archive name (default: source name)"
-    ),
-    level: int = typer.Option(
-        19, "-l", "--level", min=1, max=22, help="Compression level (1-22)"
-    ),
-    threads: int = typer.Option(
-        0, "-t", "--threads", min=0, help="Number of threads (0=auto)"
-    ),
-    no_long: bool = typer.Option(
-        False, "--no-long", help="Disable long-distance matching"
-    ),
-    no_par2: bool = typer.Option(
-        False, "--no-par2", help="Skip PAR2 recovery file generation"
-    ),
-    no_verify: bool = typer.Option(
-        False, "--no-verify", help="Skip integrity verification"
-    ),
-    par2_redundancy: int = typer.Option(
-        10, "--par2-redundancy", min=1, max=50, help="PAR2 redundancy percentage"
-    ),
-    verbose: bool = typer.Option(False, "-v", "--verbose", help="Verbose output"),
+    source: Path,
+    output: Optional[Path] = None,
+    name: Optional[str] = None,
+    level: int = 19,
+    threads: int = 0,
+    no_long: bool = False,
+    no_par2: bool = False,
+    no_verify: bool = False,
+    par2_redundancy: int = 10,
+    verbose: bool = False,
 ) -> None:
-    """Create a cold storage archive with comprehensive verification."""
+    """Create a cold storage archive with comprehensive verification.
+
+    Args:
+        source: Source file, directory, or archive to process
+        output: Output directory (default: current directory)
+        name: Archive name (default: source name)
+        level: Compression level (1-22)
+        threads: Number of threads (0=auto)
+        no_long: Disable long-distance matching
+        no_par2: Skip PAR2 recovery file generation
+        no_verify: Skip integrity verification
+        par2_redundancy: PAR2 redundancy percentage
+        verbose: Verbose output
+    """
     setup_logging(verbose)
 
     # Validate source
@@ -140,7 +135,7 @@ def archive(
         archiver = ColdStorageArchiver(compression_settings, processing_options)
 
         # Create progress tracker
-        with ProgressTracker(console) as progress:
+        with ProgressTracker(console):
             console.print(f"[cyan]Creating cold storage archive from: {source}[/cyan]")
             console.print(f"[cyan]Output directory: {output}[/cyan]")
 
@@ -161,22 +156,26 @@ def archive(
 
     except KeyboardInterrupt:
         console.print("\n[yellow]Operation cancelled by user[/yellow]")
-        raise typer.Exit(ExitCodes.GENERAL_ERROR)
+        raise typer.Exit(ExitCodes.GENERAL_ERROR) from None
     except Exception as e:
         logger.error(f"Archive creation failed: {e}")
         console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(ExitCodes.GENERAL_ERROR)
+        raise typer.Exit(ExitCodes.GENERAL_ERROR) from e
 
 
 @app.command()
 def extract(
-    archive: Path = typer.Argument(..., help="Archive file to extract"),
-    output: Optional[Path] = typer.Option(
-        None, "-o", "--output-dir", help="Output directory (default: current directory)"
-    ),
-    verbose: bool = typer.Option(False, "-v", "--verbose", help="Verbose output"),
+    archive: Path,
+    output: Optional[Path] = None,
+    verbose: bool = False,
 ) -> None:
-    """Extract a cold storage archive or supported archive format."""
+    """Extract a cold storage archive or supported archive format.
+
+    Args:
+        archive: Archive file to extract
+        output: Output directory (default: current directory)
+        verbose: Verbose output
+    """
     setup_logging(verbose)
 
     # Validate archive
@@ -203,22 +202,26 @@ def extract(
     except Exception as e:
         logger.error(f"Extraction failed: {e}")
         console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(ExitCodes.EXTRACTION_FAILED)
+        raise typer.Exit(ExitCodes.EXTRACTION_FAILED) from e
 
 
 @app.command()
 def verify(
-    archive: Path = typer.Argument(..., help="Archive file to verify"),
-    hash_files: Optional[List[Path]] = typer.Option(
-        None, "--hash", help="Hash files for verification"
-    ),
-    par2_file: Optional[Path] = typer.Option(None, "--par2", help="PAR2 recovery file"),
-    quick: bool = typer.Option(
-        False, "-q", "--quick", help="Quick verification (zstd integrity only)"
-    ),
-    verbose: bool = typer.Option(False, "-v", "--verbose", help="Verbose output"),
+    archive: Path,
+    hash_files: Optional[list[Path]] = None,
+    par2_file: Optional[Path] = None,
+    quick: bool = False,
+    verbose: bool = False,
 ) -> None:
-    """Verify archive integrity using multiple verification layers."""
+    """Verify archive integrity using multiple verification layers.
+
+    Args:
+        archive: Archive file to verify
+        hash_files: Hash files for verification
+        par2_file: PAR2 recovery file
+        quick: Quick verification (zstd integrity only)
+        verbose: Verbose output
+    """
     setup_logging(verbose)
 
     # Validate archive
@@ -280,15 +283,20 @@ def verify(
     except Exception as e:
         logger.error(f"Verification failed: {e}")
         console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(ExitCodes.VERIFICATION_FAILED)
+        raise typer.Exit(ExitCodes.VERIFICATION_FAILED) from e
 
 
 @app.command()
 def repair(
-    par2_file: Path = typer.Argument(..., help="PAR2 recovery file"),
-    verbose: bool = typer.Option(False, "-v", "--verbose", help="Verbose output"),
+    par2_file: Path,
+    verbose: bool = False,
 ) -> None:
-    """Repair a corrupted archive using PAR2 recovery files."""
+    """Repair a corrupted archive using PAR2 recovery files.
+
+    Args:
+        par2_file: PAR2 recovery file
+        verbose: Verbose output
+    """
     setup_logging(verbose)
 
     # Validate PAR2 file
@@ -328,15 +336,20 @@ def repair(
     except Exception as e:
         logger.error(f"Repair failed: {e}")
         console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(ExitCodes.GENERAL_ERROR)
+        raise typer.Exit(ExitCodes.GENERAL_ERROR) from e
 
 
 @app.command()
 def info(
-    path: Path = typer.Argument(..., help="Archive file or PAR2 file to analyze"),
-    verbose: bool = typer.Option(False, "-v", "--verbose", help="Verbose output"),
+    path: Path,
+    verbose: bool = False,
 ) -> None:
-    """Display information about an archive or PAR2 recovery files."""
+    """Display information about an archive or PAR2 recovery files.
+
+    Args:
+        path: Archive file or PAR2 file to analyze
+        verbose: Verbose output
+    """
     setup_logging(verbose)
 
     # Validate path
@@ -355,7 +368,7 @@ def info(
     except Exception as e:
         logger.error(f"Info retrieval failed: {e}")
         console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(ExitCodes.GENERAL_ERROR)
+        raise typer.Exit(ExitCodes.GENERAL_ERROR) from e
 
 
 def display_archive_summary(result: Any) -> None:

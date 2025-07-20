@@ -220,7 +220,7 @@ BACKUP_DIR="/backup/projects"
 for project in "$PROJECTS_DIR"/*/; do
     project_name=$(basename "$project")
     echo "Archiving $project_name..."
-    
+
     cpack archive "$project" \
         -o "$BACKUP_DIR" \
         -n "${project_name}_$(date +%Y%m%d)" \
@@ -262,7 +262,7 @@ for old_archive in "$OLD_ARCHIVES_DIR"/*.{7z,zip,tar.gz}; do
     if [[ -f "$old_archive" ]]; then
         echo "Converting $(basename "$old_archive")..."
         cpack archive "$old_archive" -o "$NEW_ARCHIVES_DIR"
-        
+
         # Verify the new archive
         new_name=$(basename "$old_archive" | sed 's/\.[^.]*$//')
         if cpack verify "$NEW_ARCHIVES_DIR/$new_name/$new_name.tar.zst"; then
@@ -338,24 +338,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Install coldpack
         run: pip install coldpack
-        
+
       - name: Build project
         run: |
           mkdir build
           # Your build commands here
           echo "Build artifacts" > build/artifacts.txt
-          
+
       - name: Create archive
         run: |
           cpack archive ./build/ -o ./archives -n "release_${{ github.event.release.tag_name }}"
-          
+
       - name: Verify archive
         run: |
           cpack verify ./archives/release_${{ github.event.release.tag_name }}/release_${{ github.event.release.tag_name }}.tar.zst
-          
+
       - name: Upload archive
         uses: actions/upload-artifact@v3
         with:
@@ -601,7 +601,7 @@ if cpack verify "$ARCHIVE" --quiet; then
     echo "✓ Archive integrity verified"
 else
     echo "⚠ Archive verification failed, attempting repair..."
-    
+
     # Step 2: Attempt repair
     if cpack repair "$ARCHIVE" --verify-after --quiet; then
         echo "✓ Archive repaired successfully"

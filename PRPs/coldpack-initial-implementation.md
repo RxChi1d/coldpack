@@ -84,7 +84,7 @@ coldpack/
 ├── coldpack-implementation.md # 實施計畫
 ├── examples/                  # 參考範例
 │   ├── CLAUDE.md             # 開發規範範本
-│   ├── pyproject.toml        # 配置範本  
+│   ├── pyproject.toml        # 配置範本
 │   ├── VERSION_STRATEGY.md   # 版本策略
 │   ├── API.md                # API 設計參考
 │   └── archive-compress.sh   # 實現邏輯參考
@@ -316,7 +316,7 @@ class ZstdCompressor:
             threads=threads,
             long_distance_matching=long_mode
         )
-    
+
     def compress_file(self, input_path: Path, output_path: Path) -> None:
         # CRITICAL: 使用串流處理避免記憶體問題
         with open(input_path, 'rb') as ifh, open(output_path, 'wb') as ofh:
@@ -334,7 +334,7 @@ class MultiFormatExtractor:
                 # 智能目錄結構檢測
                 files = archive.namelist()
                 has_single_root = self._check_single_root_directory(files)
-                
+
                 if has_single_root:
                     # 直接解壓縮
                     archive.extractall(temp_dir)
@@ -356,23 +356,23 @@ class ColdStorageArchiver:
         with self.progress.track("Creating archive") as task:
             # 1. 解壓縮和結構檢查
             extracted_dir = self.extractor.extract(source, self.temp_dir)
-            
+
             # 2. TAR 建立和驗證
             tar_path = self._create_deterministic_tar(extracted_dir)
             self.verifier.verify_tar_header(tar_path)
-            
+
             # 3. Zstd 壓縮和驗證
             zst_path = self.compressor.compress(tar_path, output_dir)
             self.verifier.verify_zstd_integrity(zst_path)
-            
+
             # 4. 雙重雜湊生成和驗證
             hashes = self.hasher.generate_dual_hashes(zst_path)
             self.verifier.verify_dual_hashes(zst_path, hashes)
-            
+
             # 5. PAR2 生成和驗證
             par2_files = self.par2.generate_recovery(zst_path)
             self.verifier.verify_par2(zst_path, par2_files)
-            
+
             return ArchiveResult(success=True, files=all_files)
 
 # Task 4: cli.py CLI 實現
@@ -392,7 +392,7 @@ def archive(
     try:
         archiver = ColdStorageArchiver(level=level, threads=threads)
         result = archiver.create_archive(source, output or Path.cwd())
-        
+
         if result.success:
             console.print("[green]Archive created successfully![/green]")
             # 顯示統計資訊
@@ -410,7 +410,7 @@ EXTERNAL_TOOLS:
   - dependency: par2cmdline-turbo
     check: "par2 --help"
     install_hint: "sudo apt install par2cmdline 或 brew install par2"
-  
+
   - dependency: system tar
     check: "tar --help | grep -E '(posix|gnu)'"
     requirement: "支援 POSIX 或 GNU 格式處理大檔案"
@@ -513,7 +513,7 @@ cpack info output/sample/sample.tar.zst
 ## Anti-Patterns to Avoid
 - ❌ Don't load entire files into memory - use streaming
 - ❌ Don't create new compressor instances for each operation
-- ❌ Don't ignore verification failures - always abort on errors  
+- ❌ Don't ignore verification failures - always abort on errors
 - ❌ Don't use absolute paths in tar archives - maintain portability
 - ❌ Don't skip error handling - every operation can fail
 - ❌ Don't hardcode paths or assume specific operating systems
@@ -533,7 +533,7 @@ cpack info output/sample/sample.tar.zst
 
 **Potential Challenges:**
 - Cross-platform PAR2 tool availability may vary
-- Large file handling needs careful memory management  
+- Large file handling needs careful memory management
 - CLI UX design requires iteration based on user feedback
 
 The extensive context provided, combined with the reference implementation in shell script form, provides strong foundation for successful implementation in a single development cycle.

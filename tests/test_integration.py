@@ -1,6 +1,5 @@
 """Integration tests for coldpack core functionality."""
 
-
 import pytest
 
 from coldpack.config.settings import CompressionSettings, ProcessingOptions
@@ -133,9 +132,7 @@ class TestErrorHandling:
 
     def test_nonexistent_source(self, tmp_path):
         """Test handling of non-existent source."""
-        archiver = ColdStorageArchiver()
         nonexistent_path = tmp_path / "nonexistent"
-        output_dir = tmp_path / "output"
 
         # This should be caught at the validation level
         assert not nonexistent_path.exists()

@@ -1,7 +1,7 @@
 """PAR2 repair functionality for archive recovery operations."""
 
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 from loguru import logger
 
@@ -21,7 +21,7 @@ class RepairResult:
         self,
         success: bool,
         message: str = "",
-        repaired_files: Optional[List[str]] = None,
+        repaired_files: Optional[list[str]] = None,
         error_details: Optional[str] = None,
     ):
         """Initialize repair result.
@@ -131,7 +131,7 @@ class ArchiveRepairer:
                 success=False, message=f"Repair failed: {e}", error_details=str(e)
             )
 
-    def check_repair_capability(self, par2_file: Union[str, Path]) -> Dict:
+    def check_repair_capability(self, par2_file: Union[str, Path]) -> dict:
         """Check if an archive can be repaired and what damage exists.
 
         Args:
@@ -177,7 +177,7 @@ class ArchiveRepairer:
         except Exception as e:
             raise RepairError(f"Failed to check repair capability: {e}") from e
 
-    def create_recovery_files(self, file_path: Union[str, Path]) -> List[Path]:
+    def create_recovery_files(self, file_path: Union[str, Path]) -> list[Path]:
         """Create PAR2 recovery files for a file.
 
         Args:
@@ -254,7 +254,7 @@ class ArchiveRepairer:
 
     def _verify_before_repair(
         self, par2_file: Path, original_file: Optional[Path]
-    ) -> Dict:
+    ) -> dict:
         """Verify archive state before attempting repair.
 
         Args:
@@ -303,7 +303,7 @@ class ArchiveRepairer:
 
     def _verify_after_repair(
         self, par2_file: Path, original_file: Optional[Path]
-    ) -> Dict:
+    ) -> dict:
         """Verify archive state after repair.
 
         Args:
@@ -353,7 +353,7 @@ def repair_archive(par2_file: Union[str, Path]) -> RepairResult:
     return repairer.repair_archive(par2_file)
 
 
-def check_repair_capability(par2_file: Union[str, Path]) -> Dict:
+def check_repair_capability(par2_file: Union[str, Path]) -> dict:
     """Convenience function to check repair capability.
 
     Args:
@@ -371,7 +371,7 @@ def check_repair_capability(par2_file: Union[str, Path]) -> Dict:
 
 def create_recovery_files(
     file_path: Union[str, Path], redundancy_percent: int = 10
-) -> List[Path]:
+) -> list[Path]:
     """Convenience function to create PAR2 recovery files.
 
     Args:

@@ -287,8 +287,8 @@ def get_file_size(file_path: Union[str, Path]) -> int:
 
     try:
         return path.stat().st_size
-    except FileNotFoundError:
-        raise FileNotFoundError(f"File not found: {path}")
+    except FileNotFoundError as e:
+        raise FileNotFoundError(f"File not found: {path}") from e
     except OSError as e:
         raise FilesystemError(f"Cannot get file size for {path}: {e}") from e
 

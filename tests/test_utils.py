@@ -1,6 +1,5 @@
 """Tests for utility modules."""
 
-
 import pytest
 
 from coldpack.utils.filesystem import (
