@@ -4,29 +4,24 @@ This package provides a standardized solution for creating tar.zst cold storage
 archives with comprehensive verification and repair mechanisms.
 """
 
+from importlib.metadata import PackageNotFoundError
+
+# Dynamic version detection using hatch-vcs
+from importlib.metadata import version as _get_version
+
 from .config.settings import ArchiveMetadata, CompressionSettings
 from .core.archiver import ColdStorageArchiver
 from .core.extractor import MultiFormatExtractor
 from .core.repairer import ArchiveRepairer
 from .core.verifier import ArchiveVerifier
 
-# Dynamic version detection using hatch-vcs
 try:
-    # Standard way for installed packages (Python 3.8+)
-    from importlib.metadata import version as _get_version
-
     __version__ = _get_version("coldpack")
-except ImportError:
-    # Fallback for older Python versions or missing package
-    try:
-        from importlib_metadata import version as _get_version
-
-        __version__ = _get_version("coldpack")
-    except (ImportError, Exception):
-        # Final fallback for development/edge cases
-        __version__ = "0.0.0+unknown"
+except PackageNotFoundError:  # pragma: no cover
+    # Fallback for development/edge cases when the package metadata isn't available
+    __version__ = "0.0.0+unknown"
 __author__ = "coldpack contributors"
-__license__ = "BSD-3-Clause"
+__license__ = "MIT"
 
 # Main API exports
 __all__ = [
