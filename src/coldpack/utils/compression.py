@@ -42,7 +42,8 @@ class ZstdCompressor:
             )
             logger.debug(
                 f"Created zstd compressor: level={self.settings.level}, "
-                f"threads={self.settings.threads}, long_mode={self.settings.long_mode}"
+                f"threads={self.settings.threads}, long_mode={self.settings.long_mode}, "
+                f"long_distance={self.settings.long_distance}"
             )
         except Exception as e:
             raise CompressionError(f"Failed to create zstd compressor: {e}") from e
