@@ -99,6 +99,7 @@ class ColdStorageArchiver:
 
         # Detect an external tar/bsdtar command that supports deterministic --sort=name
         self._external_tar_cmd: Optional[list[str]] = self._detect_tar_sort_command()
+        self._tar_method = self._get_tar_method_description()
 
     def create_archive(
         self,
@@ -255,6 +256,25 @@ class ColdStorageArchiver:
         # Windows 或其他：直接回傳 None，代表後續使用 Python tarfile fallback
         return None
 
+    def _get_tar_method_description(self) -> str:
+        """Get a description of the TAR method that will be used.
+
+        Returns:
+            Human-readable description of the TAR creation method
+        """
+        if self._external_tar_cmd is None:
+            return "Python tarfile"
+
+        base_exe = Path(self._external_tar_cmd[0]).name.lower()
+        if "gtar" in base_exe:
+            return "GNU tar"
+        elif "bsdtar" in base_exe:
+            return "BSD tar"
+        elif "tar" in base_exe:
+            return "GNU tar"
+        else:
+            return "External tar"
+
     @staticmethod
     def _supports_gnu_sort(tar_exe: str) -> bool:
         """Return ``True`` if *tar_exe* understands ``--sort=name``."""
@@ -406,7 +426,7 @@ class ColdStorageArchiver:
         Returns:
             Path to created TAR file
         """
-        logger.info("Step 2: Creating deterministic TAR archive")
+        logger.info(f"Step 2: Creating deterministic TAR archive ({self._tar_method})")
 
         tar_path = output_dir / f"{archive_name}.tar"
         safe_ops.track_file(tar_path)
