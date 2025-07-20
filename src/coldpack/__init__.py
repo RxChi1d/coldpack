@@ -12,16 +12,16 @@ from .core.verifier import ArchiveVerifier
 
 # Dynamic version detection using hatch-vcs
 try:
-    # Standard way for installed packages
-    from importlib.metadata import version
+    # Standard way for installed packages (Python 3.8+)
+    from importlib.metadata import version as get_package_version
 
-    __version__ = version("coldpack")
+    __version__ = get_package_version("coldpack")
 except ImportError:
-    # Fallback for Python < 3.8 (though we require 3.9+)
+    # Fallback for older Python versions or missing package
     try:
-        from importlib_metadata import version
+        from importlib_metadata import version as get_package_version
 
-        __version__ = version("coldpack")
+        __version__ = get_package_version("coldpack")
     except (ImportError, Exception):
         # Final fallback for development/edge cases
         __version__ = "0.0.0+unknown"

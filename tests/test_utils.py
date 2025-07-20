@@ -25,12 +25,17 @@ class TestFilesystemUtils:
 
     def test_create_and_cleanup_temp_directory(self):
         """Test temporary directory creation and cleanup."""
+        import platform
+
         # Create temp directory
         temp_dir = create_temp_directory()
 
         assert temp_dir.exists()
         assert temp_dir.is_dir()
-        assert oct(temp_dir.stat().st_mode)[-3:] == "700"  # Check permissions
+
+        # Check permissions (only on Unix-like systems)
+        if platform.system() != "Windows":
+            assert oct(temp_dir.stat().st_mode)[-3:] == "700"
 
         # Cleanup
         success = cleanup_temp_directory(temp_dir)
