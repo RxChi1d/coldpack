@@ -13,6 +13,12 @@ class CompressionSettings(BaseModel):
     level: int = Field(default=19, ge=1, le=22, description="Compression level")
     threads: int = Field(default=0, ge=0, description="Number of threads (0=auto)")
     long_mode: bool = Field(default=True, description="Enable long-distance matching")
+    long_distance: Optional[int] = Field(
+        default=None,
+        ge=10,
+        le=31,
+        description="Long-distance matching value (overrides long_mode)",
+    )
     ultra_mode: bool = Field(
         default=False, description="Enable ultra mode (levels 20-22)"
     )
@@ -38,7 +44,10 @@ class CompressionSettings(BaseModel):
         else:
             params.append("-T0")
 
-        if self.long_mode:
+        if self.long_distance is not None:
+            # Manual long distance value overrides long_mode
+            params.append(f"--long={self.long_distance}")
+        elif self.long_mode:
             params.append("--long=31")
 
         params.extend(["--check", "--force"])
@@ -76,7 +85,21 @@ class ProcessingOptions(BaseModel):
     """Options for archive processing operations."""
 
     verify_integrity: bool = Field(
-        default=True, description="Enable integrity verification"
+        default=True, description="Enable integrity verification (overall control)"
+    )
+    # Individual verification layer controls
+    verify_tar: bool = Field(default=True, description="Enable TAR header verification")
+    verify_zstd: bool = Field(
+        default=True, description="Enable Zstd integrity verification"
+    )
+    verify_sha256: bool = Field(
+        default=True, description="Enable SHA-256 hash verification"
+    )
+    verify_blake3: bool = Field(
+        default=True, description="Enable BLAKE3 hash verification"
+    )
+    verify_par2: bool = Field(
+        default=True, description="Enable PAR2 recovery verification"
     )
     generate_par2: bool = Field(
         default=True, description="Generate PAR2 recovery files"
