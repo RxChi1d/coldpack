@@ -47,7 +47,7 @@ dependencies = [
 dev = []
 
 [project.scripts]
-cpack = "coldpack.cli:main"
+cpack = "coldpack.cli:cli_main"
 
 [project.urls]
 Homepage = "https://github.com/rxchi1d/coldpack"
