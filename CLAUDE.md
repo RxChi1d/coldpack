@@ -19,7 +19,7 @@
 
 coldpack 是一個 Python CLI 套件，專門用於建立標準化的冷儲存封存檔案。它將各種來源（資料夾、7z、zip、tar.gz 等）轉換為統一的 tar.zst 格式，並提供雙重雜湊驗證、PAR2 修復冗餘等完整的長期保存功能。
 
-**Python 支援版本**：Python 3.8+ (包含 Python 3.13)
+**Python 支援版本**：Python 3.9+ (包含 Python 3.13)
 
 **專案願景**：提供一個可靠、標準化的冷儲存解決方案，透過簡潔的 `cpack` 命令確保重要資料的長期保存安全性，支援跨平台使用且具備完整的驗證和修復機制。
 
@@ -161,7 +161,7 @@ Final Organization → Statistics Report
 
 ### GitHub Actions 工作流程
 1. **ci.yml**：push/PR 時執行 - ruff、mypy、pytest（PR 閘道）
-   - 測試 Python 版本：3.8, 3.9, 3.10, 3.11, 3.12, 3.13
+   - 測試 Python 版本：3.9, 3.10, 3.11, 3.12, 3.13
    - 測試作業系統：Ubuntu, macOS, Windows
 2. **build.yml**：tag push 時觸發 - 建置和發布
 3. **test-integration.yml**：整合測試（真實檔案測試）

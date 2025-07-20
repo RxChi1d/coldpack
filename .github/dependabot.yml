@@ -1,0 +1,63 @@
+version: 2
+updates:
+  # Python dependencies
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+      day: "monday"
+      time: "02:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "rxchi1d"
+    assignees:
+      - "rxchi1d"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "python"
+    ignore:
+      # Ignore Python version updates below 3.9 (coldpack minimum requirement)
+      - dependency-name: "python"
+        versions: ["< 3.9"]
+    groups:
+      development-dependencies:
+        dependency-type: "development"
+        patterns:
+          - "pytest*"
+          - "ruff*"
+          - "mypy*"
+          - "*-dev"
+          - "*-test*"
+      production-dependencies:
+        dependency-type: "production"
+        patterns:
+          - "py7zz"
+          - "zstandard"
+          - "blake3"
+          - "typer"
+          - "rich"
+          - "pydantic"
+          - "loguru"
+          - "par2cmdline-turbo"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+      day: "monday"
+      time: "02:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "rxchi1d"
+    assignees:
+      - "rxchi1d"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "github-actions"
