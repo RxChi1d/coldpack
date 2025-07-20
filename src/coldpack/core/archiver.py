@@ -1,5 +1,7 @@
 """Main cold storage archiver that coordinates the entire archiving pipeline."""
 
+import platform
+import shutil
 import subprocess
 import tarfile
 from pathlib import Path
@@ -7,7 +9,7 @@ from typing import Any, Optional, Union
 
 from loguru import logger
 
-from ..config.constants import OUTPUT_FORMAT, TAR_FORMATS
+from ..config.constants import OUTPUT_FORMAT
 from ..config.settings import ArchiveMetadata, CompressionSettings, ProcessingOptions
 from ..utils.compression import ZstdCompressor, optimize_compression_settings
 from ..utils.filesystem import (
@@ -94,6 +96,9 @@ class ColdStorageArchiver:
         logger.debug(
             f"ColdStorageArchiver initialized with compression level {self.compression_settings.level}"
         )
+
+        # Detect an external tar/bsdtar command that supports deterministic --sort=name
+        self._external_tar_cmd: Optional[list[str]] = self._detect_tar_sort_command()
 
     def create_archive(
         self,
@@ -219,6 +224,115 @@ class ColdStorageArchiver:
                 if self.progress_tracker:
                     self.progress_tracker.stop()
 
+    # ---------------------------------------------------------------------
+    # External tar detection helpers
+    # ---------------------------------------------------------------------
+    def _detect_tar_sort_command(self) -> Optional[list[str]]:
+        """Detect a platform‑appropriate tar/bsdtar command that supports deterministic sorted output.
+
+        Returns:
+            A command list (program plus required sort arguments) suitable for subprocess,
+            or ``None`` if no such command is available.
+        """
+        system = platform.system().lower()
+
+        # Linux ── system GNU tar (≥1.28) with --sort=name
+        if system == "linux":
+            tar_path = shutil.which("tar")
+            if tar_path and self._supports_gnu_sort(tar_path):
+                return [tar_path, "--sort=name"]
+
+        # macOS ── prefer gtar, then bsdtar/libarchive ≥3.7
+        if system == "darwin":
+            gtar_path = shutil.which("gtar")
+            if gtar_path and self._supports_gnu_sort(gtar_path):
+                return [gtar_path, "--sort=name"]
+
+            bsdtar_path = shutil.which("bsdtar")
+            if bsdtar_path and self._supports_bsdtar_sort(bsdtar_path):
+                return [bsdtar_path, "--options", "sort=name"]
+
+        # Windows 或其他：直接回傳 None，代表後續使用 Python tarfile fallback
+        return None
+
+    @staticmethod
+    def _supports_gnu_sort(tar_exe: str) -> bool:
+        """Return ``True`` if *tar_exe* understands ``--sort=name``."""
+        try:
+            test_cmd = [tar_exe, "--sort=name", "-cf", "/dev/null", "/dev/null"]
+            return (
+                subprocess.run(
+                    test_cmd, capture_output=True, text=True, timeout=5
+                ).returncode
+                == 0
+            )
+        except Exception:
+            return False
+
+    @staticmethod
+    def _supports_bsdtar_sort(bsdtar_exe: str) -> bool:
+        """Return ``True`` if *bsdtar_exe* understands ``--options sort=name``."""
+        try:
+            test_cmd = [
+                bsdtar_exe,
+                "--options",
+                "sort=name",
+                "-cf",
+                "/dev/null",
+                "/dev/null",
+            ]
+            return (
+                subprocess.run(
+                    test_cmd, capture_output=True, text=True, timeout=5
+                ).returncode
+                == 0
+            )
+        except Exception:
+            return False
+
+    # ---------------------------------------------------------------------
+    # External tar execution helper
+    # ---------------------------------------------------------------------
+    def _create_tar_with_external(self, source_dir: Path, tar_path: Path) -> None:
+        """Create a TAR archive using the detected external command.
+
+        Args:
+            source_dir: Directory whose contents will be archived
+            tar_path: Destination TAR file path
+        """
+        assert self._external_tar_cmd is not None, "_external_tar_cmd must not be None"
+        # Decide on a POSIX‑compliant format flag
+        base_exe = Path(self._external_tar_cmd[0]).name.lower()
+        sort_args = self._external_tar_cmd[1:]
+
+        if "bsdtar" in base_exe:
+            format_args = ["--format", "pax"]  # bsdtar syntax
+        else:
+            # GNU tar / gtar syntax
+            format_args = ["--format=posix"]
+
+        cmd = [
+            self._external_tar_cmd[0],
+            *sort_args,
+            *format_args,
+            "-cf",
+            str(tar_path),
+            "--directory",
+            str(source_dir.parent),
+            source_dir.name,
+        ]
+
+        logger.debug(f"Running: {' '.join(cmd)}")
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=3600,
+        )
+        if result.returncode != 0:
+            raise ArchivingError(f"tar command failed: {result.stderr}")
+
     def _extract_source(self, source_path: Path, safe_ops: Any) -> Path:
         """Extract source content to temporary directory.
 
@@ -297,15 +411,11 @@ class ColdStorageArchiver:
         tar_path = output_dir / f"{archive_name}.tar"
         safe_ops.track_file(tar_path)
 
-        # Try to find best TAR format
-        tar_format = self._find_best_tar_format()
-
         try:
-            if tar_format and tar_format != "python":
-                # Use external tar command for better format support
-                self._create_tar_with_command(source_dir, tar_path, tar_format)
+            # Prefer external tar (GNU tar / bsdtar) if we found one; otherwise fall back to Python tarfile.
+            if self._external_tar_cmd:
+                self._create_tar_with_external(source_dir, tar_path)
             else:
-                # Use Python tarfile as fallback
                 self._create_tar_with_python(source_dir, tar_path)
 
             # Verify TAR was created
@@ -321,33 +431,6 @@ class ColdStorageArchiver:
 
         except Exception as e:
             raise ArchivingError(f"TAR creation failed: {e}") from e
-
-    def _find_best_tar_format(self) -> Optional[str]:
-        """Find the best available TAR format.
-
-        Returns:
-            TAR format name or None for Python fallback
-        """
-        # Test external tar command availability
-        try:
-            result = subprocess.run(
-                ["tar", "--help"], capture_output=True, text=True, timeout=5
-            )
-
-            if result.returncode == 0:
-                # Check for format support
-                help_text = result.stdout.lower()
-
-                for fmt in TAR_FORMATS:
-                    if fmt in help_text:
-                        logger.debug(f"Using tar format: {fmt}")
-                        return fmt
-
-        except Exception:
-            pass
-
-        logger.debug("Using Python tarfile")
-        return None
 
     def _create_tar_with_command(
         self, source_dir: Path, tar_path: Path, tar_format: str
@@ -385,13 +468,8 @@ class ColdStorageArchiver:
             raise ArchivingError(f"tar command failed: {result.stderr}")
 
     def _create_tar_with_python(self, source_dir: Path, tar_path: Path) -> None:
-        """Create TAR using Python tarfile.
-
-        Args:
-            source_dir: Source directory
-            tar_path: Output TAR path
-        """
-        with tarfile.open(tar_path, "w") as tar:
+        """Create TAR using Python tarfile (POSIX/PAX format)."""
+        with tarfile.open(tar_path, "w", format=tarfile.PAX_FORMAT) as tar:
             # Add files in sorted order for deterministic output
             files_to_add = sorted(source_dir.rglob("*"))
 
