@@ -14,12 +14,14 @@ if sys.version_info >= (3, 11):
 
     HAS_TOMLLIB = True
 else:
+    # For Python < 3.11, try to use tomli
+    HAS_TOMLLIB = False
     try:
-        import tomli as tomllib  # type: ignore
+        import tomli as tomllib  # type: ignore[import-not-found, import-untyped, unused-ignore]
 
         HAS_TOMLLIB = True
     except ImportError:
-        HAS_TOMLLIB = False
+        pass
 
 
 class CompressionSettings(BaseModel):
