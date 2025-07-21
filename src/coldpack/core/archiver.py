@@ -141,7 +141,7 @@ class ColdStorageArchiver:
 
         # Determine archive name
         if archive_name is None:
-            archive_name = source_path.stem
+            archive_name = self._get_clean_archive_name(source_path)
 
         # Ensure output directory exists
         output_path.mkdir(parents=True, exist_ok=True)
@@ -271,34 +271,112 @@ class ColdStorageArchiver:
                     self.progress_tracker.stop()
 
     # ---------------------------------------------------------------------
+    # Archive naming helpers
+    # ---------------------------------------------------------------------
+    def _get_clean_archive_name(self, source_path: Path) -> str:
+        """Get clean archive name by removing known archive extensions.
+
+        Handles compound extensions like .tar.xz, .tar.bz2, .tar.gz correctly
+        to avoid duplicate .tar in the final archive name.
+
+        Args:
+            source_path: Path to source file or directory
+
+        Returns:
+            Clean archive name without archive extensions
+
+        Examples:
+            source-name.tar.xz → source-name
+            source-name.tar.bz2 → source-name
+            source-name.7z → source-name
+            source-name/ → source-name
+        """
+        if source_path.is_dir():
+            return source_path.name
+
+        # Known compound archive extensions that should be fully stripped
+        compound_extensions = [
+            ".tar.gz",
+            ".tar.bz2",
+            ".tar.xz",
+            ".tar.lz",
+            ".tar.lzma",
+            ".tar.Z",
+            ".tar.zst",
+            ".tar.lz4",
+        ]
+
+        # Check for compound extensions first
+        name_lower = source_path.name.lower()
+        for ext in compound_extensions:
+            if name_lower.endswith(ext):
+                return source_path.name[: -len(ext)]
+
+        # Single archive extensions
+        single_extensions = [
+            ".7z",
+            ".zip",
+            ".rar",
+            ".gz",
+            ".bz2",
+            ".xz",
+            ".lz",
+            ".lzma",
+            ".Z",
+            ".zst",
+            ".lz4",
+            ".tar",
+        ]
+
+        # Check for single extensions
+        for ext in single_extensions:
+            if name_lower.endswith(ext):
+                return source_path.name[: -len(ext)]
+
+        # No known archive extension, use stem
+        return source_path.stem
+
+    # ---------------------------------------------------------------------
     # External tar detection helpers
     # ---------------------------------------------------------------------
     def _detect_tar_sort_command(self) -> Optional[list[str]]:
         """Detect a platform‑appropriate tar/bsdtar command that supports deterministic sorted output.
 
+        Only returns commands that support sorting to ensure consistent hash generation.
+
         Returns:
             A command list (program plus required sort arguments) suitable for subprocess,
-            or ``None`` if no such command is available.
+            or ``None`` if no such command is available (falls back to Python tarfile with sorting).
         """
         system = platform.system().lower()
 
-        # Linux ── system GNU tar (≥1.28) with --sort=name
+        # Linux ── try GNU tar with --sort=name only
         if system == "linux":
             tar_path = shutil.which("tar")
             if tar_path and self._supports_gnu_sort(tar_path):
                 return [tar_path, "--sort=name"]
 
-        # macOS ── prefer gtar, then bsdtar/libarchive ≥3.7
+        # macOS ── prefer gtar, then bsdtar (only if they support sorting)
         if system == "darwin":
+            # First try: gtar (GNU tar with --sort=name)
             gtar_path = shutil.which("gtar")
             if gtar_path and self._supports_gnu_sort(gtar_path):
                 return [gtar_path, "--sort=name"]
 
+            # Second try: bsdtar with sorting
             bsdtar_path = shutil.which("bsdtar")
             if bsdtar_path and self._supports_bsdtar_sort(bsdtar_path):
                 return [bsdtar_path, "--options", "sort=name"]
 
-        # Windows 或其他：直接回傳 None，代表後續使用 Python tarfile fallback
+        # Windows 或其他系統：嘗試檢測支援排序的 tar
+        tar_path = shutil.which("tar")
+        if tar_path and self._supports_gnu_sort(tar_path):
+            return [tar_path, "--sort=name"]
+
+        # 沒有找到支援排序的外部 tar，回退到 Python tarfile（Python 確保排序）
+        logger.debug(
+            "No external tar with sorting support found, using Python tarfile with deterministic sorting"
+        )
         return None
 
     def _get_tar_method_description(self) -> str:
@@ -359,16 +437,20 @@ class ColdStorageArchiver:
     # External tar execution helper
     # ---------------------------------------------------------------------
     def _create_tar_with_external(self, source_dir: Path, tar_path: Path) -> None:
-        """Create a TAR archive using the detected external command.
+        """Create a TAR archive using the detected external command with deterministic sorting.
 
         Args:
             source_dir: Directory whose contents will be archived
             tar_path: Destination TAR file path
         """
         assert self._external_tar_cmd is not None, "_external_tar_cmd must not be None"
+        assert len(self._external_tar_cmd) > 1, (
+            "External tar command must include sorting arguments"
+        )
+
         # Decide on a POSIX‑compliant format flag
         base_exe = Path(self._external_tar_cmd[0]).name.lower()
-        sort_args = self._external_tar_cmd[1:]
+        sort_args = self._external_tar_cmd[1:]  # Required sorting arguments
 
         if "bsdtar" in base_exe:
             format_args = ["--format", "pax"]  # bsdtar syntax
@@ -376,18 +458,19 @@ class ColdStorageArchiver:
             # GNU tar / gtar syntax
             format_args = ["--format=posix"]
 
+        # Build command with guaranteed sorting
         cmd = [
             self._external_tar_cmd[0],
-            *sort_args,
+            *sort_args,  # Required sorting args (--sort=name or --options sort=name)
             *format_args,
             "-cf",
             str(tar_path),
             "--directory",
-            str(source_dir.parent),
-            source_dir.name,
+            str(source_dir),
+            ".",  # Archive contents of source_dir, not source_dir itself
         ]
 
-        logger.debug(f"Running: {' '.join(cmd)}")
+        logger.debug(f"Running deterministic tar: {' '.join(cmd)}")
 
         result = subprocess.run(
             cmd,
@@ -497,51 +580,16 @@ class ColdStorageArchiver:
         except Exception as e:
             raise ArchivingError(f"TAR creation failed: {e}") from e
 
-    def _create_tar_with_command(
-        self, source_dir: Path, tar_path: Path, tar_format: str
-    ) -> None:
-        """Create TAR using external command.
-
-        Args:
-            source_dir: Source directory
-            tar_path: Output TAR path
-            tar_format: TAR format to use
-        """
-        cmd = [
-            "tar",
-            "--create",
-            "--file",
-            str(tar_path),
-            "--format",
-            tar_format,
-            "--sort=name",  # Deterministic ordering
-            "--directory",
-            str(source_dir.parent),
-            source_dir.name,
-        ]
-
-        logger.debug(f"Running: {' '.join(cmd)}")
-
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=3600,  # 1 hour timeout
-        )
-
-        if result.returncode != 0:
-            raise ArchivingError(f"tar command failed: {result.stderr}")
-
     def _create_tar_with_python(self, source_dir: Path, tar_path: Path) -> None:
         """Create TAR using Python tarfile (POSIX/PAX format)."""
         with tarfile.open(tar_path, "w", format=tarfile.PAX_FORMAT) as tar:
-            # Add files in sorted order for deterministic output
+            # Add files in sorted order for deterministic output (equivalent to --sort=name)
             files_to_add = sorted(source_dir.rglob("*"))
 
             for file_path in files_to_add:
-                if file_path.is_file():
-                    arcname = file_path.relative_to(source_dir.parent)
-                    tar.add(file_path, arcname=arcname, recursive=False)
+                # Calculate relative path from source_dir (archive contents, not directory itself)
+                arcname = file_path.relative_to(source_dir)
+                tar.add(file_path, arcname=arcname, recursive=False)
 
     def _verify_tar_integrity(self, tar_path: Path) -> None:
         """Verify TAR file integrity.
