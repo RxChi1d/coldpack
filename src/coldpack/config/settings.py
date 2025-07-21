@@ -15,7 +15,6 @@ else:
     try:
         import tomli as tomllib  # type: ignore[import-not-found]
     except ImportError:
-        # Fallback to toml for reading
         tomllib = None
 
 
@@ -270,6 +269,8 @@ class ArchiveMetadata(BaseModel):
                 toml_data = tomllib.load(f)
         else:
             # Fallback to toml library
+            import toml
+
             with open(file_path, encoding="utf-8") as f:
                 toml_data = toml.load(f)
 
