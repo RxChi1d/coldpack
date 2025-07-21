@@ -66,6 +66,7 @@ class TestArchiveMetadata:
         metadata = ArchiveMetadata(
             source_path=source_path,
             archive_path=archive_path,
+            archive_name="test_archive",
             compression_settings=settings,
             original_size=1000,
             compressed_size=600,
@@ -81,6 +82,7 @@ class TestArchiveMetadata:
         metadata = ArchiveMetadata(
             source_path=tmp_path / "source",
             archive_path=tmp_path / "archive.tar.zst",
+            archive_name="test_archive",
             compression_settings=CompressionSettings(),
             original_size=1000,
             compressed_size=600,
