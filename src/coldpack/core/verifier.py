@@ -3,12 +3,15 @@
 import subprocess
 import tarfile
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 from loguru import logger
 
 from ..utils.compression import ZstdDecompressor
 from ..utils.hashing import HashVerifier
+
+if TYPE_CHECKING:
+    from ..config.settings import PAR2Settings
 
 
 class VerificationError(Exception):
@@ -62,6 +65,7 @@ class ArchiveVerifier:
         archive_path: Union[str, Path],
         hash_files: Optional[dict[str, Path]] = None,
         par2_file: Optional[Path] = None,
+        metadata: Optional[Any] = None,
     ) -> list[VerificationResult]:
         """Perform complete 5-layer verification.
 
@@ -69,6 +73,7 @@ class ArchiveVerifier:
             archive_path: Path to the tar.zst archive
             hash_files: Dictionary of algorithm names to hash file paths
             par2_file: Path to PAR2 recovery file
+            metadata: Optional ArchiveMetadata for parameter recovery
 
         Returns:
             List of verification results for each layer
@@ -131,7 +136,9 @@ class ArchiveVerifier:
         # Layer 5: PAR2 recovery verification
         if par2_file:
             try:
-                result = self.verify_par2_recovery(par2_file)
+                # Extract PAR2 settings from metadata if available
+                par2_settings = metadata.par2_settings if metadata else None
+                result = self.verify_par2_recovery(par2_file, par2_settings)
                 results.append(result)
             except Exception as e:
                 results.append(
@@ -329,11 +336,16 @@ class ArchiveVerifier:
                 "dual_hash", False, f"Hash verification error: {e}"
             )
 
-    def verify_par2_recovery(self, par2_file: Union[str, Path]) -> VerificationResult:
+    def verify_par2_recovery(
+        self,
+        par2_file: Union[str, Path],
+        par2_settings: Optional["PAR2Settings"] = None,
+    ) -> VerificationResult:
         """Verify PAR2 recovery files.
 
         Args:
             par2_file: Path to the main PAR2 file
+            par2_settings: Optional PAR2Settings from metadata for original parameters
 
         Returns:
             Verification result
@@ -343,11 +355,19 @@ class ArchiveVerifier:
         try:
             logger.debug(f"Verifying PAR2 recovery: {par2_obj}")
 
-            # Initialize PAR2 manager if needed
+            # Initialize PAR2 manager with original parameters if available
             if self.par2_manager is None:
                 from ..utils.par2 import PAR2Manager
 
-                self.par2_manager = PAR2Manager()
+                # Use metadata parameters if available
+                redundancy_percent = 10  # default
+                if par2_settings:
+                    redundancy_percent = par2_settings.redundancy_percent
+                    logger.debug(
+                        f"Using PAR2 parameters from metadata: {redundancy_percent}% redundancy"
+                    )
+
+                self.par2_manager = PAR2Manager(redundancy_percent=redundancy_percent)
 
             # Perform PAR2 verification
             assert self.par2_manager is not None

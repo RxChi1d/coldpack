@@ -10,7 +10,13 @@ from typing import Any, Optional, Union
 from loguru import logger
 
 from ..config.constants import OUTPUT_FORMAT
-from ..config.settings import ArchiveMetadata, CompressionSettings, ProcessingOptions
+from ..config.settings import (
+    ArchiveMetadata,
+    CompressionSettings,
+    PAR2Settings,
+    ProcessingOptions,
+    TarSettings,
+)
 from ..utils.compression import ZstdCompressor, optimize_compression_settings
 from ..utils.filesystem import (
     check_disk_space,
@@ -72,15 +78,21 @@ class ColdStorageArchiver:
         self,
         compression_settings: Optional[CompressionSettings] = None,
         processing_options: Optional[ProcessingOptions] = None,
+        par2_settings: Optional[PAR2Settings] = None,
+        tar_settings: Optional[TarSettings] = None,
     ):
         """Initialize the cold storage archiver.
 
         Args:
             compression_settings: Compression configuration
             processing_options: Processing options
+            par2_settings: PAR2 configuration
+            tar_settings: TAR configuration
         """
         self.compression_settings = compression_settings or CompressionSettings()
         self.processing_options = processing_options or ProcessingOptions()
+        self.par2_settings = par2_settings or PAR2Settings()
+        self.tar_settings = tar_settings or TarSettings()
 
         # Initialize components
         self.extractor = MultiFormatExtractor()
@@ -151,6 +163,11 @@ class ColdStorageArchiver:
         logger.info(f"Source: {source_path}")
         logger.info(f"Output: {output_path}")
 
+        # Record processing start time for metadata
+        import time
+
+        processing_start_time = time.time()
+
         with safe_file_operations(self.processing_options.cleanup_on_error) as safe_ops:
             try:
                 # Create progress tracker
@@ -206,20 +223,28 @@ class ColdStorageArchiver:
                     archive_path, hash_files, par2_files, archive_name, safe_ops
                 )
 
-                # Create metadata
+                # Step 12: Create comprehensive metadata
                 metadata = self._create_metadata(
                     source_path,
                     organized_files["archive"],
                     extracted_dir,
                     organized_files["hash_files"],
                     organized_files["par2_files"],
+                    processing_start_time,
                 )
+
+                # Step 13: Generate metadata.toml file
+                metadata_file = organized_files["metadata_dir"] / "metadata.toml"
+                metadata.save_to_toml(metadata_file)
+                safe_ops.track_file(metadata_file)
+                organized_files["metadata_file"] = metadata_file
 
                 # Collect all created files
                 created_files = (
                     [organized_files["archive"]]
                     + list(organized_files["hash_files"].values())
                     + organized_files["par2_files"]
+                    + [organized_files["metadata_file"]]
                 )
 
                 logger.success(
@@ -779,19 +804,23 @@ class ColdStorageArchiver:
         extracted_dir: Path,
         hash_files: dict[str, Path],
         par2_files: list[Path],
+        processing_start_time: Optional[float] = None,
     ) -> ArchiveMetadata:
-        """Create archive metadata.
+        """Create comprehensive archive metadata with complete configuration preservation.
 
         Args:
             source_path: Original source path
             archive_path: Created archive path
             extracted_dir: Extracted content directory
-            hash_files: Dictionary of hash files
+            hash_files: Dictionary of hash files {algorithm: path}
             par2_files: List of PAR2 files
+            processing_start_time: Start time for calculating processing duration
 
         Returns:
-            Archive metadata object
+            Complete archive metadata object
         """
+        import time
+
         try:
             # Calculate sizes
             if source_path.is_file():
@@ -800,47 +829,116 @@ class ColdStorageArchiver:
                 original_size = sum(
                     f.stat().st_size for f in extracted_dir.rglob("*") if f.is_file()
                 )
-
             compressed_size = get_file_size(archive_path)
 
-            # Count files
+            # Count files and directories
             file_count = sum(1 for f in extracted_dir.rglob("*") if f.is_file())
+            directory_count = sum(1 for f in extracted_dir.rglob("*") if f.is_dir())
+
+            # Analyze directory structure
+            has_single_root = False
+            root_directory = None
+            top_level_items = list(extracted_dir.iterdir())
+            if len(top_level_items) == 1 and top_level_items[0].is_dir():
+                has_single_root = True
+                root_directory = top_level_items[0].name
 
             # Create verification hashes dictionary
             verification_hashes = {}
             for algorithm, hash_file_path in hash_files.items():
                 try:
-                    with open(hash_file_path) as f:
+                    with open(hash_file_path, encoding="utf-8") as f:
                         hash_line = f.readline().strip()
-                        hash_value = hash_line.split("  ")[0]
+                        # Handle different hash file formats
+                        if "  " in hash_line:
+                            hash_value = hash_line.split("  ")[0]
+                        else:
+                            hash_value = hash_line.split()[0]
                         verification_hashes[algorithm] = hash_value
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Could not read {algorithm} hash file: {e}")
 
-            # Create metadata
-            metadata = ArchiveMetadata(
-                source_path=source_path,
-                archive_path=archive_path,
-                compression_settings=self.compression_settings,
-                file_count=file_count,
-                original_size=original_size,
-                compressed_size=compressed_size,
-                verification_hashes=verification_hashes,
-                par2_files=[str(f) for f in par2_files],
+            # Create hash files mapping (algorithm -> filename)
+            hash_files_dict = {
+                algorithm: str(hash_file_path.name)
+                for algorithm, hash_file_path in hash_files.items()
+            }
+
+            # Calculate processing time
+            processing_time = 0.0
+            if processing_start_time:
+                processing_time = time.time() - processing_start_time
+
+            # Get archive name (without .tar.zst extension)
+            archive_name = archive_path.stem
+            if archive_name.endswith(".tar"):
+                archive_name = archive_name[:-4]
+
+            # Update TAR settings with detected method
+            tar_method = self._get_tar_method_description().lower()
+            # Map method descriptions to valid enum values
+            method_mapping = {
+                "python tarfile": "python",
+                "gnu tar": "gnu",
+                "bsd tar": "bsd",
+                "external tar": "auto",
+            }
+            valid_method = method_mapping.get(tar_method, "auto")
+
+            tar_settings = TarSettings(
+                method=valid_method,
+                sort_files=self.tar_settings.sort_files,
+                preserve_permissions=self.tar_settings.preserve_permissions,
             )
 
-            # Calculate compression ratio
-            metadata.calculate_compression_ratio()
+            # Create comprehensive metadata
+            metadata = ArchiveMetadata(
+                # Core identification
+                source_path=source_path,
+                archive_path=archive_path,
+                archive_name=archive_name,
+                # Version and creation (will be auto-populated by model_post_init)
+                coldpack_version="1.0.0-dev",
+                # Processing settings
+                compression_settings=self.compression_settings,
+                par2_settings=self.par2_settings,
+                tar_settings=tar_settings,
+                # Content statistics
+                file_count=file_count,
+                directory_count=directory_count,
+                original_size=original_size,
+                compressed_size=compressed_size,
+                # Archive structure
+                has_single_root=has_single_root,
+                root_directory=root_directory,
+                # Integrity verification
+                verification_hashes=verification_hashes,
+                hash_files=hash_files_dict,
+                par2_files=[str(f.name) for f in par2_files],
+                # Processing details
+                processing_time_seconds=processing_time,
+                temp_directory_used=str(extracted_dir.parent)
+                if extracted_dir.parent
+                else None,
+            )
+
+            logger.info(f"Created comprehensive metadata for {archive_name}")
+            logger.info(
+                f"Files: {file_count}, Directories: {directory_count}, Size: {format_file_size(original_size)}"
+            )
 
             return metadata
 
         except Exception as e:
             logger.warning(f"Could not create complete metadata: {e}")
-            # Return minimal metadata
+            # Return minimal metadata for backward compatibility
             return ArchiveMetadata(
                 source_path=source_path,
                 archive_path=archive_path,
+                archive_name=archive_path.stem.replace(".tar", ""),
                 compression_settings=self.compression_settings,
+                par2_settings=self.par2_settings,
+                tar_settings=TarSettings(),
             )
 
 

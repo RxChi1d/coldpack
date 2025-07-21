@@ -341,8 +341,15 @@ def archive(
             force_overwrite=force,
         )
 
+        # Configure PAR2 settings
+        from .config.settings import PAR2Settings
+
+        par2_settings = PAR2Settings(redundancy_percent=par2_redundancy)
+
         # Create archiver
-        archiver = ColdStorageArchiver(compression_settings, processing_options)
+        archiver = ColdStorageArchiver(
+            compression_settings, processing_options, par2_settings
+        )
 
         # Create progress tracker
         with ProgressTracker(console):
@@ -577,9 +584,40 @@ def verify(
         if no_par2:
             skip_layers.add("par2_recovery")
 
-        # Perform verification with layer controls
-        # Note: We'll need to modify the verifier to accept skip_layers parameter
-        results = verifier.verify_complete(archive, hash_file_dict, par2_file)
+        # Try to load metadata for parameter recovery
+        metadata = None
+        try:
+            from .config.settings import ArchiveMetadata
+
+            # Determine archive name for metadata path construction
+            archive_name = archive.stem
+            if archive_name.endswith(".tar"):
+                archive_name = archive_name[:-4]
+
+            metadata_paths = [
+                # Standard coldpack structure: archive_dir/metadata/metadata.toml
+                archive.parent / "metadata" / "metadata.toml",
+                # Alternative: archive_name_dir/metadata/metadata.toml
+                archive.parent / archive_name / "metadata" / "metadata.toml",
+                # Legacy location: same directory as archive
+                archive.parent / "metadata.toml",
+            ]
+
+            for metadata_path in metadata_paths:
+                if metadata_path.exists():
+                    try:
+                        metadata = ArchiveMetadata.load_from_toml(metadata_path)
+                        logger.debug(f"Loaded metadata from {metadata_path}")
+                        break
+                    except Exception as e:
+                        logger.debug(
+                            f"Could not load metadata from {metadata_path}: {e}"
+                        )
+        except Exception as e:
+            logger.debug(f"Metadata loading failed: {e}")
+
+        # Perform verification with metadata for parameter recovery
+        results = verifier.verify_complete(archive, hash_file_dict, par2_file, metadata)
 
         # Display results
         display_verification_results(results)
@@ -631,9 +669,42 @@ def repair(
         raise typer.Exit(ExitCodes.FILE_NOT_FOUND)
 
     try:
-        repairer = ArchiveRepairer()
+        # Try to load metadata for PAR2 parameter recovery
+        metadata = None
+        redundancy_percent = 10  # default
+
+        try:
+            from .config.settings import ArchiveMetadata
+
+            # Look for metadata.toml in the same directory as PAR2 file
+            metadata_paths = [
+                par2_file.parent / "metadata.toml",
+                par2_file.parent.parent / "metadata" / "metadata.toml",
+            ]
+
+            for metadata_path in metadata_paths:
+                if metadata_path.exists():
+                    try:
+                        metadata = ArchiveMetadata.load_from_toml(metadata_path)
+                        redundancy_percent = metadata.par2_settings.redundancy_percent
+                        logger.debug(
+                            f"Using PAR2 parameters from metadata: {redundancy_percent}% redundancy"
+                        )
+                        break
+                    except Exception as e:
+                        logger.debug(
+                            f"Could not load metadata from {metadata_path}: {e}"
+                        )
+        except Exception as e:
+            logger.debug(f"Metadata loading failed: {e}")
+
+        repairer = ArchiveRepairer(redundancy_percent=redundancy_percent)
 
         console.print(f"[cyan]Attempting repair using: {par2_file}[/cyan]")
+        if metadata:
+            console.print(
+                f"[cyan]Using original PAR2 settings: {redundancy_percent}% redundancy[/cyan]"
+            )
 
         # Check repair capability
         capability = repairer.check_repair_capability(par2_file)
@@ -772,13 +843,181 @@ def display_verification_results(results: Any) -> None:
 
 
 def display_archive_info(archive_path: Path) -> None:
-    """Display archive information."""
+    """Display archive information, prioritizing metadata.toml if available."""
+    from .config.settings import ArchiveMetadata
+
+    try:
+        # First, try to find and load metadata.toml
+        metadata = None
+
+        # Determine archive name for path construction
+        archive_name = archive_path.stem
+        if archive_name.endswith(".tar"):
+            archive_name = archive_name[:-4]
+
+        metadata_paths = [
+            # Standard coldpack structure: archive_dir/metadata/metadata.toml
+            archive_path.parent / "metadata" / "metadata.toml",
+            # Alternative: archive_name_dir/metadata/metadata.toml
+            archive_path.parent / archive_name / "metadata" / "metadata.toml",
+            # Legacy location: same directory as archive
+            archive_path.parent / "metadata.toml",
+        ]
+
+        for metadata_path in metadata_paths:
+            if metadata_path.exists():
+                try:
+                    metadata = ArchiveMetadata.load_from_toml(metadata_path)
+                    break
+                except Exception as e:
+                    logger.debug(f"Could not load metadata from {metadata_path}: {e}")
+
+        if metadata:
+            # Display comprehensive metadata information
+            display_metadata_info(archive_path, metadata)
+        else:
+            # Fallback to basic archive analysis
+            display_basic_archive_info(archive_path)
+
+    except Exception as e:
+        console.print(f"[red]Could not read archive info: {e}[/red]")
+
+
+def display_metadata_info(archive_path: Path, metadata: Any) -> None:
+    """Display comprehensive archive information from metadata."""
+    table = Table(
+        title=f"Archive Information: {archive_path.name}",
+        show_header=True,
+        header_style="bold magenta",
+    )
+    table.add_column("Property", style="cyan", no_wrap=True)
+    table.add_column("Value", style="green")
+
+    # Basic information
+    table.add_row("Archive Name", metadata.archive_name)
+    table.add_row("File Path", str(archive_path))
+    table.add_row("Source Path", str(metadata.source_path))
+    table.add_row("Created At", metadata.created_at.strftime("%Y-%m-%d %H:%M:%S"))
+    table.add_row("Coldpack Version", metadata.coldpack_version)
+
+    # Size and compression information
+    table.add_row("Original Size", format_file_size(metadata.original_size))
+    table.add_row("Compressed Size", format_file_size(metadata.compressed_size))
+    table.add_row("Compression Ratio", f"{metadata.compression_ratio:.4f}")
+    table.add_row("Compression Savings", f"{metadata.compression_percentage:.1f}%")
+
+    # Content statistics
+    table.add_row("File Count", str(metadata.file_count))
+    table.add_row("Directory Count", str(metadata.directory_count))
+    table.add_row("Total Entries", str(metadata.total_entries))
+    table.add_row("Has Single Root", "Yes" if metadata.has_single_root else "No")
+
+    if metadata.root_directory:
+        table.add_row("Root Directory", metadata.root_directory)
+
+    console.print(table)
+
+    # Compression settings
+    comp_table = Table(
+        title="Compression Settings",
+        show_header=True,
+        header_style="bold blue",
+    )
+    comp_table.add_column("Setting", style="cyan", no_wrap=True)
+    comp_table.add_column("Value", style="green")
+
+    comp_table.add_row("Level", str(metadata.compression_settings.level))
+    comp_table.add_row("Threads", str(metadata.compression_settings.threads))
+    comp_table.add_row(
+        "Long Mode", "Yes" if metadata.compression_settings.long_mode else "No"
+    )
+    comp_table.add_row(
+        "Ultra Mode", "Yes" if metadata.compression_settings.ultra_mode else "No"
+    )
+
+    console.print(comp_table)
+
+    # TAR settings
+    tar_table = Table(
+        title="TAR Settings",
+        show_header=True,
+        header_style="bold yellow",
+    )
+    tar_table.add_column("Setting", style="cyan", no_wrap=True)
+    tar_table.add_column("Value", style="green")
+
+    tar_table.add_row("Method", metadata.tar_settings.method.title())
+    tar_table.add_row("Sort Files", "Yes" if metadata.tar_settings.sort_files else "No")
+    tar_table.add_row(
+        "Preserve Permissions",
+        "Yes" if metadata.tar_settings.preserve_permissions else "No",
+    )
+
+    console.print(tar_table)
+
+    # Integrity information
+    if metadata.verification_hashes:
+        integrity_table = Table(
+            title="Integrity Verification",
+            show_header=True,
+            header_style="bold red",
+        )
+        integrity_table.add_column("Algorithm", style="cyan", no_wrap=True)
+        integrity_table.add_column("Hash", style="green")
+
+        for algorithm, hash_value in metadata.verification_hashes.items():
+            integrity_table.add_row(algorithm.upper(), hash_value)
+
+        console.print(integrity_table)
+
+    # PAR2 information (always show settings even if no files were generated)
+    if metadata.par2_settings:
+        par2_table = Table(
+            title="PAR2 Recovery Settings",
+            show_header=True,
+            header_style="bold purple",
+        )
+        par2_table.add_column("Setting", style="cyan", no_wrap=True)
+        par2_table.add_column("Value", style="green")
+
+        par2_table.add_row(
+            "Redundancy", f"{metadata.par2_settings.redundancy_percent}%"
+        )
+        par2_table.add_row("Block Count", str(metadata.par2_settings.block_count))
+        par2_table.add_row(
+            "Recovery Files",
+            str(len(metadata.par2_files) if metadata.par2_files else 0),
+        )
+
+        console.print(par2_table)
+
+    # Processing information
+    if metadata.processing_time_seconds:
+        processing_table = Table(
+            title="Processing Information",
+            show_header=True,
+            header_style="bold green",
+        )
+        processing_table.add_column("Metric", style="cyan", no_wrap=True)
+        processing_table.add_column("Value", style="green")
+
+        processing_table.add_row(
+            "Processing Time", f"{metadata.processing_time_seconds:.2f} seconds"
+        )
+        if metadata.temp_directory_used:
+            processing_table.add_row("Temp Directory", metadata.temp_directory_used)
+
+        console.print(processing_table)
+
+
+def display_basic_archive_info(archive_path: Path) -> None:
+    """Display basic archive information when metadata is not available."""
     try:
         extractor = MultiFormatExtractor()
         info = extractor.get_archive_info(archive_path)
 
         table = Table(
-            title=f"Archive Information: {archive_path.name}",
+            title=f"Basic Archive Information: {archive_path.name}",
             show_header=True,
             header_style="bold magenta",
         )
@@ -795,18 +1034,12 @@ def display_archive_info(archive_path: Path) -> None:
             table.add_row("Root Directory", info["root_name"])
 
         console.print(table)
-
-        # Show some file names
-        if info["files"]:
-            console.print("\n[bold]Sample Files:[/bold]")
-            for file_name in info["files"][:10]:
-                console.print(f"  {file_name}")
-
-            if len(info["files"]) > 10:
-                console.print(f"  ... and {len(info['files']) - 10} more files")
+        console.print(
+            "\n[yellow]Note: No metadata file found. Use 'cpack list' to view archive contents.[/yellow]"
+        )
 
     except Exception as e:
-        console.print(f"[red]Could not read archive info: {e}[/red]")
+        console.print(f"[red]Could not read basic archive info: {e}[/red]")
 
 
 def display_par2_info(par2_path: Path) -> None:
