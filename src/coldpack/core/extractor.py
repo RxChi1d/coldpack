@@ -34,6 +34,7 @@ class MultiFormatExtractor:
         source: Union[str, Path],
         output_dir: Union[str, Path],
         preserve_structure: bool = True,
+        force_overwrite: bool = False,
     ) -> Path:
         """Extract archive to output directory with intelligent structure detection.
 
@@ -41,6 +42,7 @@ class MultiFormatExtractor:
             source: Path to source archive or directory
             output_dir: Directory to extract to
             preserve_structure: Whether to preserve archive structure
+            force_overwrite: Force overwrite existing files
 
         Returns:
             Path to the extracted content directory
@@ -61,7 +63,9 @@ class MultiFormatExtractor:
             return self._handle_directory_input(source_path, output_path)
 
         # Handle archive files
-        return self._extract_archive(source_path, output_path, preserve_structure)
+        return self._extract_archive(
+            source_path, output_path, preserve_structure, force_overwrite
+        )
 
     def _handle_directory_input(self, source_dir: Path, output_dir: Path) -> Path:
         """Handle directory input by returning the source path.
@@ -77,7 +81,11 @@ class MultiFormatExtractor:
         return source_dir
 
     def _extract_archive(
-        self, archive_path: Path, output_dir: Path, preserve_structure: bool
+        self,
+        archive_path: Path,
+        output_dir: Path,
+        preserve_structure: bool,
+        force_overwrite: bool,
     ) -> Path:
         """Extract archive file using py7zz.
 
@@ -85,6 +93,7 @@ class MultiFormatExtractor:
             archive_path: Path to archive file
             output_dir: Directory to extract to
             preserve_structure: Whether to preserve archive structure
+            force_overwrite: Force overwrite existing files
 
         Returns:
             Path to extracted content
@@ -109,10 +118,14 @@ class MultiFormatExtractor:
 
             if has_single_root and preserve_structure:
                 # Archive has single root directory, extract directly
-                return self._extract_with_structure(archive_path, output_dir)
+                return self._extract_with_structure(
+                    archive_path, output_dir, force_overwrite
+                )
             else:
                 # Archive has multiple root items or flat structure
-                return self._extract_to_named_directory(archive_path, output_dir)
+                return self._extract_to_named_directory(
+                    archive_path, output_dir, force_overwrite
+                )
 
         except Exception as e:
             raise ExtractionError(f"Failed to extract {archive_path}: {e}") from e
@@ -198,17 +211,28 @@ class MultiFormatExtractor:
             # On error, assume no single root (safer to create directory)
             return False
 
-    def _extract_with_structure(self, archive_path: Path, output_dir: Path) -> Path:
+    def _extract_with_structure(
+        self, archive_path: Path, output_dir: Path, force_overwrite: bool
+    ) -> Path:
         """Extract archive preserving its internal structure.
 
         Args:
             archive_path: Path to the archive
             output_dir: Output directory
+            force_overwrite: Force overwrite existing files
 
         Returns:
             Path to the extracted root directory
         """
         logger.info(f"Extracting with preserved structure: {archive_path}")
+
+        # Check for existing files if not forcing overwrite
+        archive_name = archive_path.stem
+        extracted_root = output_dir / archive_name
+        if extracted_root.exists() and not force_overwrite:
+            raise ExtractionError(
+                f"Target directory already exists: {extracted_root}. Use --force to overwrite."
+            )
 
         with safe_file_operations():
             try:
@@ -234,18 +258,27 @@ class MultiFormatExtractor:
             except Exception as e:
                 raise ExtractionError(f"Extraction failed: {e}") from e
 
-    def _extract_to_named_directory(self, archive_path: Path, output_dir: Path) -> Path:
+    def _extract_to_named_directory(
+        self, archive_path: Path, output_dir: Path, force_overwrite: bool
+    ) -> Path:
         """Extract archive to a directory named after the archive.
 
         Args:
             archive_path: Path to the archive
             output_dir: Output directory
+            force_overwrite: Force overwrite existing files
 
         Returns:
             Path to the created target directory
         """
         archive_name = archive_path.stem
         target_dir = output_dir / archive_name
+
+        # Check for existing directory if not forcing overwrite
+        if target_dir.exists() and not force_overwrite:
+            raise ExtractionError(
+                f"Target directory already exists: {target_dir}. Use --force to overwrite."
+            )
 
         logger.info(f"Extracting to named directory: {target_dir}")
 

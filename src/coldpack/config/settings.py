@@ -109,6 +109,9 @@ class ProcessingOptions(BaseModel):
     )
     cleanup_on_error: bool = Field(default=True, description="Clean up files on error")
     verbose: bool = Field(default=False, description="Enable verbose output")
+    force_overwrite: bool = Field(
+        default=False, description="Force overwrite existing files"
+    )
     progress_callback: Optional[object] = Field(
         default=None, description="Progress callback function"
     )

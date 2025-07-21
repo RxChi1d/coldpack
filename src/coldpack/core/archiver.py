@@ -128,6 +128,13 @@ class ColdStorageArchiver:
         # Ensure output directory exists
         output_path.mkdir(parents=True, exist_ok=True)
 
+        # Check for existing files if not forcing overwrite
+        archive_path = output_path / f"{archive_name}.tar.zst"
+        if archive_path.exists() and not self.processing_options.force_overwrite:
+            raise ArchivingError(
+                f"Archive already exists: {archive_path}. Use --force to overwrite."
+            )
+
         # Check disk space
         try:
             check_disk_space(output_path)

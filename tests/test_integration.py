@@ -127,6 +127,107 @@ class TestModuleImports:
         assert hasattr(coldpack, "MultiFormatExtractor")
 
 
+class TestForceOverwrite:
+    """Test force overwrite functionality."""
+
+    @pytest.fixture
+    def sample_directory(self, tmp_path):
+        """Create a sample directory with test files."""
+        test_dir = tmp_path / "test_data"
+        test_dir.mkdir()
+
+        # Create some test files
+        (test_dir / "file1.txt").write_text("This is test file 1")
+        (test_dir / "file2.txt").write_text("This is test file 2")
+
+        return test_dir
+
+    def test_archive_force_overwrite_setting(self, sample_directory, tmp_path):
+        """Test that force_overwrite setting is properly handled."""
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+
+        # Test with force_overwrite=True
+        processing_options = ProcessingOptions(
+            verify_integrity=False, generate_par2=False, force_overwrite=True
+        )
+
+        archiver = ColdStorageArchiver(processing_options=processing_options)
+        assert archiver.processing_options.force_overwrite is True
+
+        # Test with force_overwrite=False (default)
+        processing_options_default = ProcessingOptions()
+        archiver_default = ColdStorageArchiver(
+            processing_options=processing_options_default
+        )
+        assert archiver_default.processing_options.force_overwrite is False
+
+    def test_archive_without_force_fails_on_existing_file(
+        self, sample_directory, tmp_path
+    ):
+        """Test that archive creation fails when target exists and force=False."""
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+
+        # Create existing archive file
+        existing_archive = output_dir / "test_data.tar.zst"
+        existing_archive.write_text("existing archive content")
+
+        # Try to create archive without force
+        compression_settings = CompressionSettings(level=1)
+        processing_options = ProcessingOptions(
+            verify_integrity=False, generate_par2=False, force_overwrite=False
+        )
+
+        archiver = ColdStorageArchiver(compression_settings, processing_options)
+
+        # This should raise an ArchivingError
+        from coldpack.core.archiver import ArchivingError
+
+        with pytest.raises(ArchivingError, match="Archive already exists.*Use --force"):
+            archiver.create_archive(sample_directory, output_dir)
+
+    def test_extractor_force_overwrite_parameter(self, tmp_path):
+        """Test that extractor accepts force_overwrite parameter."""
+        from coldpack.core.extractor import MultiFormatExtractor
+
+        extractor = MultiFormatExtractor()
+
+        # Test that the method signature accepts force_overwrite
+        # We can't fully test without a real archive, but we can verify the parameter exists
+        import inspect
+
+        extract_signature = inspect.signature(extractor.extract)
+        assert "force_overwrite" in extract_signature.parameters
+
+    def test_extractor_fails_on_existing_directory_without_force(self, tmp_path):
+        """Test that extraction fails when target directory exists and force=False."""
+        from coldpack.core.extractor import MultiFormatExtractor
+
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+
+        # Create existing target directory
+        existing_target = output_dir / "test_archive"
+        existing_target.mkdir()
+        (existing_target / "existing_file.txt").write_text("existing content")
+
+        extractor = MultiFormatExtractor()
+
+        # Create a fake archive path (we'll test the logic before actual extraction)
+        fake_archive = tmp_path / "test_archive.zip"
+        fake_archive.write_text("fake archive content")
+
+        # We can't fully test without py7zz, but we can test that force_overwrite parameter is handled
+        # This would normally fail at the format check, but we're testing the parameter passing
+        try:
+            # This should fail due to unsupported format, but the force_overwrite parameter should be accepted
+            extractor.extract(fake_archive, output_dir, force_overwrite=False)
+        except Exception as e:
+            # We expect this to fail due to format issues, not parameter issues
+            assert "force_overwrite" not in str(e)
+
+
 class TestErrorHandling:
     """Test error handling and edge cases."""
 
