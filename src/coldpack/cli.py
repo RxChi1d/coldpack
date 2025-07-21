@@ -121,6 +121,13 @@ def archive(
         show_default="source name",
         rich_help_panel="Output Options",
     ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        "-f",
+        help="Force overwrite existing files",
+        rich_help_panel="Output Options",
+    ),
     level: int = typer.Option(
         19,
         "--level",
@@ -213,6 +220,7 @@ def archive(
         source: Source file, directory, or archive to process
         output_dir: Output directory (default: current directory)
         name: Archive name (default: source name)
+        force: Force overwrite existing files
         level: Compression level (1-22)
         threads: Number of threads (0=auto)
         no_long: Disable automatic long-distance matching
@@ -330,6 +338,7 @@ def archive(
             generate_par2=not no_par2,
             par2_redundancy=par2_redundancy,
             verbose=final_verbose,
+            force_overwrite=force,
         )
 
         # Create archiver
@@ -376,6 +385,13 @@ def extract(
         show_default="current directory",
         rich_help_panel="Output Options",
     ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        "-f",
+        help="Force overwrite existing files",
+        rich_help_panel="Output Options",
+    ),
     verbose: Optional[bool] = typer.Option(
         None, "--verbose", "-v", help="Verbose output"
     ),
@@ -387,6 +403,7 @@ def extract(
         ctx: Typer context
         archive: Archive file to extract
         output_dir: Output directory (default: current directory)
+        force: Force overwrite existing files
         verbose: Local verbose override
         quiet: Local quiet override
     """
@@ -419,7 +436,7 @@ def extract(
         console.print(f"[cyan]Output directory: {output_dir}[/cyan]")
 
         # Extract archive
-        extracted_path = extractor.extract(archive, output_dir)
+        extracted_path = extractor.extract(archive, output_dir, force_overwrite=force)
 
         console.print("[green]✓ Extraction completed successfully![/green]")
         console.print(f"[green]Extracted to: {extracted_path}[/green]")
