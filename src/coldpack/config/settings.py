@@ -11,11 +11,15 @@ from pydantic import BaseModel, Field, field_validator
 # Handle tomllib compatibility (Python 3.11+ has tomllib built-in)
 if sys.version_info >= (3, 11):
     import tomllib
+
+    HAS_TOMLLIB = True
 else:
     try:
-        import tomli as tomllib  # type: ignore[import-not-found]
+        import tomli as tomllib  # type: ignore
+
+        HAS_TOMLLIB = True
     except ImportError:
-        tomllib = None
+        HAS_TOMLLIB = False
 
 
 class CompressionSettings(BaseModel):
@@ -263,7 +267,7 @@ class ArchiveMetadata(BaseModel):
             raise FileNotFoundError(f"Metadata file not found: {file_path}")
 
         # Read TOML file with compatibility handling
-        if tomllib is not None:
+        if HAS_TOMLLIB:
             # Use tomllib (Python 3.11+) or tomli
             with open(file_path, "rb") as f:
                 toml_data = tomllib.load(f)
