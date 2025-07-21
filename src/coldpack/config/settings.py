@@ -17,7 +17,7 @@ else:
     # For Python < 3.11, try to use tomli
     HAS_TOMLLIB = False
     try:
-        import tomli as tomllib  # type: ignore[import-not-found, import-untyped, unused-ignore]
+        import tomli as tomllib
 
         HAS_TOMLLIB = True
     except ImportError:
