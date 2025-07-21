@@ -218,20 +218,26 @@ class ColdStorageArchiver:
                         archive_path, hash_files, par2_files
                     )
 
-                # Step 11: Create comprehensive metadata
+                # Step 11: Organize files into proper structure
+                organized_files = self._organize_output_files(
+                    archive_path, hash_files, par2_files, archive_name, safe_ops
+                )
+
+                # Step 12: Create comprehensive metadata
                 metadata = self._create_metadata(
                     source_path,
-                    archive_path,
+                    organized_files["archive"],
                     extracted_dir,
-                    hash_files,
-                    par2_files,
+                    organized_files["hash_files"],
+                    organized_files["par2_files"],
                     processing_start_time,
                 )
 
-                # Step 12: Organize output files and generate .toml metadata
-                organized_files = self._organize_output_files(
-                    archive_path, hash_files, par2_files, metadata, safe_ops
-                )
+                # Step 13: Generate metadata.toml file
+                metadata_file = organized_files["metadata_dir"] / "metadata.toml"
+                metadata.save_to_toml(metadata_file)
+                safe_ops.track_file(metadata_file)
+                organized_files["metadata_file"] = metadata_file
 
                 # Collect all created files
                 created_files = (
@@ -242,13 +248,13 @@ class ColdStorageArchiver:
                 )
 
                 logger.success(
-                    f"Cold storage archive created successfully: {archive_path}"
+                    f"Cold storage archive created successfully: {organized_files['archive']}"
                 )
 
                 return ArchiveResult(
                     success=True,
                     metadata=metadata,
-                    message=f"Archive created: {archive_path.name}",
+                    message=f"Archive created: {organized_files['archive'].name}",
                     created_files=created_files,
                 )
 
@@ -714,6 +720,83 @@ class ColdStorageArchiver:
         except Exception as e:
             raise ArchivingError(f"Final verification failed: {e}") from e
 
+    def _organize_output_files(
+        self,
+        archive_path: Path,
+        hash_files: dict[str, Path],
+        par2_files: list[Path],
+        archive_name: str,
+        safe_ops: Any,
+    ) -> dict:
+        """Organize output files into proper directory structure.
+
+        Creates structure:
+        output_dir/
+        └── archive_name/
+            ├── archive_name.tar.zst
+            └── metadata/
+                ├── archive_name.tar.zst.sha256
+                ├── archive_name.tar.zst.blake3
+                ├── archive_name.tar.zst.par2
+                └── archive_name.tar.zst.vol000+xxx.par2
+
+        Args:
+            archive_path: Current archive file path
+            hash_files: Dictionary of hash files
+            par2_files: List of PAR2 files
+            archive_name: Name of the archive
+            safe_ops: Safe file operations context
+
+        Returns:
+            Dictionary with organized file paths
+        """
+        logger.info("Step 11: Organizing files into proper structure")
+
+        # Create directory structure
+        output_base = archive_path.parent
+        archive_dir = output_base / archive_name
+        metadata_dir = archive_dir / "metadata"
+
+        archive_dir.mkdir(exist_ok=True)
+        metadata_dir.mkdir(exist_ok=True)
+        safe_ops.track_directory(archive_dir)
+        safe_ops.track_directory(metadata_dir)
+
+        # Move archive file to archive directory
+        new_archive_path = archive_dir / archive_path.name
+        archive_path.rename(new_archive_path)
+        safe_ops.track_file(new_archive_path)
+
+        # Move hash files to metadata directory
+        new_hash_files = {}
+        for algorithm, hash_file_path in hash_files.items():
+            new_hash_path = metadata_dir / hash_file_path.name
+            hash_file_path.rename(new_hash_path)
+            safe_ops.track_file(new_hash_path)
+            new_hash_files[algorithm] = new_hash_path
+
+        # Move PAR2 files to metadata directory
+        new_par2_files = []
+        for par2_file in par2_files:
+            new_par2_path = metadata_dir / par2_file.name
+            par2_file.rename(new_par2_path)
+            safe_ops.track_file(new_par2_path)
+            new_par2_files.append(new_par2_path)
+
+        logger.success(f"Files organized into: {archive_dir}")
+        logger.info(f"Archive: {new_archive_path}")
+        logger.info(
+            f"Metadata: {metadata_dir} ({len(new_hash_files) + len(new_par2_files)} files)"
+        )
+
+        return {
+            "archive": new_archive_path,
+            "hash_files": new_hash_files,
+            "par2_files": new_par2_files,
+            "archive_dir": archive_dir,
+            "metadata_dir": metadata_dir,
+        }
+
     def _create_metadata(
         self,
         source_path: Path,
@@ -857,115 +940,6 @@ class ColdStorageArchiver:
                 par2_settings=self.par2_settings,
                 tar_settings=TarSettings(),
             )
-
-    def _organize_output_files(
-        self,
-        archive_path: Path,
-        hash_files: dict[str, Path],
-        par2_files: list[Path],
-        metadata: ArchiveMetadata,
-        safe_ops: Any,
-    ) -> dict[str, Any]:
-        """Organize output files into proper directory structure and generate metadata.toml.
-
-        Creates structure: output_dir/archive_name/{archive.tar.zst, metadata/{hash_files, par2_files, metadata.toml}}
-
-        Args:
-            archive_path: Path to the created archive
-            hash_files: Dictionary of hash files {algorithm: path}
-            par2_files: List of PAR2 files
-            metadata: Archive metadata object
-            safe_ops: Safe file operations context
-
-        Returns:
-            Dictionary with organized file paths
-        """
-        try:
-            # Get archive name without extension
-            archive_name = metadata.archive_name
-
-            # Create target directory structure
-            output_base = archive_path.parent
-            archive_dir = output_base / archive_name
-            metadata_dir = archive_dir / "metadata"
-
-            # Create directories
-            archive_dir.mkdir(parents=True, exist_ok=True)
-            metadata_dir.mkdir(parents=True, exist_ok=True)
-            safe_ops.track_directory(archive_dir)
-            safe_ops.track_directory(metadata_dir)
-
-            # Define target paths
-            target_archive = archive_dir / f"{archive_name}.tar.zst"
-            target_hash_files = {}
-            target_par2_files = []
-            target_metadata_file = metadata_dir / "metadata.toml"
-
-            # Move archive file
-            if archive_path != target_archive:
-                archive_path.rename(target_archive)
-                safe_ops.track_file(target_archive)
-                logger.debug(f"Moved archive: {archive_path} -> {target_archive}")
-
-            # Move hash files to metadata directory
-            for algorithm, hash_file_path in hash_files.items():
-                target_hash_path = metadata_dir / hash_file_path.name
-                if hash_file_path != target_hash_path:
-                    hash_file_path.rename(target_hash_path)
-                    safe_ops.track_file(target_hash_path)
-                    logger.debug(
-                        f"Moved {algorithm} hash: {hash_file_path} -> {target_hash_path}"
-                    )
-                target_hash_files[algorithm] = target_hash_path
-
-            # Move PAR2 files to metadata directory
-            for par2_file_path in par2_files:
-                target_par2_path = metadata_dir / par2_file_path.name
-                if par2_file_path != target_par2_path:
-                    par2_file_path.rename(target_par2_path)
-                    safe_ops.track_file(target_par2_path)
-                    logger.debug(
-                        f"Moved PAR2 file: {par2_file_path} -> {target_par2_path}"
-                    )
-                target_par2_files.append(target_par2_path)
-
-            # Update metadata with new paths
-            metadata.archive_path = target_archive
-            metadata.hash_files = {
-                algorithm: target_path.name
-                for algorithm, target_path in target_hash_files.items()
-            }
-            metadata.par2_files = [
-                target_path.name for target_path in target_par2_files
-            ]
-
-            # Generate and save metadata.toml file
-            metadata.save_to_toml(target_metadata_file)
-            safe_ops.track_file(target_metadata_file)
-
-            logger.info(f"Generated metadata file: {target_metadata_file}")
-            logger.info(f"Organized archive structure in: {archive_dir}")
-
-            return {
-                "archive": target_archive,
-                "hash_files": target_hash_files,
-                "par2_files": target_par2_files,
-                "metadata_file": target_metadata_file,
-                "archive_dir": archive_dir,
-                "metadata_dir": metadata_dir,
-            }
-
-        except Exception as e:
-            logger.error(f"Failed to organize output files: {e}")
-            # Return original paths as fallback
-            return {
-                "archive": archive_path,
-                "hash_files": hash_files,
-                "par2_files": par2_files,
-                "metadata_file": None,
-                "archive_dir": archive_path.parent,
-                "metadata_dir": None,
-            }
 
 
 def create_cold_storage_archive(
