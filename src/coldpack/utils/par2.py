@@ -95,8 +95,8 @@ class PAR2Manager:
         if not file_obj.exists():
             raise FileNotFoundError(f"File not found: {file_obj}")
 
-        # PAR2 base name (without .par2 extension)
-        par2_base = str(file_obj)
+        # PAR2 base name (relative to working directory)
+        par2_base = file_obj.name
 
         # Build par2 create command
         cmd = [
@@ -106,7 +106,7 @@ class PAR2Manager:
             f"-n{PAR2_BLOCK_COUNT}",  # Number of recovery files
             "-q",  # Quiet mode
             par2_base,  # Base name for PAR2 files
-            str(file_obj),  # File to protect
+            file_obj.name,  # File to protect (relative to cwd)
         ]
 
         try:
