@@ -29,6 +29,63 @@ class MultiFormatExtractor:
         """Initialize the extractor."""
         logger.debug("MultiFormatExtractor initialized")
 
+    def _get_clean_archive_name(self, source_path: Path) -> str:
+        """Get clean archive name by removing known archive extensions.
+
+        Handles compound extensions like .tar.xz, .tar.bz2, .tar.gz correctly
+        to avoid duplicate .tar in the final archive name.
+
+        Args:
+            source_path: Path to source file or directory
+
+        Returns:
+            Clean archive name without archive extensions
+        """
+        if source_path.is_dir():
+            return source_path.name
+
+        # Known compound archive extensions that should be fully stripped
+        compound_extensions = [
+            ".tar.gz",
+            ".tar.bz2",
+            ".tar.xz",
+            ".tar.lz",
+            ".tar.lzma",
+            ".tar.Z",
+            ".tar.zst",
+            ".tar.lz4",
+        ]
+
+        # Check for compound extensions first
+        name_lower = source_path.name.lower()
+        for ext in compound_extensions:
+            if name_lower.endswith(ext):
+                return source_path.name[: -len(ext)]
+
+        # Single archive extensions
+        single_extensions = [
+            ".7z",
+            ".zip",
+            ".rar",
+            ".gz",
+            ".bz2",
+            ".xz",
+            ".lz",
+            ".lzma",
+            ".Z",
+            ".zst",
+            ".lz4",
+            ".tar",
+        ]
+
+        # Check for single extensions
+        for ext in single_extensions:
+            if name_lower.endswith(ext):
+                return source_path.name[: -len(ext)]
+
+        # No known archive extension, use stem
+        return source_path.stem
+
     def extract(
         self,
         source: Union[str, Path],
@@ -119,6 +176,12 @@ class MultiFormatExtractor:
                     archive_path, output_dir, preserve_structure, force_overwrite
                 )
 
+            # Check if this is a compound tar archive (tar.gz, tar.bz2, tar.xz, etc.)
+            if self._is_compound_tar_format(archive_path):
+                return self._extract_compound_tar_archive(
+                    archive_path, output_dir, preserve_structure, force_overwrite
+                )
+
             # Check archive structure to determine extraction strategy
             has_single_root = self._check_archive_structure(archive_path)
 
@@ -171,6 +234,29 @@ class MultiFormatExtractor:
             return compound_suffix == ".tar.zst"
         return False
 
+    def _is_compound_tar_format(self, file_path: Path) -> bool:
+        """Check if file is a compound tar archive (tar.gz, tar.bz2, tar.xz, etc.).
+
+        Args:
+            file_path: Path to the file
+
+        Returns:
+            True if file is a compound tar format
+        """
+        if len(file_path.suffixes) >= 2:
+            compound_suffix = "".join(file_path.suffixes[-2:]).lower()
+            compound_tar_formats = [
+                ".tar.gz",
+                ".tar.bz2",
+                ".tar.xz",
+                ".tar.lz",
+                ".tar.lzma",
+                ".tar.Z",
+                ".tar.lz4",
+            ]
+            return compound_suffix in compound_tar_formats
+        return False
+
     def _extract_tar_zst_archive(
         self,
         archive_path: Path,
@@ -205,7 +291,9 @@ class MultiFormatExtractor:
             logger.debug(f"Using temporary directory: {temp_dir}")
 
             # Step 1: Extract .zst compression to get .tar file
-            tar_name = archive_path.stem  # This gives us the name without .zst
+            tar_name = (
+                archive_path.stem
+            )  # This gives us the name without .zst (should be .tar)
             intermediate_tar = temp_dir / tar_name
 
             logger.debug(f"Step 1: Extracting zst compression to {intermediate_tar}")
@@ -224,24 +312,39 @@ class MultiFormatExtractor:
             # Step 2: Extract tar file to final destination
             logger.debug(f"Step 2: Extracting tar file to {output_dir}")
 
-            # Use the existing tar extraction logic
-            # Create a temporary extractor instance for the tar file
+            # For tar.zst files, extract tar contents directly to output_dir
             with py7zz.SevenZipFile(intermediate_tar, "r") as tar_archive:
-                # Check tar structure to determine extraction strategy
-                has_single_root = self._check_archive_structure_from_filelist(
-                    tar_archive.namelist(), intermediate_tar.stem
-                )
+                # Extract tar contents directly to the output directory
+                tar_archive.extractall(output_dir)
 
-                if has_single_root and preserve_structure:
-                    # Extract with preserved structure
-                    result_path = self._extract_tar_with_structure(
-                        tar_archive, intermediate_tar, output_dir, force_overwrite
-                    )
+                # Check what was extracted
+                extracted_items = list(output_dir.iterdir())
+
+                if len(extracted_items) == 1 and extracted_items[0].is_dir():
+                    # Single directory was extracted - this should be the content
+                    result_path = extracted_items[0]
+                elif len(extracted_items) > 1:
+                    # Multiple items extracted - wrap them in a named directory
+                    archive_name = self._get_clean_archive_name(archive_path)
+
+                    # Use a unique wrapper directory name to avoid conflicts
+                    wrapper_dir = output_dir / archive_name
+                    counter = 1
+                    while wrapper_dir.exists():
+                        wrapper_dir = output_dir / f"{archive_name}_{counter}"
+                        counter += 1
+
+                    wrapper_dir.mkdir(exist_ok=True)
+
+                    # Move all extracted items into the wrapper directory
+                    for item in extracted_items:
+                        target = wrapper_dir / item.name
+                        item.rename(target)
+
+                    result_path = wrapper_dir
                 else:
-                    # Extract to named directory
-                    result_path = self._extract_tar_to_named_directory(
-                        tar_archive, intermediate_tar, output_dir, force_overwrite
-                    )
+                    # No items extracted - error
+                    raise ExtractionError("No content found after tar extraction")
 
             logger.success(f"Successfully extracted tar.zst to: {result_path}")
             return result_path
@@ -330,7 +433,7 @@ class MultiFormatExtractor:
         logger.info(f"Extracting tar with preserved structure: {archive_path}")
 
         # Check for existing files if not forcing overwrite
-        archive_name = archive_path.stem
+        archive_name = self._get_clean_archive_name(archive_path)
         extracted_root = output_dir / archive_name
         if extracted_root.exists() and not force_overwrite:
             raise ExtractionError(
@@ -342,7 +445,7 @@ class MultiFormatExtractor:
                 tar_archive.extractall(output_dir)
 
                 # Find the extracted root directory
-                archive_name = archive_path.stem
+                archive_name = self._get_clean_archive_name(archive_path)
                 extracted_root = output_dir / archive_name
 
                 if extracted_root.exists() and extracted_root.is_dir():
@@ -378,7 +481,7 @@ class MultiFormatExtractor:
         Returns:
             Path to the created target directory
         """
-        archive_name = archive_path.stem
+        archive_name = self._get_clean_archive_name(archive_path)
         target_dir = output_dir / archive_name
 
         # Check for existing directory if not forcing overwrite
@@ -446,7 +549,7 @@ class MultiFormatExtractor:
                 # Check if there's exactly one first-level item
                 if len(first_level_items) == 1:
                     root_name = next(iter(first_level_items))
-                    archive_name = archive_path.stem
+                    archive_name = self._get_clean_archive_name(archive_path)
 
                     # Check if root directory name matches archive name
                     if root_name == archive_name:
@@ -486,7 +589,7 @@ class MultiFormatExtractor:
         logger.info(f"Extracting with preserved structure: {archive_path}")
 
         # Check for existing files if not forcing overwrite
-        archive_name = archive_path.stem
+        archive_name = self._get_clean_archive_name(archive_path)
         extracted_root = output_dir / archive_name
         if extracted_root.exists() and not force_overwrite:
             raise ExtractionError(
@@ -499,7 +602,7 @@ class MultiFormatExtractor:
                     archive.extractall(output_dir)
 
                 # Find the extracted root directory
-                archive_name = archive_path.stem
+                archive_name = self._get_clean_archive_name(archive_path)
                 extracted_root = output_dir / archive_name
 
                 if extracted_root.exists() and extracted_root.is_dir():
@@ -530,7 +633,7 @@ class MultiFormatExtractor:
         Returns:
             Path to the created target directory
         """
-        archive_name = archive_path.stem
+        archive_name = self._get_clean_archive_name(archive_path)
         target_dir = output_dir / archive_name
 
         # Check for existing directory if not forcing overwrite
@@ -650,6 +753,114 @@ class MultiFormatExtractor:
         except Exception as e:
             logger.error(f"Archive validation failed: {e}")
             return False
+
+    def _extract_compound_tar_archive(
+        self,
+        archive_path: Path,
+        output_dir: Path,
+        preserve_structure: bool,
+        force_overwrite: bool,
+    ) -> Path:
+        """Extract compound tar archive (tar.gz, tar.bz2, tar.xz, etc.) by two-stage extraction.
+
+        Args:
+            archive_path: Path to the compound tar archive
+            output_dir: Directory to extract to
+            preserve_structure: Whether to preserve archive structure
+            force_overwrite: Force overwrite existing files
+
+        Returns:
+            Path to the extracted content directory
+
+        Raises:
+            ExtractionError: If extraction fails at any stage
+        """
+        logger.info(f"Extracting compound tar archive: {archive_path}")
+
+        # Use a temporary directory for the intermediate tar file
+        import tempfile
+
+        temp_dir = None
+
+        try:
+            # Create temporary directory for intermediate tar file
+            temp_dir = Path(tempfile.mkdtemp(prefix="coldpack_extract_"))
+            logger.debug(f"Using temporary directory: {temp_dir}")
+
+            # Step 1: Extract outer compression to get .tar file
+            logger.debug("Step 1: Extracting outer compression")
+            with py7zz.SevenZipFile(archive_path, "r") as compressed_archive:
+                compressed_archive.extractall(temp_dir)
+
+                # Find the intermediate tar file
+                extracted_files = list(temp_dir.iterdir())
+                tar_file = None
+                for f in extracted_files:
+                    if f.is_file() and f.name.lower().endswith(".tar"):
+                        tar_file = f
+                        break
+
+                if not tar_file:
+                    raise ExtractionError(
+                        "No .tar file found after extracting outer compression"
+                    )
+
+                logger.debug(f"Found intermediate tar file: {tar_file}")
+
+            # Step 2: Extract tar file to final destination
+            logger.debug(f"Step 2: Extracting tar file to {output_dir}")
+
+            # For compound tar files, extract tar contents directly to output_dir
+            with py7zz.SevenZipFile(tar_file, "r") as tar_archive:
+                # Extract tar contents directly to the output directory
+                tar_archive.extractall(output_dir)
+
+                # Check what was extracted and determine final structure
+                extracted_items = list(output_dir.iterdir())
+
+                if len(extracted_items) == 1 and extracted_items[0].is_dir():
+                    # Single directory was extracted - this should be the content
+                    result_path = extracted_items[0]
+                elif len(extracted_items) >= 1:
+                    # Multiple items or special case - wrap them in a named directory
+                    archive_name = self._get_clean_archive_name(archive_path)
+
+                    # Use a unique wrapper directory name to avoid conflicts
+                    wrapper_dir = output_dir / archive_name
+                    counter = 1
+                    while wrapper_dir.exists():
+                        wrapper_dir = output_dir / f"{archive_name}_{counter}"
+                        counter += 1
+
+                    wrapper_dir.mkdir(exist_ok=True)
+
+                    # Move all extracted items into the wrapper directory
+                    for item in extracted_items:
+                        target = wrapper_dir / item.name
+                        item.rename(target)
+
+                    result_path = wrapper_dir
+                else:
+                    # No items extracted - error
+                    raise ExtractionError("No content found after tar extraction")
+
+            logger.success(f"Successfully extracted compound tar to: {result_path}")
+            return result_path
+
+        except Exception as e:
+            raise ExtractionError(f"Failed to extract compound tar archive: {e}") from e
+        finally:
+            # Clean up temporary directory
+            if temp_dir and temp_dir.exists():
+                import shutil
+
+                try:
+                    shutil.rmtree(temp_dir)
+                    logger.debug(f"Cleaned up temporary directory: {temp_dir}")
+                except Exception as cleanup_error:
+                    logger.warning(
+                        f"Failed to clean up temporary directory {temp_dir}: {cleanup_error}"
+                    )
 
 
 def extract_archive(source: Union[str, Path], output_dir: Union[str, Path]) -> Path:
