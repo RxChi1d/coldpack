@@ -62,6 +62,7 @@ class ArchiveVerifier:
         archive_path: Union[str, Path],
         hash_files: Optional[dict[str, Path]] = None,
         par2_file: Optional[Path] = None,
+        par2_redundancy: int = 10,
     ) -> list[VerificationResult]:
         """Perform complete 5-layer verification.
 
@@ -69,6 +70,7 @@ class ArchiveVerifier:
             archive_path: Path to the tar.zst archive
             hash_files: Dictionary of algorithm names to hash file paths
             par2_file: Path to PAR2 recovery file
+            par2_redundancy: PAR2 redundancy percentage for proper verification
 
         Returns:
             List of verification results for each layer
@@ -131,7 +133,7 @@ class ArchiveVerifier:
         # Layer 5: PAR2 recovery verification
         if par2_file:
             try:
-                result = self.verify_par2_recovery(par2_file)
+                result = self.verify_par2_recovery(par2_file, par2_redundancy)
                 results.append(result)
             except Exception as e:
                 results.append(
@@ -329,11 +331,14 @@ class ArchiveVerifier:
                 "dual_hash", False, f"Hash verification error: {e}"
             )
 
-    def verify_par2_recovery(self, par2_file: Union[str, Path]) -> VerificationResult:
+    def verify_par2_recovery(
+        self, par2_file: Union[str, Path], par2_redundancy: int = 10
+    ) -> VerificationResult:
         """Verify PAR2 recovery files.
 
         Args:
             par2_file: Path to the main PAR2 file
+            par2_redundancy: PAR2 redundancy percentage for proper initialization
 
         Returns:
             Verification result
@@ -343,11 +348,10 @@ class ArchiveVerifier:
         try:
             logger.debug(f"Verifying PAR2 recovery: {par2_obj}")
 
-            # Initialize PAR2 manager if needed
-            if self.par2_manager is None:
-                from ..utils.par2 import PAR2Manager
+            # Always create a new PAR2Manager with the correct redundancy
+            from ..utils.par2 import PAR2Manager
 
-                self.par2_manager = PAR2Manager()
+            self.par2_manager = PAR2Manager(par2_redundancy)
 
             # Perform PAR2 verification
             assert self.par2_manager is not None
@@ -419,6 +423,7 @@ def verify_archive(
     archive_path: Union[str, Path],
     hash_files: Optional[dict[str, Path]] = None,
     par2_file: Optional[Path] = None,
+    par2_redundancy: int = 10,
 ) -> list[VerificationResult]:
     """Convenience function for complete archive verification.
 
@@ -426,12 +431,15 @@ def verify_archive(
         archive_path: Path to the archive
         hash_files: Dictionary of algorithm names to hash file paths
         par2_file: Path to PAR2 recovery file
+        par2_redundancy: PAR2 redundancy percentage
 
     Returns:
         List of verification results
     """
     verifier = ArchiveVerifier()
-    return verifier.verify_complete(archive_path, hash_files, par2_file)
+    return verifier.verify_complete(
+        archive_path, hash_files, par2_file, par2_redundancy
+    )
 
 
 def quick_verify(archive_path: Union[str, Path]) -> bool:

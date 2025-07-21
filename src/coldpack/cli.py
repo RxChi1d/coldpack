@@ -539,6 +539,20 @@ def verify(
 
         console.print(f"[cyan]Verifying archive: {archive}[/cyan]")
 
+        # Try to get par2_redundancy from metadata if available
+        par2_redundancy = 10  # Default value
+        metadata_file = archive.with_suffix(archive.suffix + ".toml")
+        if metadata_file.exists():
+            try:
+                from .config.settings import ArchiveMetadata
+
+                metadata = ArchiveMetadata.load_from_toml(metadata_file)
+                if hasattr(metadata, "par2_redundancy"):
+                    par2_redundancy = metadata.par2_redundancy
+                logger.debug(f"Using PAR2 redundancy from metadata: {par2_redundancy}%")
+            except Exception as e:
+                logger.debug(f"Could not read PAR2 redundancy from metadata: {e}")
+
         # Build hash file dictionary
         hash_file_dict = {}
         if hash_files:
@@ -577,9 +591,10 @@ def verify(
         if no_par2:
             skip_layers.add("par2_recovery")
 
-        # Perform verification with layer controls
-        # Note: We'll need to modify the verifier to accept skip_layers parameter
-        results = verifier.verify_complete(archive, hash_file_dict, par2_file)
+        # Perform verification with layer controls and correct par2_redundancy
+        results = verifier.verify_complete(
+            archive, hash_file_dict, par2_file, par2_redundancy
+        )
 
         # Display results
         display_verification_results(results)

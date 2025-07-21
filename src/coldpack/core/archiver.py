@@ -680,7 +680,12 @@ class ColdStorageArchiver:
 
         try:
             par2_file = par2_files[0] if par2_files else None
-            results = self.verifier.verify_complete(archive_path, hash_files, par2_file)
+            results = self.verifier.verify_complete(
+                archive_path,
+                hash_files,
+                par2_file,
+                self.processing_options.par2_redundancy,
+            )
 
             # Check if all layers passed
             failed_layers = [r for r in results if not r.success]
