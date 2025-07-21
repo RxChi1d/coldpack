@@ -113,6 +113,12 @@ class MultiFormatExtractor:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         try:
+            # Check if this is a tar.zst archive (coldpack format)
+            if self._is_tar_zst_format(archive_path):
+                return self._extract_tar_zst_archive(
+                    archive_path, output_dir, preserve_structure, force_overwrite
+                )
+
             # Check archive structure to determine extraction strategy
             has_single_root = self._check_archive_structure(archive_path)
 
@@ -150,6 +156,259 @@ class MultiFormatExtractor:
                 return True
 
         return False
+
+    def _is_tar_zst_format(self, file_path: Path) -> bool:
+        """Check if file is a tar.zst archive (coldpack format).
+
+        Args:
+            file_path: Path to the file
+
+        Returns:
+            True if file is tar.zst format
+        """
+        if len(file_path.suffixes) >= 2:
+            compound_suffix = "".join(file_path.suffixes[-2:]).lower()
+            return compound_suffix == ".tar.zst"
+        return False
+
+    def _extract_tar_zst_archive(
+        self,
+        archive_path: Path,
+        output_dir: Path,
+        preserve_structure: bool,
+        force_overwrite: bool,
+    ) -> Path:
+        """Extract tar.zst archive by first extracting zst, then tar.
+
+        Args:
+            archive_path: Path to the .tar.zst archive
+            output_dir: Directory to extract to
+            preserve_structure: Whether to preserve archive structure
+            force_overwrite: Force overwrite existing files
+
+        Returns:
+            Path to the extracted content directory
+
+        Raises:
+            ExtractionError: If extraction fails at any stage
+        """
+        logger.info(f"Extracting tar.zst archive: {archive_path}")
+
+        # Use a temporary directory for the intermediate tar file
+        import tempfile
+
+        temp_dir = None
+
+        try:
+            # Create temporary directory for intermediate tar file
+            temp_dir = Path(tempfile.mkdtemp(prefix="coldpack_extract_"))
+            logger.debug(f"Using temporary directory: {temp_dir}")
+
+            # Step 1: Extract .zst compression to get .tar file
+            tar_name = archive_path.stem  # This gives us the name without .zst
+            intermediate_tar = temp_dir / tar_name
+
+            logger.debug(f"Step 1: Extracting zst compression to {intermediate_tar}")
+            with py7zz.SevenZipFile(archive_path, "r") as zst_archive:
+                zst_archive.extractall(temp_dir)
+
+            # Verify intermediate tar file exists
+            if not intermediate_tar.exists():
+                # py7zz might extract with a different name, find the tar file
+                tar_files = list(temp_dir.glob("*.tar"))
+                if not tar_files:
+                    raise ExtractionError("No tar file found after zst extraction")
+                intermediate_tar = tar_files[0]
+                logger.debug(f"Found intermediate tar file: {intermediate_tar}")
+
+            # Step 2: Extract tar file to final destination
+            logger.debug(f"Step 2: Extracting tar file to {output_dir}")
+
+            # Use the existing tar extraction logic
+            # Create a temporary extractor instance for the tar file
+            with py7zz.SevenZipFile(intermediate_tar, "r") as tar_archive:
+                # Check tar structure to determine extraction strategy
+                has_single_root = self._check_archive_structure_from_filelist(
+                    tar_archive.namelist(), intermediate_tar.stem
+                )
+
+                if has_single_root and preserve_structure:
+                    # Extract with preserved structure
+                    result_path = self._extract_tar_with_structure(
+                        tar_archive, intermediate_tar, output_dir, force_overwrite
+                    )
+                else:
+                    # Extract to named directory
+                    result_path = self._extract_tar_to_named_directory(
+                        tar_archive, intermediate_tar, output_dir, force_overwrite
+                    )
+
+            logger.success(f"Successfully extracted tar.zst to: {result_path}")
+            return result_path
+
+        except Exception as e:
+            raise ExtractionError(f"Failed to extract tar.zst archive: {e}") from e
+        finally:
+            # Clean up temporary directory
+            if temp_dir and temp_dir.exists():
+                import shutil
+
+                try:
+                    shutil.rmtree(temp_dir)
+                    logger.debug(f"Cleaned up temporary directory: {temp_dir}")
+                except Exception as cleanup_error:
+                    logger.warning(
+                        f"Failed to clean up temp directory: {cleanup_error}"
+                    )
+
+    def _check_archive_structure_from_filelist(
+        self, file_list: list, archive_name: str
+    ) -> bool:
+        """Check if archive has a single root directory structure from file list.
+
+        Args:
+            file_list: List of files in the archive
+            archive_name: Name of the archive (without extension)
+
+        Returns:
+            True if archive has single root directory matching the archive name
+        """
+        if not file_list:
+            logger.warning("Archive is empty")
+            return False
+
+        # Extract first-level items (no path separators)
+        first_level_items = set()
+        for item in file_list:
+            # Normalize path separators
+            normalized_path = item.replace("\\", "/")
+
+            # Get first component
+            parts = normalized_path.split("/")
+            if parts[0]:  # Skip empty parts
+                first_level_items.add(parts[0])
+
+        # Check if there's exactly one first-level item
+        if len(first_level_items) == 1:
+            root_name = next(iter(first_level_items))
+
+            # Check if root directory name matches archive name
+            if root_name == archive_name:
+                # Verify it's actually a directory (has subdirectories/files)
+                has_subdirectories = any(
+                    item.replace("\\", "/").startswith(f"{root_name}/")
+                    for item in file_list
+                )
+
+                if has_subdirectories:
+                    logger.debug(
+                        f"Archive has matching single root directory: {root_name}"
+                    )
+                    return True
+
+        logger.debug(f"Archive structure: {len(first_level_items)} root items")
+        return False
+
+    def _extract_tar_with_structure(
+        self,
+        tar_archive: py7zz.SevenZipFile,
+        archive_path: Path,
+        output_dir: Path,
+        force_overwrite: bool,
+    ) -> Path:
+        """Extract tar archive preserving its internal structure.
+
+        Args:
+            tar_archive: Opened py7zz archive object
+            archive_path: Path to the tar archive
+            output_dir: Output directory
+            force_overwrite: Force overwrite existing files
+
+        Returns:
+            Path to the extracted root directory
+        """
+        logger.info(f"Extracting tar with preserved structure: {archive_path}")
+
+        # Check for existing files if not forcing overwrite
+        archive_name = archive_path.stem
+        extracted_root = output_dir / archive_name
+        if extracted_root.exists() and not force_overwrite:
+            raise ExtractionError(
+                f"Target directory already exists: {extracted_root}. Use --force to overwrite."
+            )
+
+        with safe_file_operations():
+            try:
+                tar_archive.extractall(output_dir)
+
+                # Find the extracted root directory
+                archive_name = archive_path.stem
+                extracted_root = output_dir / archive_name
+
+                if extracted_root.exists() and extracted_root.is_dir():
+                    logger.success(f"Extracted to: {extracted_root}")
+                    return extracted_root
+                else:
+                    # Fallback: find the first directory in output
+                    for item in output_dir.iterdir():
+                        if item.is_dir():
+                            logger.success(f"Extracted to: {item}")
+                            return item
+
+                    raise ExtractionError("No directory found after extraction")
+
+            except Exception as e:
+                raise ExtractionError(f"Tar extraction failed: {e}") from e
+
+    def _extract_tar_to_named_directory(
+        self,
+        tar_archive: py7zz.SevenZipFile,
+        archive_path: Path,
+        output_dir: Path,
+        force_overwrite: bool,
+    ) -> Path:
+        """Extract tar archive to a directory named after the archive.
+
+        Args:
+            tar_archive: Opened py7zz archive object
+            archive_path: Path to the tar archive
+            output_dir: Output directory
+            force_overwrite: Force overwrite existing files
+
+        Returns:
+            Path to the created target directory
+        """
+        archive_name = archive_path.stem
+        target_dir = output_dir / archive_name
+
+        # Check for existing directory if not forcing overwrite
+        if target_dir.exists() and not force_overwrite:
+            raise ExtractionError(
+                f"Target directory already exists: {target_dir}. Use --force to overwrite."
+            )
+
+        logger.info(f"Extracting tar to named directory: {target_dir}")
+
+        with safe_file_operations() as safe_ops:
+            try:
+                # Create target directory
+                target_dir.mkdir(parents=True, exist_ok=True)
+                safe_ops.track_directory(target_dir)
+
+                # Extract to target directory
+                tar_archive.extractall(target_dir)
+
+                # Verify extraction
+                if not any(target_dir.iterdir()):
+                    raise ExtractionError("Target directory is empty after extraction")
+
+                logger.success(f"Extracted to: {target_dir}")
+                return target_dir
+
+            except Exception as e:
+                raise ExtractionError(
+                    f"Tar extraction to named directory failed: {e}"
+                ) from e
 
     def _check_archive_structure(self, archive_path: Path) -> bool:
         """Check if archive has a single root directory structure.
