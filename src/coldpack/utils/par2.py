@@ -95,18 +95,25 @@ class PAR2Manager:
         if not file_obj.exists():
             raise FileNotFoundError(f"File not found: {file_obj}")
 
-        # PAR2 base name (without .par2 extension)
-        par2_base = str(file_obj)
+        # PAR2 base name - use relative path to ensure portability
+        # PAR2 files store relative paths internally for cross-platform compatibility
+        par2_base = (
+            file_obj.name
+        )  # Use filename as base (will be created in same directory)
 
         # Build par2 create command
+        # Note: We use relative paths because:
+        # 1. PAR2 stores paths internally in .par2 files
+        # 2. Absolute paths make archives non-portable between systems
+        # 3. We set cwd=work_dir below to ensure correct working directory
         cmd = [
             self.par2_cmd,
             "create",
             f"-r{self.redundancy_percent}",  # Redundancy percentage
             f"-n{PAR2_BLOCK_COUNT}",  # Number of recovery files
             "-q",  # Quiet mode
-            par2_base,  # Base name for PAR2 files
-            str(file_obj),  # File to protect
+            par2_base,  # Base name for PAR2 files (relative)
+            file_obj.name,  # File to protect (relative to working directory)
         ]
 
         try:
@@ -189,7 +196,7 @@ class PAR2Manager:
             self.par2_cmd,
             "verify",
             "-q",  # Quiet mode
-            str(par2_obj),
+            par2_obj.name,  # Use relative path for consistency
         ]
 
         try:
@@ -240,7 +247,7 @@ class PAR2Manager:
             self.par2_cmd,
             "repair",
             "-q",  # Quiet mode
-            str(par2_obj),
+            par2_obj.name,  # Use relative path for consistency
         ]
 
         try:
