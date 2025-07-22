@@ -419,6 +419,278 @@ class ArchiveVerifier:
             },
         }
 
+    def verify_auto(
+        self,
+        archive_path: Union[str, Path],
+        skip_layers: Optional[set[str]] = None,
+    ) -> list[VerificationResult]:
+        """Perform complete verification with automatic file discovery.
+
+        This method automatically discovers hash files, PAR2 files, and metadata
+        files associated with the archive, then performs comprehensive verification.
+
+        Args:
+            archive_path: Path to the tar.zst archive
+            skip_layers: Optional set of layer names to skip
+
+        Returns:
+            List of verification results for each layer
+
+        Raises:
+            FileNotFoundError: If archive doesn't exist
+            VerificationError: If verification setup fails
+        """
+        archive_obj = Path(archive_path)
+
+        if not archive_obj.exists():
+            raise FileNotFoundError(f"Archive not found: {archive_obj}")
+
+        skip_layers = skip_layers or set()
+
+        # Auto-discover hash files
+        hash_files = self._discover_hash_files(archive_obj, skip_layers)
+
+        # Auto-discover PAR2 file
+        par2_file = self._discover_par2_file(archive_obj, skip_layers)
+
+        # Auto-discover metadata
+        metadata = self._discover_metadata(archive_obj)
+
+        # Perform complete verification with discovered files and skip layers
+        return self._verify_complete_with_skip(
+            archive_path, hash_files, par2_file, metadata, skip_layers
+        )
+
+    def _discover_hash_files(
+        self, archive_obj: Path, skip_layers: set[str]
+    ) -> dict[str, Path]:
+        """Discover hash files for the archive."""
+        hash_files = {}
+
+        # Determine archive name for consistent file searching
+        archive_name = archive_obj.stem
+        if archive_name.endswith(".tar"):
+            archive_name = archive_name[:-4]
+
+        # Search locations for hash files
+        hash_search_locations = [
+            # Same directory as archive
+            (
+                archive_obj.with_suffix(archive_obj.suffix + ".sha256"),
+                archive_obj.with_suffix(archive_obj.suffix + ".blake3"),
+            ),
+            # In metadata subdirectory of archive directory
+            (
+                archive_obj.parent / "metadata" / f"{archive_obj.name}.sha256",
+                archive_obj.parent / "metadata" / f"{archive_obj.name}.blake3",
+            ),
+            # In archive_name/metadata subdirectory
+            (
+                archive_obj.parent
+                / archive_name
+                / "metadata"
+                / f"{archive_obj.name}.sha256",
+                archive_obj.parent
+                / archive_name
+                / "metadata"
+                / f"{archive_obj.name}.blake3",
+            ),
+        ]
+
+        for sha256_file, blake3_file in hash_search_locations:
+            if (
+                sha256_file.exists()
+                and "sha256_hash" not in skip_layers
+                and "sha256" not in hash_files
+            ):
+                hash_files["sha256"] = sha256_file
+                logger.debug(f"Found SHA256 hash file: {sha256_file}")
+            if (
+                blake3_file.exists()
+                and "blake3_hash" not in skip_layers
+                and "blake3" not in hash_files
+            ):
+                hash_files["blake3"] = blake3_file
+                logger.debug(f"Found BLAKE3 hash file: {blake3_file}")
+
+        return hash_files
+
+    def _discover_par2_file(
+        self, archive_obj: Path, skip_layers: set[str]
+    ) -> Optional[Path]:
+        """Discover PAR2 file for the archive."""
+        if "par2_recovery" in skip_layers:
+            return None
+
+        # Determine archive name for consistent file searching
+        archive_name = archive_obj.stem
+        if archive_name.endswith(".tar"):
+            archive_name = archive_name[:-4]
+
+        # Search locations for PAR2 files
+        par2_search_locations = [
+            # Same directory as archive
+            archive_obj.with_suffix(archive_obj.suffix + ".par2"),
+            # In metadata subdirectory of archive directory
+            archive_obj.parent / "metadata" / f"{archive_obj.name}.par2",
+            # In archive_name/metadata subdirectory
+            archive_obj.parent / archive_name / "metadata" / f"{archive_obj.name}.par2",
+        ]
+
+        for par2_candidate in par2_search_locations:
+            if par2_candidate.exists():
+                logger.debug(f"Found PAR2 file: {par2_candidate}")
+                return par2_candidate
+
+        return None
+
+    def _discover_metadata(self, archive_obj: Path) -> Optional[Any]:
+        """Discover metadata file for the archive."""
+        try:
+            from ..config.settings import ArchiveMetadata
+
+            # Determine archive name for path construction
+            archive_name = archive_obj.stem
+            if archive_name.endswith(".tar"):
+                archive_name = archive_name[:-4]
+
+            metadata_paths = [
+                # Standard coldpack structure: archive_dir/metadata/metadata.toml
+                archive_obj.parent / "metadata" / "metadata.toml",
+                # Alternative: archive_name_dir/metadata/metadata.toml
+                archive_obj.parent / archive_name / "metadata" / "metadata.toml",
+                # Legacy location: same directory as archive
+                archive_obj.parent / "metadata.toml",
+            ]
+
+            for metadata_path in metadata_paths:
+                if metadata_path.exists():
+                    try:
+                        metadata = ArchiveMetadata.load_from_toml(metadata_path)
+                        logger.debug(f"Found metadata file: {metadata_path}")
+                        return metadata
+                    except Exception as e:
+                        logger.debug(
+                            f"Could not load metadata from {metadata_path}: {e}"
+                        )
+
+        except Exception as e:
+            logger.debug(f"Metadata discovery failed: {e}")
+
+        return None
+
+    def _verify_complete_with_skip(
+        self,
+        archive_path: Union[str, Path],
+        hash_files: Optional[dict[str, Path]] = None,
+        par2_file: Optional[Path] = None,
+        metadata: Optional[Any] = None,
+        skip_layers: Optional[set[str]] = None,
+    ) -> list[VerificationResult]:
+        """Perform complete verification with layer skipping support.
+
+        This is an internal method that supports skipping verification layers.
+
+        Args:
+            archive_path: Path to the tar.zst archive
+            hash_files: Dictionary of algorithm names to hash file paths
+            par2_file: Path to PAR2 recovery file
+            metadata: Optional ArchiveMetadata for parameter recovery
+            skip_layers: Optional set of layer names to skip
+
+        Returns:
+            List of verification results for each layer
+        """
+        archive_obj = Path(archive_path)
+
+        if not archive_obj.exists():
+            raise FileNotFoundError(f"Archive not found: {archive_obj}")
+
+        skip_layers = skip_layers or set()
+        logger.info(f"Starting 5-layer verification for: {archive_obj}")
+
+        results = []
+
+        # Layer 1: Zstd integrity verification
+        if "zstd_integrity" not in skip_layers:
+            try:
+                result = self.verify_zstd_integrity(archive_obj)
+                results.append(result)
+                if not result.success:
+                    logger.error("Zstd verification failed, skipping remaining layers")
+                    return results
+            except Exception as e:
+                results.append(
+                    VerificationResult(
+                        "zstd_integrity", False, f"Verification error: {e}"
+                    )
+                )
+                return results
+
+        # Layer 2: TAR header verification
+        if "tar_header" not in skip_layers:
+            try:
+                result = self.verify_tar_structure(archive_obj)
+                results.append(result)
+                if not result.success:
+                    logger.warning(
+                        "TAR verification failed, continuing with remaining layers"
+                    )
+            except Exception as e:
+                results.append(
+                    VerificationResult("tar_header", False, f"Verification error: {e}")
+                )
+
+        # Layer 3 & 4: Hash verification (SHA-256 + BLAKE3)
+        if hash_files and not (
+            "sha256_hash" in skip_layers and "blake3_hash" in skip_layers
+        ):
+            # Filter hash files based on skip layers
+            filtered_hash_files = {}
+            for algorithm, path in hash_files.items():
+                if f"{algorithm}_hash" not in skip_layers:
+                    filtered_hash_files[algorithm] = path
+
+            if filtered_hash_files:
+                try:
+                    result = self.verify_hash_files(archive_obj, filtered_hash_files)
+                    results.append(result)
+                except Exception as e:
+                    results.append(
+                        VerificationResult(
+                            "dual_hash", False, f"Hash verification error: {e}"
+                        )
+                    )
+
+        # Layer 5: PAR2 recovery verification
+        if "par2_recovery" not in skip_layers:
+            if par2_file:
+                try:
+                    # Extract PAR2 settings from metadata if available
+                    par2_settings = metadata.par2_settings if metadata else None
+                    result = self.verify_par2_recovery(par2_file, par2_settings)
+                    results.append(result)
+                except Exception as e:
+                    results.append(
+                        VerificationResult(
+                            "par2_recovery", False, f"PAR2 verification error: {e}"
+                        )
+                    )
+            else:
+                results.append(
+                    VerificationResult("par2_recovery", False, "PAR2 file not provided")
+                )
+
+        # Summary
+        passed_layers = sum(1 for r in results if r.success)
+        total_layers = len(results)
+
+        logger.info(
+            f"Verification complete: {passed_layers}/{total_layers} layers passed"
+        )
+
+        return results
+
     def verify_quick(self, archive_path: Union[str, Path]) -> bool:
         """Perform quick verification (zstd integrity only).
 
