@@ -310,3 +310,185 @@ def format_file_size(size_bytes: int) -> str:
         return f"{size_bytes / 1024:.2f} KB"
     else:
         return f"{size_bytes} bytes"
+
+
+# System-specific file patterns to exclude from archives
+SYSTEM_FILE_PATTERNS = {
+    "macos": [
+        "._*",  # macOS resource forks
+        ".DS_Store",  # macOS desktop services store
+        ".fseventsd",  # macOS file system events daemon
+        ".Spotlight-*",  # macOS spotlight indexing
+        ".Trashes",  # macOS trash
+        ".DocumentRevisions-V100",  # macOS document revisions
+        ".TemporaryItems",  # macOS temporary items
+        "__MACOSX",  # macOS archive metadata directory
+        ".AppleDouble",  # macOS AppleDouble files
+        ".LSOverride",  # macOS launch services override
+        ".Spotlight-V100",  # macOS spotlight
+        ".VolumeIcon.icns",  # macOS volume icon
+    ],
+    "windows": [
+        "Thumbs.db",  # Windows thumbnail cache
+        "Desktop.ini",  # Windows desktop configuration
+        "*.tmp",  # Windows temporary files
+        "*.lnk",  # Windows shortcuts (typically shouldn't be archived)
+        "$RECYCLE.BIN",  # Windows recycle bin
+        "System Volume Information",  # Windows system volume info
+        "hiberfil.sys",  # Windows hibernate file
+        "pagefile.sys",  # Windows page file
+        "swapfile.sys",  # Windows swap file
+        "*.cab",  # Windows cabinet files (system)
+        "*.msi",  # Windows installer packages
+        "*.exe",  # Windows executables (when found in system contexts)
+    ],
+    "linux": [
+        ".Trash-*",  # Linux trash directories
+        ".cache",  # Linux cache directory
+        ".thumbnails",  # Linux thumbnail cache
+        ".gvfs",  # Linux GNOME virtual file system
+        "lost+found",  # Linux filesystem recovery directory
+        ".xsession-errors",  # Linux X session errors
+        "*.tmp",  # Linux temporary files
+        "*~",  # Linux backup files
+        ".nfs*",  # NFS temporary files
+    ],
+    "common": [
+        ".git",  # Git repository data
+        ".svn",  # Subversion repository data
+        ".hg",  # Mercurial repository data
+        ".bzr",  # Bazaar repository data
+        "node_modules",  # Node.js modules (should be excluded from most archives)
+        "__pycache__",  # Python bytecode cache
+        "*.pyc",  # Python bytecode files
+        "*.pyo",  # Python optimized bytecode
+        ".pytest_cache",  # Pytest cache
+        ".coverage",  # Coverage.py files
+        ".tox",  # Tox testing tool
+        ".venv",  # Python virtual environment
+        "venv",  # Python virtual environment
+        ".env",  # Environment files (may contain secrets)
+        "*.log",  # Log files
+        "*.lock",  # Lock files
+        ".idea",  # JetBrains IDE
+        ".vscode",  # Visual Studio Code
+        ".vs",  # Visual Studio
+        ".gradle",  # Gradle build cache
+        ".m2",  # Maven cache
+        "target",  # Maven/Gradle build output
+        "build",  # Generic build directory
+        "dist",  # Distribution directory
+        "*.orig",  # Original files from merges
+        "*.rej",  # Rejected patches
+        ".sass-cache",  # Sass compilation cache
+        ".npm",  # NPM cache
+        "Cargo.lock",  # Rust lock file (context dependent)
+        "package-lock.json",  # NPM lock file (context dependent)
+        "yarn.lock",  # Yarn lock file (context dependent)
+    ],
+}
+
+
+def should_exclude_file(file_path: Path, base_dir: Path) -> bool:
+    """Determine if a file should be excluded from archiving.
+
+    This function checks against system-specific file patterns that are
+    typically unwanted in clean archives, including:
+    - macOS system files (._*, .DS_Store, etc.)
+    - Windows system files (Thumbs.db, Desktop.ini, etc.)
+    - Linux system files (.Trash-*, .cache, etc.)
+    - Common development artifacts (node_modules, __pycache__, etc.)
+
+    Args:
+        file_path: Path to the file to check
+        base_dir: Base directory being archived (for relative path calculation)
+
+    Returns:
+        True if the file should be excluded from the archive
+    """
+    import fnmatch
+
+    # Get relative path from base directory
+    try:
+        rel_path = file_path.relative_to(base_dir)
+    except ValueError:
+        # File is not under base_dir, probably shouldn't be archived anyway
+        return True
+
+    # Get file/directory name
+    name = file_path.name
+    rel_path_str = str(rel_path)
+
+    # Always check all system patterns for maximum compatibility
+    # Users may transfer files between different operating systems
+    patterns_to_check = SYSTEM_FILE_PATTERNS["common"].copy()
+    patterns_to_check.extend(SYSTEM_FILE_PATTERNS["macos"])
+    patterns_to_check.extend(SYSTEM_FILE_PATTERNS["windows"])
+    patterns_to_check.extend(SYSTEM_FILE_PATTERNS["linux"])
+
+    # Check patterns against both filename and relative path
+    for pattern in patterns_to_check:
+        # Check exact name match
+        if fnmatch.fnmatch(name, pattern):
+            logger.debug(
+                f"Excluding file (name pattern): {rel_path} (matched: {pattern})"
+            )
+            return True
+
+        # Check relative path match (for directory patterns)
+        if fnmatch.fnmatch(rel_path_str, pattern):
+            logger.debug(
+                f"Excluding file (path pattern): {rel_path} (matched: {pattern})"
+            )
+            return True
+
+        # Check if any parent directory matches the pattern
+        for parent in rel_path.parents:
+            if fnmatch.fnmatch(parent.name, pattern):
+                logger.debug(
+                    f"Excluding file (parent pattern): {rel_path} (parent {parent.name} matched: {pattern})"
+                )
+                return True
+
+    return False
+
+
+def filter_files_for_archive(source_dir: Path) -> list[Path]:
+    """Get a filtered list of files suitable for archiving.
+
+    This function recursively finds all files in the source directory
+    and excludes system files, build artifacts, and other files that
+    typically shouldn't be included in clean archives.
+
+    Args:
+        source_dir: Directory to scan for files
+
+    Returns:
+        Sorted list of Path objects for files that should be archived
+    """
+    if not source_dir.exists() or not source_dir.is_dir():
+        raise ValueError(
+            f"Source directory does not exist or is not a directory: {source_dir}"
+        )
+
+    included_files = []
+    excluded_count = 0
+
+    for file_path in source_dir.rglob("*"):
+        if not file_path.is_file():
+            continue
+
+        if should_exclude_file(file_path, source_dir):
+            excluded_count += 1
+            continue
+
+        included_files.append(file_path)
+
+    # Sort files for deterministic output
+    included_files.sort()
+
+    logger.info(
+        f"File filtering complete: {len(included_files)} included, {excluded_count} excluded"
+    )
+
+    return included_files

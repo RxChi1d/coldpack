@@ -21,6 +21,7 @@ from ..utils.compression import ZstdCompressor, optimize_compression_settings
 from ..utils.filesystem import (
     check_disk_space,
     create_temp_directory,
+    filter_files_for_archive,
     format_file_size,
     get_file_size,
     safe_file_operations,
@@ -455,7 +456,7 @@ class ColdStorageArchiver:
     # External tar execution helper
     # ---------------------------------------------------------------------
     def _create_tar_with_external(self, source_dir: Path, tar_path: Path) -> None:
-        """Create a TAR archive using the detected external command with deterministic sorting.
+        """Create a TAR archive using the detected external command with deterministic sorting and system file filtering.
 
         Args:
             source_dir: Directory whose contents will be archived
@@ -466,38 +467,69 @@ class ColdStorageArchiver:
             "External tar command must include sorting arguments"
         )
 
-        # Decide on a POSIX‑compliant format flag
-        base_exe = Path(self._external_tar_cmd[0]).name.lower()
-        sort_args = self._external_tar_cmd[1:]  # Required sorting arguments
+        # Get filtered file list
+        files_to_archive = filter_files_for_archive(source_dir)
 
-        if "bsdtar" in base_exe:
-            format_args = ["--format", "pax"]  # bsdtar syntax
-        else:
-            # GNU tar / gtar syntax
-            format_args = ["--format=posix"]
+        if not files_to_archive:
+            logger.warning("No files to archive after filtering")
+            # Create empty tar file
+            with tarfile.open(tar_path, "w", format=tarfile.PAX_FORMAT):
+                pass
+            return
 
-        # Build command with guaranteed sorting
-        cmd = [
-            self._external_tar_cmd[0],
-            *sort_args,  # Required sorting args (--sort=name or --options sort=name)
-            *format_args,
-            "-cf",
-            str(tar_path),
-            "--directory",
-            str(source_dir),
-            ".",  # Archive contents of source_dir, not source_dir itself
-        ]
+        # Create temporary file list for tar
+        import tempfile
 
-        logger.debug(f"Running deterministic tar: {' '.join(cmd)}")
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+            files_list_path = Path(f.name)
+            for file_path in files_to_archive:
+                # Calculate relative path from source_dir
+                rel_path = file_path.relative_to(source_dir)
+                f.write(f"{rel_path}\n")
 
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=3600,
-        )
-        if result.returncode != 0:
-            raise ArchivingError(f"tar command failed: {result.stderr}")
+        try:
+            # Decide on a POSIX‑compliant format flag
+            base_exe = Path(self._external_tar_cmd[0]).name.lower()
+            sort_args = self._external_tar_cmd[1:]  # Required sorting arguments
+
+            if "bsdtar" in base_exe:
+                format_args = ["--format", "pax"]  # bsdtar syntax
+            else:
+                # GNU tar / gtar syntax
+                format_args = ["--format=posix"]
+
+            # Build command with file list and guaranteed sorting
+            cmd = [
+                self._external_tar_cmd[0],
+                *sort_args,  # Required sorting args (--sort=name or --options sort=name)
+                *format_args,
+                "-cf",
+                str(tar_path),
+                "--directory",
+                str(source_dir),
+                "-T",  # Read file list from file
+                str(files_list_path),
+            ]
+
+            logger.debug(
+                f"Running deterministic tar with filtered file list: {' '.join(cmd)}"
+            )
+
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=3600,
+            )
+            if result.returncode != 0:
+                raise ArchivingError(f"tar command failed: {result.stderr}")
+
+        finally:
+            # Clean up temporary file list
+            from contextlib import suppress
+
+            with suppress(OSError):
+                files_list_path.unlink()
 
     def _extract_source(self, source_path: Path, safe_ops: Any) -> Path:
         """Extract source content to temporary directory.
@@ -599,10 +631,10 @@ class ColdStorageArchiver:
             raise ArchivingError(f"TAR creation failed: {e}") from e
 
     def _create_tar_with_python(self, source_dir: Path, tar_path: Path) -> None:
-        """Create TAR using Python tarfile (POSIX/PAX format)."""
+        """Create TAR using Python tarfile (POSIX/PAX format) with system file filtering."""
         with tarfile.open(tar_path, "w", format=tarfile.PAX_FORMAT) as tar:
-            # Add files in sorted order for deterministic output (equivalent to --sort=name)
-            files_to_add = sorted(source_dir.rglob("*"))
+            # Use filtered file list to exclude system files
+            files_to_add = filter_files_for_archive(source_dir)
 
             for file_path in files_to_add:
                 # Calculate relative path from source_dir (archive contents, not directory itself)
