@@ -557,19 +557,66 @@ def verify(
 
         # Auto-detect hash files if not provided
         if not hash_file_dict:
-            sha256_file = archive.with_suffix(archive.suffix + ".sha256")
-            blake3_file = archive.with_suffix(archive.suffix + ".blake3")
+            # Determine archive name for consistent file searching
+            archive_name = archive.stem
+            if archive_name.endswith(".tar"):
+                archive_name = archive_name[:-4]
 
-            if sha256_file.exists() and not no_sha256:
-                hash_file_dict["sha256"] = sha256_file
-            if blake3_file.exists() and not no_blake3:
-                hash_file_dict["blake3"] = blake3_file
+            # Search locations for hash files
+            hash_search_locations = [
+                # Same directory as archive
+                (
+                    archive.with_suffix(archive.suffix + ".sha256"),
+                    archive.with_suffix(archive.suffix + ".blake3"),
+                ),
+                # In metadata subdirectory of archive directory
+                (
+                    archive.parent / "metadata" / f"{archive.name}.sha256",
+                    archive.parent / "metadata" / f"{archive.name}.blake3",
+                ),
+                # In archive_name/metadata subdirectory
+                (
+                    archive.parent
+                    / archive_name
+                    / "metadata"
+                    / f"{archive.name}.sha256",
+                    archive.parent
+                    / archive_name
+                    / "metadata"
+                    / f"{archive.name}.blake3",
+                ),
+            ]
+
+            for sha256_file, blake3_file in hash_search_locations:
+                if (
+                    sha256_file.exists()
+                    and not no_sha256
+                    and "sha256" not in hash_file_dict
+                ):
+                    hash_file_dict["sha256"] = sha256_file
+                if (
+                    blake3_file.exists()
+                    and not no_blake3
+                    and "blake3" not in hash_file_dict
+                ):
+                    hash_file_dict["blake3"] = blake3_file
 
         # Auto-detect PAR2 file if not provided
         if not par2_file and not no_par2:
-            par2_candidate = archive.with_suffix(archive.suffix + ".par2")
-            if par2_candidate.exists():
-                par2_file = par2_candidate
+            # Search locations for PAR2 files
+            par2_search_locations = [
+                # Same directory as archive
+                archive.with_suffix(archive.suffix + ".par2"),
+                # In metadata subdirectory of archive directory
+                archive.parent / "metadata" / f"{archive.name}.par2",
+                # In archive_name/metadata subdirectory
+                archive.parent / archive_name / "metadata" / f"{archive.name}.par2",
+            ]
+
+            for par2_candidate in par2_search_locations:
+                if par2_candidate.exists():
+                    par2_file = par2_candidate
+                    break
 
         # Configure which verification layers to skip
         skip_layers = set()
