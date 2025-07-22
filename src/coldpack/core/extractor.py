@@ -673,7 +673,7 @@ class MultiFormatExtractor:
             archive_path: Path to the archive
 
         Returns:
-            Dictionary with archive information
+            Dictionary with archive information (no file list for performance)
 
         Raises:
             FileNotFoundError: If archive doesn't exist
@@ -692,12 +692,19 @@ class MultiFormatExtractor:
             with py7zz.SevenZipFile(archive_obj, "r") as archive:
                 file_list = archive.namelist()
 
-                # Calculate basic statistics
+                # Calculate basic statistics (but don't return file list for performance)
                 file_count = len(file_list)
                 has_single_root = self._check_archive_structure(archive_obj)
 
                 # Get archive size
                 archive_size = archive_obj.stat().st_size
+
+                # Determine root name if single root
+                root_name = None
+                if has_single_root and file_list:
+                    # Extract first component from first file path
+                    first_path = file_list[0].replace("\\", "/")
+                    root_name = first_path.split("/")[0]
 
                 return {
                     "path": str(archive_obj),
@@ -705,10 +712,7 @@ class MultiFormatExtractor:
                     "size": archive_size,
                     "file_count": file_count,
                     "has_single_root": has_single_root,
-                    "root_name": archive_obj.stem if has_single_root else None,
-                    "files": file_list[:10]
-                    if file_count <= 10
-                    else file_list[:10] + ["..."],
+                    "root_name": root_name,
                 }
 
         except Exception as e:
