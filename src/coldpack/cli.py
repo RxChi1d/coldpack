@@ -546,31 +546,6 @@ def verify(
 
         console.print(f"[cyan]Verifying archive: {archive}[/cyan]")
 
-        # Build hash file dictionary
-        hash_file_dict = {}
-        if hash_files:
-            for hash_file in hash_files:
-                if hash_file.suffix == ".sha256":
-                    hash_file_dict["sha256"] = hash_file
-                elif hash_file.suffix == ".blake3":
-                    hash_file_dict["blake3"] = hash_file
-
-        # Auto-detect hash files if not provided
-        if not hash_file_dict:
-            sha256_file = archive.with_suffix(archive.suffix + ".sha256")
-            blake3_file = archive.with_suffix(archive.suffix + ".blake3")
-
-            if sha256_file.exists() and not no_sha256:
-                hash_file_dict["sha256"] = sha256_file
-            if blake3_file.exists() and not no_blake3:
-                hash_file_dict["blake3"] = blake3_file
-
-        # Auto-detect PAR2 file if not provided
-        if not par2_file and not no_par2:
-            par2_candidate = archive.with_suffix(archive.suffix + ".par2")
-            if par2_candidate.exists():
-                par2_file = par2_candidate
-
         # Configure which verification layers to skip
         skip_layers = set()
         if no_tar:
@@ -584,40 +559,28 @@ def verify(
         if no_par2:
             skip_layers.add("par2_recovery")
 
-        # Try to load metadata for parameter recovery
-        metadata = None
-        try:
-            from .config.settings import ArchiveMetadata
+        # Handle explicitly provided files
+        if hash_files or par2_file:
+            # Build hash file dictionary from explicit files
+            hash_file_dict = {}
+            if hash_files:
+                for hash_file in hash_files:
+                    if (
+                        hash_file.suffix == ".sha256"
+                        and "sha256_hash" not in skip_layers
+                    ):
+                        hash_file_dict["sha256"] = hash_file
+                    elif (
+                        hash_file.suffix == ".blake3"
+                        and "blake3_hash" not in skip_layers
+                    ):
+                        hash_file_dict["blake3"] = hash_file
 
-            # Determine archive name for metadata path construction
-            archive_name = archive.stem
-            if archive_name.endswith(".tar"):
-                archive_name = archive_name[:-4]
-
-            metadata_paths = [
-                # Standard coldpack structure: archive_dir/metadata/metadata.toml
-                archive.parent / "metadata" / "metadata.toml",
-                # Alternative: archive_name_dir/metadata/metadata.toml
-                archive.parent / archive_name / "metadata" / "metadata.toml",
-                # Legacy location: same directory as archive
-                archive.parent / "metadata.toml",
-            ]
-
-            for metadata_path in metadata_paths:
-                if metadata_path.exists():
-                    try:
-                        metadata = ArchiveMetadata.load_from_toml(metadata_path)
-                        logger.debug(f"Loaded metadata from {metadata_path}")
-                        break
-                    except Exception as e:
-                        logger.debug(
-                            f"Could not load metadata from {metadata_path}: {e}"
-                        )
-        except Exception as e:
-            logger.debug(f"Metadata loading failed: {e}")
-
-        # Perform verification with metadata for parameter recovery
-        results = verifier.verify_complete(archive, hash_file_dict, par2_file, metadata)
+            # Use manual verification with explicitly provided files
+            results = verifier.verify_complete(archive, hash_file_dict, par2_file)
+        else:
+            # Use auto-discovery verification (recommended approach)
+            results = verifier.verify_auto(archive, skip_layers)
 
         # Display results
         display_verification_results(results)

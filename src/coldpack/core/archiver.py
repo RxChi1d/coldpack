@@ -200,61 +200,79 @@ class ColdStorageArchiver:
                 if self.processing_options.verify_integrity:
                     self._verify_zstd_integrity(archive_path)
 
-                # Step 7: Generate dual hash files
-                hash_files = self._generate_hash_files(archive_path, safe_ops)
-
-                # Step 8: Verify hash files
-                if self.processing_options.verify_integrity:
-                    self._verify_hash_files(archive_path, hash_files)
-
-                # Step 9: Generate PAR2 recovery files
-                par2_files = []
-                if self.processing_options.generate_par2:
-                    par2_files = self._generate_par2_files(archive_path, safe_ops)
-
-                # Step 10: Final verification
-                if self.processing_options.verify_integrity:
-                    self._perform_final_verification(
-                        archive_path, hash_files, par2_files
-                    )
-
-                # Step 11: Organize files into proper structure
-                organized_files = self._organize_output_files(
-                    archive_path, hash_files, par2_files, archive_name, safe_ops
+                # Step 7: Create final directory structure early
+                archive_dir, metadata_dir = self._create_final_directory_structure(
+                    archive_path, archive_name, safe_ops
                 )
 
-                # Step 12: Create comprehensive metadata
+                # Step 8: Move archive to final location
+                final_archive_path = self._move_archive_to_final_location(
+                    archive_path, archive_dir, safe_ops
+                )
+
+                # Step 9: Generate dual hash files directly in metadata directory
+                hash_files = self._generate_hash_files(
+                    final_archive_path, metadata_dir, safe_ops
+                )
+
+                # Step 10: Verify hash files
+                if self.processing_options.verify_integrity:
+                    self._verify_hash_files(final_archive_path, hash_files)
+
+                # Step 11: Generate PAR2 recovery files directly in metadata directory
+                par2_files = []
+                if self.processing_options.generate_par2:
+                    par2_files = self._generate_par2_files(
+                        final_archive_path, metadata_dir, safe_ops
+                    )
+
+                # Step 12: Final verification with files in final locations
+                if self.processing_options.verify_integrity:
+                    self._perform_final_verification(
+                        final_archive_path, hash_files, par2_files
+                    )
+
+                # Prepare organized files info for metadata creation
+                organized_files = {
+                    "archive": final_archive_path,
+                    "hash_files": hash_files,
+                    "par2_files": par2_files,
+                    "archive_dir": archive_dir,
+                    "metadata_dir": metadata_dir,
+                }
+
+                # Step 13: Create comprehensive metadata
                 metadata = self._create_metadata(
                     source_path,
-                    organized_files["archive"],
+                    final_archive_path,
                     extracted_dir,
-                    organized_files["hash_files"],
-                    organized_files["par2_files"],
+                    hash_files,
+                    par2_files,
                     processing_start_time,
                 )
 
-                # Step 13: Generate metadata.toml file
-                metadata_file = organized_files["metadata_dir"] / "metadata.toml"
+                # Step 14: Generate metadata.toml file
+                metadata_file = metadata_dir / "metadata.toml"
                 metadata.save_to_toml(metadata_file)
                 safe_ops.track_file(metadata_file)
                 organized_files["metadata_file"] = metadata_file
 
                 # Collect all created files
                 created_files = (
-                    [organized_files["archive"]]
-                    + list(organized_files["hash_files"].values())
-                    + organized_files["par2_files"]
-                    + [organized_files["metadata_file"]]
+                    [final_archive_path]
+                    + list(hash_files.values())
+                    + par2_files
+                    + [metadata_file]
                 )
 
                 logger.success(
-                    f"Cold storage archive created successfully: {organized_files['archive']}"
+                    f"Cold storage archive created successfully: {final_archive_path}"
                 )
 
                 return ArchiveResult(
                     success=True,
                     metadata=metadata,
-                    message=f"Archive created: {organized_files['archive'].name}",
+                    message=f"Archive created: {final_archive_path.name}",
                     created_files=created_files,
                 )
 
@@ -660,12 +678,13 @@ class ColdStorageArchiver:
             raise ArchivingError(f"Zstd integrity verification failed: {e}") from e
 
     def _generate_hash_files(
-        self, archive_path: Path, safe_ops: Any
+        self, archive_path: Path, metadata_dir: Path, safe_ops: Any
     ) -> dict[str, Path]:
-        """Generate dual hash files.
+        """Generate dual hash files directly in metadata directory.
 
         Args:
             archive_path: Path to archive
+            metadata_dir: Path to metadata directory where hash files should be created
             safe_ops: Safe file operations context
 
         Returns:
@@ -677,14 +696,16 @@ class ColdStorageArchiver:
             # Compute hashes
             hashes = compute_file_hashes(archive_path)
 
-            # Generate hash files
-            hash_files = generate_hash_files(archive_path, hashes)
+            # Generate hash files directly in metadata directory
+            hash_files = generate_hash_files(
+                archive_path, hashes, output_dir=metadata_dir
+            )
 
             # Track files for cleanup on error
             for hash_file in hash_files.values():
                 safe_ops.track_file(hash_file)
 
-            logger.success(f"Generated {len(hash_files)} hash files")
+            logger.success(f"Generated {len(hash_files)} hash files in {metadata_dir}")
             return hash_files
 
         except Exception as e:
@@ -711,11 +732,14 @@ class ColdStorageArchiver:
         except Exception as e:
             raise ArchivingError(f"Hash verification failed: {e}") from e
 
-    def _generate_par2_files(self, archive_path: Path, safe_ops: Any) -> list[Path]:
-        """Generate PAR2 recovery files.
+    def _generate_par2_files(
+        self, archive_path: Path, metadata_dir: Path, safe_ops: Any
+    ) -> list[Path]:
+        """Generate PAR2 recovery files directly in metadata directory.
 
         Args:
             archive_path: Path to archive
+            metadata_dir: Path to metadata directory where PAR2 files should be created
             safe_ops: Safe file operations context
 
         Returns:
@@ -727,17 +751,71 @@ class ColdStorageArchiver:
 
         try:
             par2_manager = PAR2Manager(self.processing_options.par2_redundancy)
-            par2_files = par2_manager.create_recovery_files(archive_path)
+            par2_files = par2_manager.create_recovery_files(
+                archive_path, output_dir=metadata_dir
+            )
 
             # Track files for cleanup on error
             for par2_file in par2_files:
                 safe_ops.track_file(par2_file)
 
-            logger.success(f"Generated {len(par2_files)} PAR2 recovery files")
+            logger.success(
+                f"Generated {len(par2_files)} PAR2 recovery files in {metadata_dir}"
+            )
             return par2_files
 
         except Exception as e:
             raise ArchivingError(f"PAR2 generation failed: {e}") from e
+
+    def _create_final_directory_structure(
+        self, archive_path: Path, archive_name: str, safe_ops: Any
+    ) -> tuple[Path, Path]:
+        """Create the final directory structure early in the process.
+
+        Args:
+            archive_path: Current archive file path
+            archive_name: Name of the archive
+            safe_ops: Safe file operations context
+
+        Returns:
+            Tuple of (archive_dir, metadata_dir) paths
+        """
+        logger.info("Step 7: Creating final directory structure")
+
+        # Create directory structure
+        output_base = archive_path.parent
+        archive_dir = output_base / archive_name
+        metadata_dir = archive_dir / "metadata"
+
+        archive_dir.mkdir(exist_ok=True)
+        metadata_dir.mkdir(exist_ok=True)
+        safe_ops.track_directory(archive_dir)
+        safe_ops.track_directory(metadata_dir)
+
+        logger.success(f"Created directory structure: {archive_dir}")
+        return archive_dir, metadata_dir
+
+    def _move_archive_to_final_location(
+        self, archive_path: Path, archive_dir: Path, safe_ops: Any
+    ) -> Path:
+        """Move archive file to its final location.
+
+        Args:
+            archive_path: Current archive file path
+            archive_dir: Target archive directory
+            safe_ops: Safe file operations context
+
+        Returns:
+            Final archive path
+        """
+        logger.info("Step 8: Moving archive to final location")
+
+        final_archive_path = archive_dir / archive_path.name
+        archive_path.rename(final_archive_path)
+        safe_ops.track_file(final_archive_path)
+
+        logger.success(f"Moved archive to: {final_archive_path}")
+        return final_archive_path
 
     def _perform_final_verification(
         self, archive_path: Path, hash_files: dict[str, Path], par2_files: list[Path]
