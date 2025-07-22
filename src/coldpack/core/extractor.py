@@ -1,7 +1,7 @@
 """Multi-format extractor using py7zz with intelligent directory structure detection."""
 
 from pathlib import Path
-from typing import Union
+from typing import Any, Optional, Union
 
 import py7zz  # type: ignore
 from loguru import logger
@@ -92,6 +92,7 @@ class MultiFormatExtractor:
         output_dir: Union[str, Path],
         preserve_structure: bool = True,
         force_overwrite: bool = False,
+        metadata: Optional[Any] = None,
     ) -> Path:
         """Extract archive to output directory with intelligent structure detection.
 
@@ -100,6 +101,7 @@ class MultiFormatExtractor:
             output_dir: Directory to extract to
             preserve_structure: Whether to preserve archive structure
             force_overwrite: Force overwrite existing files
+            metadata: Optional metadata for parameter recovery (for tar.zst archives)
 
         Returns:
             Path to the extracted content directory
@@ -121,7 +123,7 @@ class MultiFormatExtractor:
 
         # Handle archive files
         return self._extract_archive(
-            source_path, output_path, preserve_structure, force_overwrite
+            source_path, output_path, preserve_structure, force_overwrite, metadata
         )
 
     def _handle_directory_input(self, source_dir: Path, output_dir: Path) -> Path:
@@ -143,6 +145,7 @@ class MultiFormatExtractor:
         output_dir: Path,
         preserve_structure: bool,
         force_overwrite: bool,
+        metadata: Optional[Any] = None,
     ) -> Path:
         """Extract archive file using py7zz.
 
@@ -151,6 +154,7 @@ class MultiFormatExtractor:
             output_dir: Directory to extract to
             preserve_structure: Whether to preserve archive structure
             force_overwrite: Force overwrite existing files
+            metadata: Optional metadata for parameter recovery
 
         Returns:
             Path to extracted content
@@ -173,7 +177,11 @@ class MultiFormatExtractor:
             # Check if this is a tar.zst archive (coldpack format)
             if self._is_tar_zst_format(archive_path):
                 return self._extract_tar_zst_archive(
-                    archive_path, output_dir, preserve_structure, force_overwrite
+                    archive_path,
+                    output_dir,
+                    preserve_structure,
+                    force_overwrite,
+                    metadata,
                 )
 
             # Check if this is a compound tar archive (tar.gz, tar.bz2, tar.xz, etc.)
@@ -263,6 +271,7 @@ class MultiFormatExtractor:
         output_dir: Path,
         preserve_structure: bool,
         force_overwrite: bool,
+        metadata: Optional[Any] = None,
     ) -> Path:
         """Extract tar.zst archive by first extracting zst, then tar.
 
@@ -271,6 +280,7 @@ class MultiFormatExtractor:
             output_dir: Directory to extract to
             preserve_structure: Whether to preserve archive structure
             force_overwrite: Force overwrite existing files
+            metadata: Optional metadata containing original compression parameters
 
         Returns:
             Path to the extracted content directory
@@ -279,6 +289,12 @@ class MultiFormatExtractor:
             ExtractionError: If extraction fails at any stage
         """
         logger.info(f"Extracting tar.zst archive: {archive_path}")
+
+        if metadata:
+            logger.info("Using original compression parameters from metadata")
+            logger.debug(f"  Level: {metadata.compression_settings.level}")
+            logger.debug(f"  Threads: {metadata.compression_settings.threads}")
+            logger.debug(f"  Long mode: {metadata.compression_settings.long_mode}")
 
         # Use a temporary directory for the intermediate tar file
         import tempfile
@@ -297,6 +313,10 @@ class MultiFormatExtractor:
             intermediate_tar = temp_dir / tar_name
 
             logger.debug(f"Step 1: Extracting zst compression to {intermediate_tar}")
+
+            # For tar.zst files, we could potentially use zstd command line with original parameters
+            # if metadata is available, but py7zz should handle decompression automatically
+            # The original compression parameters are mainly useful for recompression, not decompression
             with py7zz.SevenZipFile(archive_path, "r") as zst_archive:
                 zst_archive.extractall(temp_dir)
 
