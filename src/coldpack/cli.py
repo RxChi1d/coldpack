@@ -64,6 +64,48 @@ def get_global_options(ctx: typer.Context) -> tuple[bool, bool]:
     return ctx.obj.get("verbose", False), ctx.obj.get("quiet", False)
 
 
+def _load_coldpack_metadata(
+    archive: Path, verbose: bool = False
+) -> tuple[Optional[Any], Optional[str]]:
+    """Load metadata.toml for coldpack standard archives.
+
+    For coldpack standard compliance, metadata.toml must be in the standard location:
+    archive_directory/metadata/metadata.toml
+
+    Args:
+        archive: Path to the archive file
+        verbose: Enable verbose logging
+
+    Returns:
+        Tuple of (ArchiveMetadata object if found, error message if corrupted)
+        - (metadata, None): Successfully loaded metadata
+        - (None, None): No metadata file found (not a coldpack archive)
+        - (None, error_msg): Metadata file exists but is corrupted
+    """
+    from .config.settings import ArchiveMetadata
+
+    # Standard coldpack structure: archive_dir/metadata/metadata.toml
+    metadata_path = archive.parent / "metadata" / "metadata.toml"
+
+    if metadata_path.exists():
+        try:
+            metadata = ArchiveMetadata.load_from_toml(metadata_path)
+            if verbose:
+                logger.info(f"Loading coldpack metadata from: {metadata_path}")
+            return metadata, None
+        except Exception as e:
+            # If metadata.toml exists but is corrupted, return error but don't raise
+            error_msg = f"Corrupted metadata.toml at {metadata_path}: {e}"
+            logger.warning(error_msg)
+            return None, error_msg
+
+    if verbose:
+        logger.debug(
+            f"No coldpack metadata found for {archive} (not a coldpack archive)"
+        )
+    return None, None
+
+
 @app.callback()
 def main(
     ctx: typer.Context,
@@ -406,6 +448,11 @@ def extract(
 ) -> None:
     """Extract a cold storage archive or supported archive format.
 
+    For coldpack archives (.tar.zst with metadata/metadata.toml):
+    - Automatically uses original compression parameters from metadata
+    - Falls back to direct extraction if metadata is unavailable
+    - Errors if metadata is corrupted or extraction fails without metadata
+
     Args:
         ctx: Typer context
         archive: Archive file to extract
@@ -437,17 +484,78 @@ def extract(
         output_dir = Path.cwd()
 
     try:
-        extractor = MultiFormatExtractor()
-
         console.print(f"[cyan]Extracting archive: {archive}[/cyan]")
         console.print(f"[cyan]Output directory: {output_dir}[/cyan]")
 
-        # Extract archive
-        extracted_path = extractor.extract(archive, output_dir, force_overwrite=force)
+        # Step 1: Try to load coldpack metadata (standard compliant archives)
+        metadata, metadata_error = _load_coldpack_metadata(archive, final_verbose)
+
+        extractor = MultiFormatExtractor()
+
+        if metadata:
+            # Step 2a: Standard coldpack archive - use original parameters
+            console.print(
+                "[cyan]Coldpack archive detected - using original compression parameters[/cyan]"
+            )
+            console.print(
+                f"[cyan]  Compression level: {metadata.compression_settings.level}[/cyan]"
+            )
+            console.print(
+                f"[cyan]  Threads: {metadata.compression_settings.threads}[/cyan]"
+            )
+            console.print(
+                f"[cyan]  Long distance: {metadata.compression_settings.long_mode}[/cyan]"
+            )
+
+            # Extract with metadata
+            extracted_path = extractor.extract(
+                archive, output_dir, force_overwrite=force, metadata=metadata
+            )
+        else:
+            # Step 2b: Non-coldpack archive, missing metadata, or corrupted metadata - attempt direct extraction
+            if metadata_error:
+                # Warn about corrupted metadata but continue with direct extraction
+                console.print(f"[yellow]Warning: {metadata_error}[/yellow]")
+                console.print(
+                    "[yellow]Attempting direct extraction without metadata...[/yellow]"
+                )
+            elif final_verbose:
+                console.print(
+                    "[yellow]No coldpack metadata found - attempting direct extraction[/yellow]"
+                )
+
+            try:
+                extracted_path = extractor.extract(
+                    archive, output_dir, force_overwrite=force, metadata=None
+                )
+            except Exception as direct_extract_error:
+                # Step 3: Direct extraction failed
+                logger.error(f"Direct extraction failed: {direct_extract_error}")
+
+                if metadata_error:
+                    # Both metadata is corrupted AND direct extraction failed
+                    console.print(
+                        "[red]Error: Archive extraction failed. The metadata is corrupted and direct extraction also failed.[/red]"
+                    )
+                    console.print(f"[red]Metadata error: {metadata_error}[/red]")
+                    console.print(
+                        f"[red]Extraction error: {direct_extract_error}[/red]"
+                    )
+                else:
+                    # No metadata but direct extraction failed
+                    console.print(
+                        "[red]Error: Archive extraction failed. This may not be a valid coldpack archive or the format is unsupported.[/red]"
+                    )
+                    console.print(f"[red]Details: {direct_extract_error}[/red]")
+
+                raise typer.Exit(ExitCodes.EXTRACTION_FAILED) from direct_extract_error
 
         console.print("[green]✓ Extraction completed successfully![/green]")
         console.print(f"[green]Extracted to: {extracted_path}[/green]")
 
+    except typer.Exit:
+        # Re-raise typer.Exit to preserve exit codes
+        raise
     except Exception as e:
         logger.error(f"Extraction failed: {e}")
         console.print(f"[red]Error: {e}[/red]")
