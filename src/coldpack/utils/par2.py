@@ -77,11 +77,14 @@ class PAR2Manager:
 
         return None
 
-    def create_recovery_files(self, file_path: Union[str, Path]) -> list[Path]:
+    def create_recovery_files(
+        self, file_path: Union[str, Path], output_dir: Optional[Path] = None
+    ) -> list[Path]:
         """Create PAR2 recovery files for a file.
 
         Args:
             file_path: Path to the file to protect
+            output_dir: Optional directory to place PAR2 files (default: same as file_path)
 
         Returns:
             List of created PAR2 recovery file paths
@@ -95,75 +98,78 @@ class PAR2Manager:
         if not file_obj.exists():
             raise FileNotFoundError(f"File not found: {file_obj}")
 
-        # PAR2 base name - use relative path to ensure portability
-        # PAR2 files store relative paths internally for cross-platform compatibility
-        par2_base = (
-            file_obj.name
-        )  # Use filename as base (will be created in same directory)
+        # Always create PAR2 files in the same directory as the protected file first
+        # Then move them to output_dir if specified
+        work_dir = file_obj.parent
+        par2_base = file_obj.name  # Base name for PAR2 files
+        target_file = file_obj.name  # File to protect (same directory)
 
         # Build par2 create command
-        # Note: We use relative paths because:
-        # 1. PAR2 stores paths internally in .par2 files
-        # 2. Absolute paths make archives non-portable between systems
-        # 3. We set cwd=work_dir below to ensure correct working directory
+        # Note: We use relative paths to ensure portability
         cmd = [
             self.par2_cmd,
             "create",
             f"-r{self.redundancy_percent}",  # Redundancy percentage
             f"-n{PAR2_BLOCK_COUNT}",  # Number of recovery files
             "-q",  # Quiet mode
-            par2_base,  # Base name for PAR2 files (relative)
-            file_obj.name,  # File to protect (relative to working directory)
+            par2_base,  # Base name for PAR2 files
+            target_file,  # File to protect (relative path)
         ]
 
         try:
+            output_location = output_dir or file_obj.parent
             logger.info(
                 f"Creating PAR2 recovery files for {file_obj} "
-                f"({self.redundancy_percent}% redundancy)"
+                f"({self.redundancy_percent}% redundancy) in {output_location}"
             )
 
-            # Change to file directory to avoid path issues
-            original_cwd = Path.cwd()
-            work_dir = file_obj.parent
+            # Debug: Log the command and working directory
+            logger.debug(f"PAR2 command: {' '.join(cmd)}")
+            logger.debug(f"Working directory: {work_dir}")
+            logger.debug(
+                f"Target file exists: {(work_dir / target_file).exists() if work_dir else False}"
+            )
 
-            try:
-                # Execute par2 create command
-                result = subprocess.run(
-                    cmd,
-                    cwd=work_dir,
-                    capture_output=True,
-                    text=True,
-                    timeout=3600,  # 1 hour timeout for large files
+            # Execute par2 create command
+            result = subprocess.run(
+                cmd,
+                cwd=work_dir,
+                capture_output=True,
+                text=True,
+                timeout=3600,  # 1 hour timeout for large files
+            )
+
+            if result.returncode != 0:
+                raise PAR2Error(
+                    f"PAR2 create failed (exit code {result.returncode}): "
+                    f"{result.stderr}"
                 )
 
-                if result.returncode != 0:
-                    raise PAR2Error(
-                        f"PAR2 create failed (exit code {result.returncode}): "
-                        f"{result.stderr}"
-                    )
+            # Find all created PAR2 files (initially in same directory as protected file)
+            par2_files = self._find_par2_files(file_obj)
 
-                # Find all created PAR2 files
-                par2_files = self._find_par2_files(file_obj)
+            if not par2_files:
+                raise PAR2Error("No PAR2 files were created")
 
-                if not par2_files:
-                    raise PAR2Error("No PAR2 files were created")
+            # If output_dir specified, move PAR2 files to that directory
+            if output_dir:
+                output_dir.mkdir(parents=True, exist_ok=True)
+                moved_par2_files = []
 
-                logger.success(f"Created {len(par2_files)} PAR2 recovery files")
                 for par2_file in par2_files:
-                    file_size = par2_file.stat().st_size
-                    logger.debug(f"  {par2_file.name} ({file_size} bytes)")
+                    target_path = output_dir / par2_file.name
+                    par2_file.rename(target_path)
+                    moved_par2_files.append(target_path)
+                    logger.debug(f"Moved {par2_file.name} to {output_dir}")
 
-                return par2_files
+                par2_files = moved_par2_files
 
-            finally:
-                # Restore original working directory
-                try:
-                    original_cwd.exists() and original_cwd.is_dir()
-                    # Only change back if original directory still exists
-                    if original_cwd.exists():
-                        pass  # subprocess.run already handles cwd context
-                except OSError:
-                    pass
+            logger.success(f"Created {len(par2_files)} PAR2 recovery files")
+            for par2_file in par2_files:
+                file_size = par2_file.stat().st_size
+                logger.debug(f"  {par2_file.name} ({file_size} bytes)")
+
+            return par2_files
 
         except subprocess.TimeoutExpired as e:
             raise PAR2Error(
@@ -192,38 +198,158 @@ class PAR2Manager:
         if not par2_obj.exists():
             raise FileNotFoundError(f"PAR2 file not found: {par2_obj}")
 
-        cmd = [
-            self.par2_cmd,
-            "verify",
-            "-q",  # Quiet mode
-            par2_obj.name,  # Use relative path for consistency
-        ]
+        # Determine the correct working directory for PAR2 verification
+        # PAR2 files store relative paths internally, so we need to find the correct
+        # working directory where the protected files actually exist
 
-        try:
-            logger.info(f"Verifying PAR2 recovery files: {par2_obj}")
+        # For coldpack archives, PAR2 files in metadata/ directory protect files
+        # in the parent directory. We need to run PAR2 from the parent directory.
+        potential_work_dirs = []
 
-            result = subprocess.run(
-                cmd,
-                cwd=par2_obj.parent,
-                capture_output=True,
-                text=True,
-                timeout=1800,  # 30 minutes timeout
-            )
+        if par2_obj.parent.name == "metadata":
+            # PAR2 is in metadata directory - the protected file should be in parent
+            protected_file_dir = par2_obj.parent.parent
+            potential_work_dirs.append(protected_file_dir)
+            # Also try the metadata directory itself as fallback
+            potential_work_dirs.append(par2_obj.parent)
+        else:
+            # PAR2 is in same directory as protected file
+            potential_work_dirs.append(par2_obj.parent)
 
-            if result.returncode == 0:
-                logger.success(f"PAR2 verification passed: {par2_obj}")
-                return True
+        for work_dir in potential_work_dirs:
+            # For PAR2 files in metadata directory, we need to run from parent directory
+            # but reference the PAR2 file with relative path
+            if (
+                par2_obj.parent.name == "metadata"
+                and work_dir == par2_obj.parent.parent
+            ):
+                # Run from parent directory, reference PAR2 file in metadata subdirectory
+                par2_rel_path = f"metadata/{par2_obj.name}"
             else:
-                logger.error(
-                    f"PAR2 verification failed (exit code {result.returncode}): "
-                    f"{result.stderr}"
-                )
-                return False
+                # Standard case - PAR2 file in same directory as protected file
+                try:
+                    par2_rel_path = str(par2_obj.relative_to(work_dir))
+                except ValueError:
+                    # PAR2 file is not under this work directory
+                    continue
 
-        except subprocess.TimeoutExpired as e:
-            raise PAR2Error("PAR2 verification timed out") from e
-        except subprocess.SubprocessError as e:
-            raise PAR2Error(f"PAR2 verification command failed: {e}") from e
+            cmd = [
+                self.par2_cmd,
+                "verify",
+                "-q",  # Quiet mode
+                par2_rel_path,  # Use relative path for consistency
+            ]
+
+            try:
+                logger.info(f"Verifying PAR2 recovery files: {par2_obj}")
+                logger.debug(f"Running PAR2 verify from directory: {work_dir}")
+                logger.debug(f"PAR2 file path: {par2_rel_path}")
+
+                result = subprocess.run(
+                    cmd,
+                    cwd=work_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=1800,  # 30 minutes timeout
+                )
+
+                if result.returncode == 0:
+                    logger.success(f"PAR2 verification passed: {par2_obj}")
+                    return True
+                else:
+                    # Special handling for PAR2 files in metadata directory:
+                    # If verification fails because target file is missing, try creating
+                    # a temporary symlink to make verification work
+                    if (
+                        par2_obj.parent.name == "metadata"
+                        and "missing" in result.stdout.lower()
+                    ):
+                        # Extract the expected filename from PAR2 error output
+                        # Look for pattern like 'Target: "filename" - missing.'
+                        import re
+
+                        target_match = re.search(
+                            r'Target: "([^"]+)" - missing', result.stdout
+                        )
+                        if target_match:
+                            expected_filename = target_match.group(1)
+
+                            # Look for the actual file in the parent directory
+                            actual_file = par2_obj.parent.parent / expected_filename
+
+                            if actual_file.exists():
+                                logger.debug(
+                                    f"Found target file in parent directory: {actual_file}"
+                                )
+
+                                # Create temporary symlink in metadata directory
+                                temp_link = par2_obj.parent / expected_filename
+                                created_link = False
+
+                                try:
+                                    if not temp_link.exists():
+                                        # Create relative symlink
+                                        temp_link.symlink_to(f"../{expected_filename}")
+                                        created_link = True
+                                        logger.debug(
+                                            f"Created temporary symlink: {temp_link}"
+                                        )
+
+                                    # Run verification from metadata directory with symlink in place
+                                    cmd_metadata = [
+                                        self.par2_cmd,
+                                        "verify",
+                                        "-q",
+                                        par2_obj.name,  # Just the PAR2 filename
+                                    ]
+
+                                    result2 = subprocess.run(
+                                        cmd_metadata,
+                                        cwd=par2_obj.parent,  # Run from metadata directory
+                                        capture_output=True,
+                                        text=True,
+                                        timeout=1800,
+                                    )
+
+                                    if result2.returncode == 0:
+                                        logger.success(
+                                            f"PAR2 verification passed with symlink: {par2_obj}"
+                                        )
+                                        return True
+                                    else:
+                                        logger.debug(
+                                            f"PAR2 verification still failed with symlink: {result2.stdout}"
+                                        )
+
+                                finally:
+                                    # Clean up temporary symlink
+                                    if created_link and temp_link.exists():
+                                        try:
+                                            temp_link.unlink()
+                                            logger.debug(
+                                                f"Removed temporary symlink: {temp_link}"
+                                            )
+                                        except Exception as e:
+                                            logger.debug(
+                                                f"Failed to remove temp symlink: {e}"
+                                            )
+
+                    logger.debug(
+                        f"PAR2 verification failed from {work_dir} (exit code {result.returncode}): "
+                        f"stdout: {result.stdout}, stderr: {result.stderr}"
+                    )
+                    # Try next work directory
+                    continue
+
+            except subprocess.TimeoutExpired as e:
+                raise PAR2Error("PAR2 verification timed out") from e
+            except subprocess.SubprocessError as e:
+                logger.debug(f"PAR2 verification command failed from {work_dir}: {e}")
+                continue
+
+        # If we get here, all work directories failed
+        logger.error("PAR2 verification failed from all attempted directories")
+        return False
 
     def repair_file(self, par2_file: Union[str, Path]) -> bool:
         """Attempt to repair a file using PAR2 recovery data.
@@ -290,6 +416,29 @@ class PAR2Manager:
 
         # Look for PAR2 files in the same directory
         for file_path in original_file.parent.iterdir():
+            if file_path.name.startswith(base_pattern) and file_path.suffix == ".par2":
+                par2_files.append(file_path)
+
+        # Sort to ensure consistent ordering
+        return sorted(par2_files)
+
+    def _find_par2_files_in_dir(
+        self, original_file: Path, search_dir: Path
+    ) -> list[Path]:
+        """Find all PAR2 files created for an original file in a specific directory.
+
+        Args:
+            original_file: Path to the original file
+            search_dir: Directory to search for PAR2 files
+
+        Returns:
+            List of PAR2 file paths
+        """
+        par2_files = []
+        base_pattern = original_file.name
+
+        # Look for PAR2 files in the specified directory
+        for file_path in search_dir.iterdir():
             if file_path.name.startswith(base_pattern) and file_path.suffix == ".par2":
                 par2_files.append(file_path)
 

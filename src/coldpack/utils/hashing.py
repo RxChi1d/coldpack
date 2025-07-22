@@ -114,7 +114,10 @@ def compute_file_hashes(
 
 
 def write_hash_file(
-    file_path: Union[str, Path], hash_value: str, algorithm: str
+    file_path: Union[str, Path],
+    hash_value: str,
+    algorithm: str,
+    output_dir: Optional[Path] = None,
 ) -> Path:
     """Write hash value to a hash file.
 
@@ -122,6 +125,7 @@ def write_hash_file(
         file_path: Path to the original file
         hash_value: Hash value in hex format
         algorithm: Hash algorithm name (sha256, blake3)
+        output_dir: Optional directory to place the hash file (default: same as file_path)
 
     Returns:
         Path to the created hash file
@@ -130,7 +134,13 @@ def write_hash_file(
         HashingError: If writing fails
     """
     file_obj = Path(file_path)
-    hash_file = file_obj.with_suffix(f"{file_obj.suffix}.{algorithm.lower()}")
+
+    if output_dir:
+        # Place hash file in specified directory
+        hash_file = output_dir / f"{file_obj.name}.{algorithm.lower()}"
+    else:
+        # Place hash file alongside the original file
+        hash_file = file_obj.with_suffix(f"{file_obj.suffix}.{algorithm.lower()}")
 
     try:
         # Format: hash  filename (compatible with sha256sum, b3sum)
@@ -147,13 +157,16 @@ def write_hash_file(
 
 
 def generate_hash_files(
-    file_path: Union[str, Path], hashes: dict[str, str]
+    file_path: Union[str, Path],
+    hashes: dict[str, str],
+    output_dir: Optional[Path] = None,
 ) -> dict[str, Path]:
     """Generate hash files for all computed hashes.
 
     Args:
         file_path: Path to the original file
         hashes: Dictionary of hash algorithm names to hash values
+        output_dir: Optional directory to place hash files (default: same as file_path)
 
     Returns:
         Dictionary mapping algorithm names to hash file paths
@@ -165,10 +178,15 @@ def generate_hash_files(
 
     try:
         for algorithm, hash_value in hashes.items():
-            hash_file_path = write_hash_file(file_path, hash_value, algorithm)
+            hash_file_path = write_hash_file(
+                file_path, hash_value, algorithm, output_dir=output_dir
+            )
             hash_files[algorithm] = hash_file_path
 
-        logger.success(f"Generated {len(hash_files)} hash files for {file_path}")
+        output_location = output_dir or Path(file_path).parent
+        logger.success(
+            f"Generated {len(hash_files)} hash files for {file_path} in {output_location}"
+        )
         return hash_files
 
     except Exception as e:
