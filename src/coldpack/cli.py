@@ -848,129 +848,149 @@ def display_archive_info(archive_path: Path) -> None:
 
 def display_metadata_info(archive_path: Path, metadata: Any) -> None:
     """Display comprehensive archive information from metadata."""
-    table = Table(
-        title=f"Archive Information: {archive_path.name}",
-        show_header=True,
-        header_style="bold magenta",
+    # Archive Basic Information
+    basic_table = Table(
+        title=f"Archive: {archive_path.name}",
+        show_header=False,
+        header_style="bold cyan",
+        title_style="bold white",
+        border_style="dim",
     )
-    table.add_column("Property", style="cyan", no_wrap=True)
-    table.add_column("Value", style="green")
+    basic_table.add_column("Property", style="dim", no_wrap=True, width=20)
+    basic_table.add_column("Value", style="white")
 
-    # Basic information
-    table.add_row("Archive Name", metadata.archive_name)
-    table.add_row("File Path", str(archive_path))
-    table.add_row("Source Path", str(metadata.source_path))
-    table.add_row("Created At", metadata.created_at.strftime("%Y-%m-%d %H:%M:%S"))
-    table.add_row("Coldpack Version", metadata.coldpack_version)
+    basic_table.add_row("Path", str(archive_path))
+    basic_table.add_row("Format", "TAR + Zstandard")
 
-    # Size and compression information
-    table.add_row("Original Size", format_file_size(metadata.original_size))
-    table.add_row("Compressed Size", format_file_size(metadata.compressed_size))
-    table.add_row("Compression Ratio", f"{metadata.compression_ratio:.4f}")
-    table.add_row("Compression Savings", f"{metadata.compression_percentage:.1f}%")
+    # Calculate size display with compression info
+    original_size_str = format_file_size(metadata.original_size)
+    compressed_size_str = format_file_size(metadata.compressed_size)
+    compression_pct = metadata.compression_percentage
 
-    # Content statistics
-    table.add_row("File Count", str(metadata.file_count))
-    table.add_row("Directory Count", str(metadata.directory_count))
-    table.add_row("Total Entries", str(metadata.total_entries))
-    table.add_row("Has Single Root", "Yes" if metadata.has_single_root else "No")
+    size_info = f"{compressed_size_str} ({original_size_str} → {compressed_size_str}, {compression_pct:.1f}% compression)"
+    basic_table.add_row("Size", size_info)
 
-    if metadata.root_directory:
-        table.add_row("Root Directory", metadata.root_directory)
+    console.print(basic_table)
 
-    console.print(table)
-
-    # Compression settings
-    comp_table = Table(
-        title="Compression Settings",
-        show_header=True,
-        header_style="bold blue",
+    # Content Summary
+    content_table = Table(
+        title="Content Summary",
+        show_header=False,
+        title_style="bold cyan",
+        border_style="dim",
     )
-    comp_table.add_column("Setting", style="cyan", no_wrap=True)
-    comp_table.add_column("Value", style="green")
+    content_table.add_column("Item", style="dim", no_wrap=True, width=20)
+    content_table.add_column("Value", style="green")
 
-    comp_table.add_row("Level", str(metadata.compression_settings.level))
-    comp_table.add_row("Threads", str(metadata.compression_settings.threads))
-    comp_table.add_row(
-        "Long Mode", "Yes" if metadata.compression_settings.long_mode else "No"
+    content_table.add_row("├── Files", str(metadata.file_count))
+    content_table.add_row("├── Directories", str(metadata.directory_count))
+    content_table.add_row("├── Total Size", original_size_str)
+    content_table.add_row("└── Compression", f"{compression_pct:.1f}%")
+
+    console.print(content_table)
+
+    # Creation Settings
+    creation_table = Table(
+        title="Creation Settings",
+        show_header=False,
+        title_style="bold cyan",
+        border_style="dim",
     )
-    comp_table.add_row(
-        "Ultra Mode", "Yes" if metadata.compression_settings.ultra_mode else "No"
-    )
+    creation_table.add_column("Setting", style="dim", no_wrap=True, width=20)
+    creation_table.add_column("Value", style="yellow")
 
-    console.print(comp_table)
+    creation_table.add_row("├── Zstd Level", str(metadata.compression_settings.level))
 
-    # TAR settings
-    tar_table = Table(
-        title="TAR Settings",
-        show_header=True,
-        header_style="bold yellow",
-    )
-    tar_table.add_column("Setting", style="cyan", no_wrap=True)
-    tar_table.add_column("Value", style="green")
+    # Handle long distance display
+    if metadata.compression_settings.long_distance is not None:
+        long_display = str(metadata.compression_settings.long_distance)
+    else:
+        long_display = "true" if metadata.compression_settings.long_mode else "false"
+    creation_table.add_row("├── Long Distance", long_display)
 
-    tar_table.add_row("Method", metadata.tar_settings.method.title())
-    tar_table.add_row("Sort Files", "Yes" if metadata.tar_settings.sort_files else "No")
-    tar_table.add_row(
-        "Preserve Permissions",
-        "Yes" if metadata.tar_settings.preserve_permissions else "No",
-    )
+    creation_table.add_row("├── Threads", str(metadata.compression_settings.threads))
+    creation_table.add_row("└── TAR Method", metadata.tar_settings.method.title())
 
-    console.print(tar_table)
+    console.print(creation_table)
 
     # Integrity information
     if metadata.verification_hashes:
         integrity_table = Table(
-            title="Integrity Verification",
-            show_header=True,
-            header_style="bold red",
+            title="Integrity",
+            show_header=False,
+            title_style="bold cyan",
+            border_style="dim",
         )
-        integrity_table.add_column("Algorithm", style="cyan", no_wrap=True)
-        integrity_table.add_column("Hash", style="green")
+        integrity_table.add_column("Algorithm", style="dim", no_wrap=True, width=20)
+        integrity_table.add_column("Hash", style="bright_blue")
 
-        for algorithm, hash_value in metadata.verification_hashes.items():
-            integrity_table.add_row(algorithm.upper(), hash_value)
+        # Display hashes with checkmark if available
+        hash_algorithms = ["sha256", "blake3"]
+        for i, algorithm in enumerate(hash_algorithms):
+            if algorithm in metadata.verification_hashes:
+                hash_value = metadata.verification_hashes[algorithm]
+                # Truncate hash for display
+                display_hash = f"{hash_value[:16]}... ✓"
+                prefix = "├──" if i < len(hash_algorithms) - 1 else "├──"
+                integrity_table.add_row(f"{prefix} {algorithm.upper()}", display_hash)
+
+        # Add PAR2 info if available
+        if metadata.par2_settings:
+            par2_info = f"{metadata.par2_settings.redundancy_percent}% redundancy"
+            if metadata.par2_files:
+                par2_info += f", {len(metadata.par2_files)} recovery file{'s' if len(metadata.par2_files) > 1 else ''} ✓"
+            else:
+                par2_info += " (no files generated)"
+            integrity_table.add_row("└── PAR2", par2_info)
 
         console.print(integrity_table)
 
-    # PAR2 information (always show settings even if no files were generated)
-    if metadata.par2_settings:
-        par2_table = Table(
-            title="PAR2 Recovery Settings",
-            show_header=True,
-            header_style="bold purple",
-        )
-        par2_table.add_column("Setting", style="cyan", no_wrap=True)
-        par2_table.add_column("Value", style="green")
+    # Metadata information
+    metadata_table = Table(
+        title="Metadata",
+        show_header=False,
+        title_style="bold cyan",
+        border_style="dim",
+    )
+    metadata_table.add_column("Property", style="dim", no_wrap=True, width=20)
+    metadata_table.add_column("Value", style="magenta")
 
-        par2_table.add_row(
-            "Redundancy", f"{metadata.par2_settings.redundancy_percent}%"
-        )
-        par2_table.add_row("Block Count", str(metadata.par2_settings.block_count))
-        par2_table.add_row(
-            "Recovery Files",
-            str(len(metadata.par2_files) if metadata.par2_files else 0),
-        )
+    metadata_table.add_row(
+        "├── Created", metadata.created_at.strftime("%Y-%m-%d %H:%M:%S UTC")
+    )
+    metadata_table.add_row("├── coldpack", f"v{metadata.coldpack_version}")
 
-        console.print(par2_table)
+    # Check for related files and show their status
+    related_files = []
+    archive_dir = archive_path.parent
+    archive_name = archive_path.stem
+    if archive_name.endswith(".tar"):
+        archive_name = archive_name[:-4]  # Remove .tar from .tar.zst
 
-    # Processing information
-    if metadata.processing_time_seconds:
-        processing_table = Table(
-            title="Processing Information",
-            show_header=True,
-            header_style="bold green",
-        )
-        processing_table.add_column("Metric", style="cyan", no_wrap=True)
-        processing_table.add_column("Value", style="green")
+    # Check for hash files
+    sha256_file = archive_dir / f"{archive_path.name}.sha256"
+    blake3_file = archive_dir / f"{archive_path.name}.blake3"
 
-        processing_table.add_row(
-            "Processing Time", f"{metadata.processing_time_seconds:.2f} seconds"
-        )
-        if metadata.temp_directory_used:
-            processing_table.add_row("Temp Directory", metadata.temp_directory_used)
+    # Check for PAR2 files (can be in same directory or metadata subdirectory)
+    par2_file = archive_dir / f"{archive_path.name}.par2"
+    metadata_par2_file = archive_dir / "metadata" / f"{archive_path.name}.par2"
 
-        console.print(processing_table)
+    if sha256_file.exists():
+        related_files.append(f"{archive_path.name}.sha256")
+    if blake3_file.exists():
+        related_files.append(f"{archive_path.name}.blake3")
+    if par2_file.exists():
+        related_files.append(f"{archive_path.name}.par2")
+    elif metadata_par2_file.exists():
+        related_files.append(f"metadata/{archive_path.name}.par2")
+
+    if related_files:
+        related_files_str = ", ".join(related_files)
+        metadata_table.add_row("└── Related Files", related_files_str)
+    else:
+        metadata_table.add_row("└── Related Files", "[dim]None found[/dim]")
+
+    console.print(metadata_table)
 
 
 def display_basic_archive_info(archive_path: Path) -> None:
@@ -979,27 +999,58 @@ def display_basic_archive_info(archive_path: Path) -> None:
         extractor = MultiFormatExtractor()
         info = extractor.get_archive_info(archive_path)
 
-        table = Table(
-            title=f"Basic Archive Information: {archive_path.name}",
-            show_header=True,
-            header_style="bold magenta",
+        # Archive basic information
+        basic_table = Table(
+            title=f"Archive: {archive_path.name}",
+            show_header=False,
+            title_style="bold white",
+            border_style="dim",
         )
-        table.add_column("Property", style="cyan", no_wrap=True)
-        table.add_column("Value", style="green")
+        basic_table.add_column("Property", style="dim", no_wrap=True, width=20)
+        basic_table.add_column("Value", style="white")
 
-        table.add_row("File Path", str(archive_path))
-        table.add_row("Format", info["format"])
-        table.add_row("File Size", format_file_size(info["size"]))
-        table.add_row("Files Count", str(info["file_count"]))
-        table.add_row("Has Single Root", "Yes" if info["has_single_root"] else "No")
+        basic_table.add_row("Path", str(archive_path))
 
+        # Determine format based on file extension
+        if archive_path.suffix.lower() == ".zst" and archive_path.stem.endswith(".tar"):
+            format_display = "TAR + Zstandard"
+        else:
+            format_display = info["format"].upper()
+
+        basic_table.add_row("Format", format_display)
+        basic_table.add_row("Size", format_file_size(info["size"]))
+
+        console.print(basic_table)
+
+        # Content summary (limited info available)
+        content_table = Table(
+            title="Content Summary",
+            show_header=False,
+            title_style="bold cyan",
+            border_style="dim",
+        )
+        content_table.add_column("Item", style="dim", no_wrap=True, width=20)
+        content_table.add_column("Value", style="green")
+
+        content_table.add_row("├── Files", str(info["file_count"]))
+        content_table.add_row(
+            "├── Single Root", "Yes" if info["has_single_root"] else "No"
+        )
         if info.get("root_name"):
-            table.add_row("Root Directory", info["root_name"])
+            content_table.add_row("└── Root Directory", info["root_name"])
+        else:
+            content_table.add_row("└── Root Directory", "[dim]Multiple roots[/dim]")
 
-        console.print(table)
+        console.print(content_table)
+
+        # Warning about limited information
         console.print(
-            "\n[yellow]Note: No metadata file found. Use 'cpack list' to view archive contents.[/yellow]"
+            "\n[yellow]⚠️  Limited information available - no metadata file found.[/yellow]"
         )
+        console.print(
+            "[dim]For complete archive information, ensure the metadata/ directory is present.[/dim]"
+        )
+        console.print("[dim]Use 'cpack list' to view archive contents.[/dim]")
 
     except Exception as e:
         console.print(f"[red]Could not read basic archive info: {e}[/red]")
@@ -1011,29 +1062,47 @@ def display_par2_info(par2_path: Path) -> None:
         par2_manager = PAR2Manager()
         info = par2_manager.get_recovery_info(par2_path)
 
-        table = Table(
-            title=f"PAR2 Recovery Information: {par2_path.name}",
-            show_header=True,
-            header_style="bold magenta",
+        # PAR2 Recovery Information
+        par2_table = Table(
+            title=f"PAR2 Recovery: {par2_path.name}",
+            show_header=False,
+            title_style="bold white",
+            border_style="dim",
         )
-        table.add_column("Property", style="cyan", no_wrap=True)
-        table.add_column("Value", style="green")
+        par2_table.add_column("Property", style="dim", no_wrap=True, width=20)
+        par2_table.add_column("Value", style="green")
 
-        table.add_row("Main PAR2 File", info["main_par2_file"])
-        table.add_row("Recovery Files", str(info["file_count"]))
-        table.add_row("Total Size", format_file_size(info["total_size"]))
-        table.add_row("Redundancy", f"{info['redundancy_percent']}%")
+        par2_table.add_row("Path", str(par2_path))
+        par2_table.add_row("Redundancy", f"{info['redundancy_percent']}%")
+        par2_table.add_row("Recovery Files", str(info["file_count"]))
+        par2_table.add_row("Total Size", format_file_size(info["total_size"]))
 
-        console.print(table)
+        console.print(par2_table)
 
-        # Show recovery files
+        # Recovery files list with tree-like display
         if info["par2_files"]:
-            console.print("\n[bold]Recovery Files:[/bold]")
-            for par2_file in info["par2_files"]:
+            files_table = Table(
+                title="Recovery Files",
+                show_header=False,
+                title_style="bold cyan",
+                border_style="dim",
+            )
+            files_table.add_column("File", style="dim", no_wrap=True, width=30)
+            files_table.add_column("Size", style="yellow", justify="right")
+
+            for i, par2_file in enumerate(info["par2_files"]):
                 file_path = Path(par2_file)
                 if file_path.exists():
                     size = format_file_size(get_file_size(file_path))
-                    console.print(f"  {file_path.name} ({size})")
+                    prefix = "├──" if i < len(info["par2_files"]) - 1 else "└──"
+                    files_table.add_row(f"{prefix} {file_path.name}", size)
+                else:
+                    prefix = "├──" if i < len(info["par2_files"]) - 1 else "└──"
+                    files_table.add_row(
+                        f"{prefix} {file_path.name}", "[red]Missing[/red]"
+                    )
+
+            console.print(files_table)
 
     except Exception as e:
         console.print(f"[red]Could not read PAR2 info: {e}[/red]")
