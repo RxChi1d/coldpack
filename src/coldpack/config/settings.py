@@ -90,6 +90,46 @@ class PAR2Settings(BaseModel):
         ]
 
 
+class SevenZipSettings(BaseModel):
+    """Configuration for 7z compression operations using py7zz."""
+
+    level: int = Field(default=5, ge=0, le=9, description="Compression level (0-9)")
+    dictionary_size: str = Field(
+        default="16m", description="Dictionary size (1m, 4m, 8m, 16m, 32m, 64m)"
+    )
+    threads: int = Field(default=0, ge=0, description="Number of threads (0=auto)")
+    solid: bool = Field(default=True, description="Enable solid compression")
+    method: str = Field(default="LZMA2", description="Compression method")
+
+    @field_validator("dictionary_size")
+    @classmethod
+    def validate_dictionary_size(cls, v: str) -> str:
+        """Validate dictionary size format."""
+        valid_sizes = {"1m", "4m", "8m", "16m", "32m", "64m"}
+        if v.lower() not in valid_sizes:
+            raise ValueError(f"Dictionary size must be one of: {valid_sizes}")
+        return v.lower()
+
+    @field_validator("method")
+    @classmethod
+    def validate_method(cls, v: str) -> str:
+        """Validate compression method."""
+        valid_methods = {"LZMA2", "LZMA", "PPMd", "BZip2"}
+        if v not in valid_methods:
+            raise ValueError(f"Compression method must be one of: {valid_methods}")
+        return v
+
+    def to_py7zz_config(self) -> dict[str, Any]:
+        """Convert settings to py7zz Config compatible dictionary."""
+        return {
+            "level": self.level,
+            "compression": self.method.lower(),  # py7zz uses lowercase compression names
+            "dictionary_size": self.dictionary_size,
+            "solid": self.solid,
+            "threads": self.threads,
+        }
+
+
 class TarSettings(BaseModel):
     """Configuration for TAR operations."""
 
@@ -130,10 +170,32 @@ class ArchiveMetadata(BaseModel):
     )
     created_at_iso: str = Field(default="", description="ISO formatted creation time")
 
+    # Archive format
+    archive_format: str = Field(
+        default="tar.zst", description="Archive format (7z or tar.zst)"
+    )
+
     # Processing settings (complete configuration preservation)
-    compression_settings: CompressionSettings
+    compression_settings: Optional[CompressionSettings] = Field(
+        default=None, description="Zstd compression settings for tar.zst format"
+    )
+    sevenzip_settings: Optional[SevenZipSettings] = Field(
+        default=None, description="7z compression settings for 7z format"
+    )
     par2_settings: PAR2Settings = Field(default_factory=PAR2Settings)
     tar_settings: TarSettings = Field(default_factory=TarSettings)
+
+    @field_validator("archive_format")
+    @classmethod
+    def validate_archive_format(cls, v: str) -> str:
+        """Validate archive format."""
+        from .constants import SUPPORTED_OUTPUT_FORMATS
+
+        if v not in SUPPORTED_OUTPUT_FORMATS:
+            raise ValueError(
+                f"Archive format must be one of: {SUPPORTED_OUTPUT_FORMATS}"
+            )
+        return v
 
     # Content statistics
     file_count: int = Field(default=0, ge=0, description="Total number of files")
@@ -186,6 +248,12 @@ class ArchiveMetadata(BaseModel):
         # Calculate compression ratio if sizes are available
         self.calculate_compression_ratio()
 
+        # Ensure format-specific settings are set
+        if self.archive_format == "tar.zst" and self.compression_settings is None:
+            self.compression_settings = CompressionSettings()
+        elif self.archive_format == "7z" and self.sevenzip_settings is None:
+            self.sevenzip_settings = SevenZipSettings()
+
     @property
     def compression_percentage(self) -> float:
         """Get compression percentage (100% - compression_ratio * 100)."""
@@ -224,13 +292,11 @@ class ArchiveMetadata(BaseModel):
                 "has_single_root": self.has_single_root,
                 "root_directory": self.root_directory,
             },
-            "compression": {
-                "level": self.compression_settings.level,
-                "threads": self.compression_settings.threads,
-                "long_mode": self.compression_settings.long_mode,
-                "long_distance": self.compression_settings.long_distance,
-                "ultra_mode": self.compression_settings.ultra_mode,
+            "archive": {
+                "format": self.archive_format,
             },
+            "compression": self._get_compression_dict(),
+            "sevenzip": self._get_sevenzip_dict(),
             "par2": {
                 "redundancy_percent": self.par2_settings.redundancy_percent,
                 "block_count": self.par2_settings.block_count,
@@ -250,6 +316,30 @@ class ArchiveMetadata(BaseModel):
                 "temp_directory": self.temp_directory_used,
             },
         }
+
+    def _get_compression_dict(self) -> dict[str, Any]:
+        """Get compression settings dictionary for TOML serialization."""
+        if self.compression_settings is not None:
+            return {
+                "level": self.compression_settings.level,
+                "threads": self.compression_settings.threads,
+                "long_mode": self.compression_settings.long_mode,
+                "long_distance": self.compression_settings.long_distance,
+                "ultra_mode": self.compression_settings.ultra_mode,
+            }
+        return {}
+
+    def _get_sevenzip_dict(self) -> dict[str, Any]:
+        """Get sevenzip settings dictionary for TOML serialization."""
+        if self.sevenzip_settings is not None:
+            return {
+                "level": self.sevenzip_settings.level,
+                "dictionary_size": self.sevenzip_settings.dictionary_size,
+                "threads": self.sevenzip_settings.threads,
+                "solid": self.sevenzip_settings.solid,
+                "method": self.sevenzip_settings.method,
+            }
+        return {}
 
     def save_to_toml(self, file_path: Path) -> None:
         """Save metadata to TOML file."""
@@ -283,14 +373,26 @@ class ArchiveMetadata(BaseModel):
         # Extract sections
         metadata_section = toml_data.get("metadata", {})
         content_section = toml_data.get("content", {})
+        archive_section = toml_data.get("archive", {})
         compression_section = toml_data.get("compression", {})
+        sevenzip_section = toml_data.get("sevenzip", {})
         par2_section = toml_data.get("par2", {})
         tar_section = toml_data.get("tar", {})
         integrity_section = toml_data.get("integrity", {})
         processing_section = toml_data.get("processing", {})
 
-        # Reconstruct settings objects
-        compression_settings = CompressionSettings(**compression_section)
+        # Get archive format
+        archive_format = archive_section.get("format", "tar.zst")
+
+        # Reconstruct settings objects based on format
+        compression_settings = None
+        sevenzip_settings = None
+
+        if archive_format == "tar.zst" and compression_section:
+            compression_settings = CompressionSettings(**compression_section)
+        elif archive_format == "7z" and sevenzip_section:
+            sevenzip_settings = SevenZipSettings(**sevenzip_section)
+
         par2_settings = PAR2Settings(
             redundancy_percent=par2_section.get("redundancy_percent", 10),
             block_count=par2_section.get("block_count", 2000),
@@ -309,8 +411,11 @@ class ArchiveMetadata(BaseModel):
                 metadata_section.get("created_at", datetime.now().isoformat())
             ),
             created_at_iso=metadata_section.get("created_at", ""),
+            # Archive format
+            archive_format=archive_format,
             # Settings
             compression_settings=compression_settings,
+            sevenzip_settings=sevenzip_settings,
             par2_settings=par2_settings,
             tar_settings=tar_settings,
             # Content statistics

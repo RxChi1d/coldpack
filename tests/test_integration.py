@@ -169,8 +169,9 @@ class TestForceOverwrite:
         output_dir = tmp_path / "output"
         output_dir.mkdir()
 
-        # Create existing archive file
-        existing_archive = output_dir / "test_data.tar.zst"
+        # Create existing archive file (using default 7z format)
+        # The archiver initially creates: output_dir/test_data.7z
+        existing_archive = output_dir / "test_data.7z"
         existing_archive.write_text("existing archive content")
 
         # Try to create archive without force

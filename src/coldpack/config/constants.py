@@ -30,9 +30,14 @@ SUPPORTED_ARCHIVE_FORMATS = SUPPORTED_INPUT_FORMATS.union(
 )
 
 # Output format
+DEFAULT_OUTPUT_FORMAT = "7z"
+SUPPORTED_OUTPUT_FORMATS = {"7z", "tar.zst"}
+
+# Legacy format (for backward compatibility)
 OUTPUT_FORMAT = ".tar.zst"
 OUTPUT_EXTENSIONS = {
-    "archive": ".tar.zst",
+    "archive_7z": ".7z",
+    "archive_tar_zst": ".tar.zst",
     "sha256": ".sha256",
     "blake3": ".blake3",
     "par2": ".par2",
@@ -64,6 +69,7 @@ TAR_FORMATS = ["posix", "gnu", "ustar"]
 
 # Verification layer names
 VERIFICATION_LAYERS = [
+    "7z_integrity",
     "tar_header",
     "zstd_integrity",
     "sha256_hash",

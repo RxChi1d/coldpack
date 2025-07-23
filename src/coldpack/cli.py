@@ -10,7 +10,12 @@ from rich.console import Console
 from rich.table import Table
 
 from . import __version__
-from .config.constants import SUPPORTED_INPUT_FORMATS, ExitCodes
+from .config.constants import (
+    DEFAULT_OUTPUT_FORMAT,
+    SUPPORTED_INPUT_FORMATS,
+    SUPPORTED_OUTPUT_FORMATS,
+    ExitCodes,
+)
 from .config.settings import CompressionSettings, ProcessingOptions
 from .core.archiver import ColdStorageArchiver
 from .core.extractor import MultiFormatExtractor
@@ -23,7 +28,7 @@ from .utils.progress import ProgressTracker
 # Initialize Typer app
 app = typer.Typer(
     name="cpack",
-    help="coldpack - Cross-platform cold storage CLI package for standardized tar.zst archives",
+    help="coldpack - Cross-platform cold storage CLI package for standardized 7z archives (with tar.zst legacy support)",
     add_completion=False,
     rich_markup_mode="rich",
     context_settings={"help_option_names": ["-h", "--help"]},
@@ -249,6 +254,14 @@ def archive(
         show_default=True,
         rich_help_panel="PAR2 Options",
     ),
+    # Format Options
+    format: str = typer.Option(
+        DEFAULT_OUTPUT_FORMAT,
+        "--format",
+        help="Archive format (7z or tar.zst)",
+        show_default=True,
+        rich_help_panel="Format Options",
+    ),
     # Global Options
     verbose: Optional[bool] = typer.Option(
         None, "--verbose", "-v", help="Verbose output"
@@ -275,6 +288,7 @@ def archive(
         no_verify_blake3: Skip BLAKE3 hash verification during archive creation
         no_verify_par2: Skip PAR2 recovery verification during archive creation
         par2_redundancy: PAR2 redundancy percentage
+        format: Archive format (7z or tar.zst)
         verbose: Local verbose override
         quiet: Local quiet override
     """
@@ -290,6 +304,13 @@ def archive(
     final_quiet = quiet if quiet is not None else global_quiet
 
     setup_logging(final_verbose, final_quiet)
+
+    # Validate format parameter
+    if format not in SUPPORTED_OUTPUT_FORMATS:
+        console.print(
+            f"[red]Error: Unsupported format '{format}'. Supported formats: {', '.join(SUPPORTED_OUTPUT_FORMATS)}[/red]"
+        )
+        raise typer.Exit(ExitCodes.INVALID_FORMAT)
 
     # Validate long-distance matching parameters
     if no_long and long_distance is not None:
@@ -388,18 +409,34 @@ def archive(
 
         par2_settings = PAR2Settings(redundancy_percent=par2_redundancy)
 
-        # Create archiver
+        # Create archiver with format-specific settings
+        from .config.settings import SevenZipSettings
+
+        sevenzip_settings = None
+        if format == "7z":
+            # Configure 7z settings based on compression level
+            # Map zstd level (1-22) to 7z level (0-9)
+            sevenz_level = min(9, max(0, int(level * 9 / 22)))
+            sevenzip_settings = SevenZipSettings(
+                level=sevenz_level,
+                threads=threads,
+            )
+
         archiver = ColdStorageArchiver(
-            compression_settings, processing_options, par2_settings
+            compression_settings,
+            processing_options,
+            par2_settings,
+            sevenzip_settings=sevenzip_settings,
         )
 
         # Create progress tracker
         with ProgressTracker(console):
             console.print(f"[cyan]Creating cold storage archive from: {source}[/cyan]")
+            console.print(f"[cyan]Format: {format}[/cyan]")
             console.print(f"[cyan]Output directory: {output_dir}[/cyan]")
 
-            # Create archive
-            result = archiver.create_archive(source, output_dir, name)
+            # Create archive with format selection
+            result = archiver.create_archive(source, output_dir, name, format)
 
             if result.success:
                 console.print("[green]✓ Archive created successfully![/green]")
@@ -497,15 +534,29 @@ def extract(
             console.print(
                 "[cyan]Coldpack archive detected - using original compression parameters[/cyan]"
             )
-            console.print(
-                f"[cyan]  Compression level: {metadata.compression_settings.level}[/cyan]"
-            )
-            console.print(
-                f"[cyan]  Threads: {metadata.compression_settings.threads}[/cyan]"
-            )
-            console.print(
-                f"[cyan]  Long distance: {metadata.compression_settings.long_mode}[/cyan]"
-            )
+            # Display parameters based on archive format
+            if metadata.compression_settings:
+                # TAR.ZST format
+                console.print(
+                    f"[cyan]  Compression level: {metadata.compression_settings.level}[/cyan]"
+                )
+                console.print(
+                    f"[cyan]  Threads: {metadata.compression_settings.threads}[/cyan]"
+                )
+                console.print(
+                    f"[cyan]  Long distance: {metadata.compression_settings.long_mode}[/cyan]"
+                )
+            elif metadata.sevenzip_settings:
+                # 7Z format
+                console.print(
+                    f"[cyan]  Compression level: {metadata.sevenzip_settings.level}[/cyan]"
+                )
+                console.print(
+                    f"[cyan]  Threads: {metadata.sevenzip_settings.threads}[/cyan]"
+                )
+                console.print(
+                    f"[cyan]  Method: {metadata.sevenzip_settings.method}[/cyan]"
+                )
 
             # Extract with metadata
             extracted_path = extractor.extract(
@@ -874,7 +925,11 @@ def display_archive_summary(result: Any) -> None:
     table.add_row("Compressed Size", format_file_size(metadata.compressed_size))
     table.add_row("Compression Ratio", f"{metadata.compression_percentage:.1f}%")
     table.add_row("Files", str(metadata.file_count))
-    table.add_row("Compression Level", str(metadata.compression_settings.level))
+    # Display compression level based on archive format
+    if metadata.compression_settings:
+        table.add_row("Compression Level", str(metadata.compression_settings.level))
+    elif metadata.sevenzip_settings:
+        table.add_row("Compression Level", str(metadata.sevenzip_settings.level))
 
     if metadata.verification_hashes:
         for algorithm, hash_value in metadata.verification_hashes.items():
@@ -887,7 +942,7 @@ def display_archive_summary(result: Any) -> None:
 
 
 def display_verification_results(results: Any) -> None:
-    """Display verification results table."""
+    """Display verification results table with detailed failure information."""
     table = Table(
         title="Verification Results", show_header=True, header_style="bold magenta"
     )
@@ -895,8 +950,14 @@ def display_verification_results(results: Any) -> None:
     table.add_column("Status", justify="center")
     table.add_column("Message", style="dim")
 
+    failed_results = []
     for result in results:
-        status = "[green]✓ PASS[/green]" if result.success else "[red]✗ FAIL[/red]"
+        if result.success:
+            status = "[green]✓ PASS[/green]"
+        else:
+            status = "[red]✗ FAIL[/red]"
+            failed_results.append(result)
+
         table.add_row(result.layer.replace("_", " ").title(), status, result.message)
 
     console.print(table)
@@ -911,6 +972,24 @@ def display_verification_results(results: Any) -> None:
         console.print(
             f"[red]{total - passed} of {total} verification layers failed![/red]"
         )
+
+        # Display detailed failure information
+        if failed_results:
+            console.print()
+            console.print("[red]Failed Verification Details:[/red]")
+            for result in failed_results:
+                layer_name = result.layer.replace("_", " ").title()
+                console.print(f"[red]• {layer_name}:[/red] {result.message}")
+
+                # Show additional details if available
+                if hasattr(result, "details") and result.details:
+                    for key, value in result.details.items():
+                        if isinstance(value, list) and value:
+                            console.print(
+                                f"  - {key.title()}: {', '.join(map(str, value))}"
+                            )
+                        elif value:
+                            console.print(f"  - {key.title()}: {value}")
 
 
 def display_archive_info(archive_path: Path) -> None:
@@ -968,7 +1047,12 @@ def display_metadata_info(archive_path: Path, metadata: Any) -> None:
     basic_table.add_column("Value", style="white")
 
     basic_table.add_row("Path", str(archive_path))
-    basic_table.add_row("Format", "TAR + Zstandard")
+    # Display format based on archive format
+    if hasattr(metadata, "archive_format") and metadata.archive_format == "7z":
+        format_display = "7z Archive"
+    else:
+        format_display = "TAR + Zstandard"
+    basic_table.add_row("Format", format_display)
 
     # Calculate size display with compression info
     original_size_str = format_file_size(metadata.original_size)
@@ -1007,17 +1091,40 @@ def display_metadata_info(archive_path: Path, metadata: Any) -> None:
     creation_table.add_column("Setting", style="dim", no_wrap=True, width=20)
     creation_table.add_column("Value", style="yellow")
 
-    creation_table.add_row("├── Zstd Level", str(metadata.compression_settings.level))
+    # Display compression settings based on archive format
+    if metadata.compression_settings:
+        # TAR.ZST format settings
+        creation_table.add_row(
+            "├── Zstd Level", str(metadata.compression_settings.level)
+        )
 
-    # Handle long distance display
-    if metadata.compression_settings.long_distance is not None:
-        long_display = str(metadata.compression_settings.long_distance)
-    else:
-        long_display = "true" if metadata.compression_settings.long_mode else "false"
-    creation_table.add_row("├── Long Distance", long_display)
+        # Handle long distance display
+        if metadata.compression_settings.long_distance is not None:
+            long_display = str(metadata.compression_settings.long_distance)
+        else:
+            long_display = (
+                "true" if metadata.compression_settings.long_mode else "false"
+            )
+        creation_table.add_row("├── Long Distance", long_display)
 
-    creation_table.add_row("├── Threads", str(metadata.compression_settings.threads))
-    creation_table.add_row("└── TAR Method", metadata.tar_settings.method.title())
+        creation_table.add_row(
+            "├── Threads", str(metadata.compression_settings.threads)
+        )
+    elif metadata.sevenzip_settings:
+        # 7Z format settings
+        creation_table.add_row("├── 7z Level", str(metadata.sevenzip_settings.level))
+        creation_table.add_row("├── Method", metadata.sevenzip_settings.method)
+        creation_table.add_row(
+            "├── Dictionary", metadata.sevenzip_settings.dictionary_size
+        )
+        creation_table.add_row("├── Threads", str(metadata.sevenzip_settings.threads))
+        creation_table.add_row(
+            "└── Solid", "true" if metadata.sevenzip_settings.solid else "false"
+        )
+
+    # Only show TAR method for tar.zst format
+    if metadata.compression_settings and metadata.tar_settings:
+        creation_table.add_row("└── TAR Method", metadata.tar_settings.method.title())
 
     console.print(creation_table)
 

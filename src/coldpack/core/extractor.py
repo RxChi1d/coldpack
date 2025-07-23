@@ -93,6 +93,7 @@ class MultiFormatExtractor:
         preserve_structure: bool = True,
         force_overwrite: bool = False,
         metadata: Optional[Any] = None,
+        progress_callback: Optional[Any] = None,
     ) -> Path:
         """Extract archive to output directory with intelligent structure detection.
 
@@ -102,6 +103,7 @@ class MultiFormatExtractor:
             preserve_structure: Whether to preserve archive structure
             force_overwrite: Force overwrite existing files
             metadata: Optional metadata for parameter recovery (for tar.zst archives)
+            progress_callback: Optional progress callback for extraction progress
 
         Returns:
             Path to the extracted content directory
@@ -123,7 +125,12 @@ class MultiFormatExtractor:
 
         # Handle archive files
         return self._extract_archive(
-            source_path, output_path, preserve_structure, force_overwrite, metadata
+            source_path,
+            output_path,
+            preserve_structure,
+            force_overwrite,
+            metadata,
+            progress_callback,
         )
 
     def _handle_directory_input(self, source_dir: Path, output_dir: Path) -> Path:
@@ -146,8 +153,9 @@ class MultiFormatExtractor:
         preserve_structure: bool,
         force_overwrite: bool,
         metadata: Optional[Any] = None,
+        progress_callback: Optional[Any] = None,
     ) -> Path:
-        """Extract archive file using py7zz.
+        """Extract archive file using py7zz with enhanced 7z support.
 
         Args:
             archive_path: Path to archive file
@@ -155,6 +163,7 @@ class MultiFormatExtractor:
             preserve_structure: Whether to preserve archive structure
             force_overwrite: Force overwrite existing files
             metadata: Optional metadata for parameter recovery
+            progress_callback: Optional progress callback for extraction progress
 
         Returns:
             Path to extracted content
@@ -174,7 +183,18 @@ class MultiFormatExtractor:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         try:
-            # Check if this is a tar.zst archive (coldpack format)
+            # Check if this is a 7z archive (coldpack 7z format)
+            if self._is_7z_format(archive_path):
+                return self._extract_7z_archive(
+                    archive_path,
+                    output_dir,
+                    preserve_structure,
+                    force_overwrite,
+                    metadata,
+                    progress_callback,
+                )
+
+            # Check if this is a tar.zst archive (coldpack tar.zst format)
             if self._is_tar_zst_format(archive_path):
                 return self._extract_tar_zst_archive(
                     archive_path,
@@ -196,12 +216,12 @@ class MultiFormatExtractor:
             if has_single_root and preserve_structure:
                 # Archive has single root directory, extract directly
                 return self._extract_with_structure(
-                    archive_path, output_dir, force_overwrite
+                    archive_path, output_dir, force_overwrite, progress_callback
                 )
             else:
                 # Archive has multiple root items or flat structure
                 return self._extract_to_named_directory(
-                    archive_path, output_dir, force_overwrite
+                    archive_path, output_dir, force_overwrite, progress_callback
                 )
 
         except Exception as e:
@@ -227,6 +247,17 @@ class MultiFormatExtractor:
                 return True
 
         return False
+
+    def _is_7z_format(self, file_path: Path) -> bool:
+        """Check if file is a 7z archive (coldpack 7z format).
+
+        Args:
+            file_path: Path to the file
+
+        Returns:
+            True if file is 7z format
+        """
+        return file_path.suffix.lower() == ".7z"
 
     def _is_tar_zst_format(self, file_path: Path) -> bool:
         """Check if file is a tar.zst archive (coldpack format).
@@ -265,6 +296,116 @@ class MultiFormatExtractor:
             return compound_suffix in compound_tar_formats
         return False
 
+    def _extract_7z_archive(
+        self,
+        archive_path: Path,
+        output_dir: Path,
+        preserve_structure: bool,
+        force_overwrite: bool,
+        metadata: Optional[Any] = None,
+        progress_callback: Optional[Any] = None,
+    ) -> Path:
+        """Extract 7z archive with enhanced progress tracking and structure detection.
+
+        Args:
+            archive_path: Path to the 7z archive
+            output_dir: Directory to extract to
+            preserve_structure: Whether to preserve archive structure
+            force_overwrite: Force overwrite existing files
+            metadata: Optional metadata containing original compression parameters
+            progress_callback: Optional progress callback function
+
+        Returns:
+            Path to the extracted content directory
+
+        Raises:
+            ExtractionError: If extraction fails
+        """
+        logger.info(f"Extracting 7z archive: {archive_path}")
+
+        if (
+            metadata
+            and hasattr(metadata, "sevenzip_settings")
+            and metadata.sevenzip_settings
+        ):
+            logger.info("Using 7z settings from metadata")
+            logger.debug(f"  Level: {metadata.sevenzip_settings.level}")
+            logger.debug(f"  Dictionary: {metadata.sevenzip_settings.dictionary_size}")
+            logger.debug(f"  Method: {metadata.sevenzip_settings.method}")
+
+        try:
+            # Create progress callback adapter if needed
+            py7zz_callback = None
+            if progress_callback:
+
+                def progress_adapter(progress_info: Any) -> None:
+                    """Adapter for py7zz progress callbacks."""
+                    try:
+                        if hasattr(progress_info, "percentage"):
+                            percentage = int(progress_info.percentage)
+                        else:
+                            percentage = 0
+
+                        if hasattr(progress_info, "current_file"):
+                            current_file = str(progress_info.current_file)
+                        else:
+                            current_file = "Extracting..."
+
+                        progress_callback(percentage, current_file)
+                    except Exception as e:
+                        logger.debug(f"Progress callback error: {e}")
+
+                py7zz_callback = progress_adapter
+
+            # Check for existing directory if not forcing overwrite
+            if not force_overwrite:
+                existing_items = (
+                    list(output_dir.iterdir()) if output_dir.exists() else []
+                )
+                if existing_items:
+                    raise ExtractionError(
+                        f"Target directory not empty: {output_dir}. Use --force to overwrite."
+                    )
+
+            # Ensure output directory exists
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            # Extract 7z archive using py7zz with progress callback
+            with py7zz.SevenZipFile(archive_path, "r") as archive:
+                if py7zz_callback:
+                    # Use extract_all with progress callback if supported
+                    try:
+                        archive.extractall(output_dir, progress_callback=py7zz_callback)
+                    except (TypeError, AttributeError):
+                        # Fallback if progress callback not supported
+                        logger.debug(
+                            "Progress callback not supported, extracting without progress"
+                        )
+                        archive.extractall(output_dir)
+                else:
+                    archive.extractall(output_dir)
+
+            # Determine extracted structure
+            extracted_items = list(output_dir.iterdir())
+
+            if len(extracted_items) == 1 and extracted_items[0].is_dir():
+                # Single directory was extracted - return it directly
+                result_path = extracted_items[0]
+            elif len(extracted_items) >= 1:
+                # Multiple items extracted - they are already in output_dir
+                result_path = output_dir
+            else:
+                # No items extracted - error
+                raise ExtractionError("No content found after 7z extraction")
+
+            logger.success(f"Successfully extracted 7z archive to: {result_path}")
+            return result_path
+
+        except py7zz.Py7zzError as e:
+            raise ExtractionError(f"7z extraction failed: {e}") from e
+        except Exception as e:
+            raise ExtractionError(f"Failed to extract 7z archive: {e}") from e
+
     def _extract_tar_zst_archive(
         self,
         archive_path: Path,
@@ -292,9 +433,16 @@ class MultiFormatExtractor:
 
         if metadata:
             logger.info("Using original compression parameters from metadata")
-            logger.debug(f"  Level: {metadata.compression_settings.level}")
-            logger.debug(f"  Threads: {metadata.compression_settings.threads}")
-            logger.debug(f"  Long mode: {metadata.compression_settings.long_mode}")
+            if metadata.compression_settings:
+                # TAR.ZST format metadata
+                logger.debug(f"  Level: {metadata.compression_settings.level}")
+                logger.debug(f"  Threads: {metadata.compression_settings.threads}")
+                logger.debug(f"  Long mode: {metadata.compression_settings.long_mode}")
+            elif metadata.sevenzip_settings:
+                # 7Z format metadata (shouldn't occur in tar.zst extraction, but handle gracefully)
+                logger.debug(f"  Level: {metadata.sevenzip_settings.level}")
+                logger.debug(f"  Threads: {metadata.sevenzip_settings.threads}")
+                logger.debug(f"  Method: {metadata.sevenzip_settings.method}")
 
         # Use a temporary directory for the intermediate tar file
         import tempfile
@@ -594,7 +742,11 @@ class MultiFormatExtractor:
             return False
 
     def _extract_with_structure(
-        self, archive_path: Path, output_dir: Path, force_overwrite: bool
+        self,
+        archive_path: Path,
+        output_dir: Path,
+        force_overwrite: bool,
+        progress_callback: Optional[Any] = None,
     ) -> Path:
         """Extract archive preserving its internal structure.
 
@@ -602,6 +754,7 @@ class MultiFormatExtractor:
             archive_path: Path to the archive
             output_dir: Output directory
             force_overwrite: Force overwrite existing files
+            progress_callback: Optional progress callback function
 
         Returns:
             Path to the extracted root directory
@@ -641,7 +794,11 @@ class MultiFormatExtractor:
                 raise ExtractionError(f"Extraction failed: {e}") from e
 
     def _extract_to_named_directory(
-        self, archive_path: Path, output_dir: Path, force_overwrite: bool
+        self,
+        archive_path: Path,
+        output_dir: Path,
+        force_overwrite: bool,
+        progress_callback: Optional[Any] = None,
     ) -> Path:
         """Extract archive to a directory named after the archive.
 
@@ -649,6 +806,7 @@ class MultiFormatExtractor:
             archive_path: Path to the archive
             output_dir: Output directory
             force_overwrite: Force overwrite existing files
+            progress_callback: Optional progress callback function
 
         Returns:
             Path to the created target directory
