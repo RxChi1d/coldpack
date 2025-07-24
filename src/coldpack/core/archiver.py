@@ -200,7 +200,7 @@ class ColdStorageArchiver:
             raise ArchivingError(f"Insufficient disk space: {e}") from e
 
         logger.info(f"Creating cold storage archive: {archive_name}")
-        logger.info(f"Format: {format}")
+        # logger.info(f"Format: {format}")
         logger.info(f"Source: {source_path}")
         logger.info(f"Output: {output_path}")
 
