@@ -348,8 +348,6 @@ def archive(
 
         processing_options = ProcessingOptions(
             verify_integrity=final_verify_integrity,
-            verify_tar=False,  # Not used for 7z format
-            verify_zstd=False,  # Not used for 7z format
             verify_sha256=final_verify_sha256,
             verify_blake3=final_verify_blake3,
             verify_par2=final_verify_par2,
@@ -456,6 +454,12 @@ def extract(
         help="Force overwrite existing files",
         rich_help_panel="Output Options",
     ),
+    verify: bool = typer.Option(
+        False,
+        "--verify",
+        help="Verify archive integrity before extraction",
+        rich_help_panel="Verification Options",
+    ),
     verbose: Optional[bool] = typer.Option(
         None, "--verbose", "-v", help="Verbose output"
     ),
@@ -463,7 +467,7 @@ def extract(
 ) -> None:
     """Extract a cold storage archive or supported archive format.
 
-    For coldpack archives (.tar.zst with metadata/metadata.toml):
+    For coldpack archives with metadata/metadata.toml:
     - Automatically uses original compression parameters from metadata
     - Falls back to direct extraction if metadata is unavailable
     - Errors if metadata is corrupted or extraction fails without metadata
@@ -473,6 +477,7 @@ def extract(
         archive: Archive file to extract
         output_dir: Output directory (default: current directory)
         force: Force overwrite existing files
+        verify: Verify archive integrity before extraction
         verbose: Local verbose override
         quiet: Local quiet override
     """
@@ -502,10 +507,18 @@ def extract(
         console.print(f"[cyan]Extracting archive: {archive}[/cyan]")
         console.print(f"[cyan]Output directory: {output_dir}[/cyan]")
 
-        # Step 1: Try to load coldpack metadata (standard compliant archives)
-        metadata, metadata_error = _load_coldpack_metadata(archive, final_verbose)
-
+        # Step 1: Optional pre-extraction verification
         extractor = MultiFormatExtractor()
+        if verify:
+            console.print("[cyan]Performing pre-extraction verification...[/cyan]")
+            if extractor.validate_archive(archive):
+                console.print("[green]✓ Archive integrity verified[/green]")
+            else:
+                console.print("[red]✗ Archive integrity check failed[/red]")
+                console.print("[yellow]Continuing with extraction attempt...[/yellow]")
+
+        # Step 2: Try to load coldpack metadata (standard compliant archives)
+        metadata, metadata_error = _load_coldpack_metadata(archive, final_verbose)
 
         if metadata:
             # Step 2a: Standard coldpack archive - use original parameters
@@ -609,18 +622,6 @@ def verify(
         rich_help_panel="Input Options",
     ),
     # Individual verification layer controls
-    no_tar: bool = typer.Option(
-        False,
-        "--no-tar",
-        help="Skip TAR header verification",
-        rich_help_panel="Verification Controls",
-    ),
-    no_zstd: bool = typer.Option(
-        False,
-        "--no-zstd",
-        help="Skip Zstd integrity verification",
-        rich_help_panel="Verification Controls",
-    ),
     no_sha256: bool = typer.Option(
         False,
         "--no-sha256",
@@ -652,8 +653,6 @@ def verify(
         archive: Archive file to verify
         hash_files: Hash files for verification
         par2_file: PAR2 recovery file
-        no_tar: Skip TAR header verification
-        no_zstd: Skip Zstd integrity verification
         no_sha256: Skip SHA-256 hash verification
         no_blake3: Skip BLAKE3 hash verification
         no_par2: Skip PAR2 recovery verification
@@ -685,10 +684,6 @@ def verify(
 
         # Configure which verification layers to skip
         skip_layers = set()
-        if no_tar:
-            skip_layers.add("tar_header")
-        if no_zstd:
-            skip_layers.add("zstd_integrity")
         if no_sha256:
             skip_layers.add("sha256_hash")
         if no_blake3:
@@ -1353,7 +1348,7 @@ def formats() -> None:
         f"\n[bold]Total:[/bold] {len(SUPPORTED_INPUT_FORMATS)} formats supported"
     )
     console.print(
-        "[bold]Output Format:[/bold] .tar.zst (TAR archive compressed with Zstandard)"
+        "[bold]Output Format:[/bold] .7z (7-Zip archive with LZMA2 compression)"
     )
 
 
