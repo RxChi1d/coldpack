@@ -226,7 +226,7 @@ class TestWindowsSystemDetection:
         self, mock_is_windows
     ):
         """Test that case conflicts alone don't trigger special handling.
-        
+
         Since 7-Zip handles case conflicts natively, we should let it do so
         rather than applying our own filename sanitization.
         """

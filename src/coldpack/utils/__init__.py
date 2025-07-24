@@ -11,6 +11,10 @@ from .filesystem import (
 from .hashing import DualHasher, HashVerifier
 from .par2 import PAR2Manager
 from .progress import ProgressTracker, create_progress_callback
+from .windows_compat import (
+    check_par2_related_paths_compatibility,
+    check_windows_par2_unicode_compatibility,
+)
 
 __all__ = [
     "create_temp_directory",
@@ -25,4 +29,6 @@ __all__ = [
     "PAR2Manager",
     "ProgressTracker",
     "create_progress_callback",
+    "check_par2_related_paths_compatibility",
+    "check_windows_par2_unicode_compatibility",
 ]
