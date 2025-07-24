@@ -736,7 +736,7 @@ def verify(
 @app.command()
 def repair(
     ctx: typer.Context,
-    par2_file: Path,
+    file_path: Path,
     verbose: Optional[bool] = typer.Option(
         None, "--verbose", "-v", help="Verbose output"
     ),
@@ -744,9 +744,13 @@ def repair(
 ) -> None:
     """Repair a corrupted archive using PAR2 recovery files.
 
+    Can accept either:
+    - PAR2 recovery file directly (.par2)
+    - Archive file (will auto-locate corresponding PAR2 files)
+
     Args:
         ctx: Typer context
-        par2_file: PAR2 recovery file
+        file_path: PAR2 recovery file or archive file
         verbose: Local verbose override
         quiet: Local quiet override
     """
@@ -763,10 +767,46 @@ def repair(
 
     setup_logging(final_verbose, final_quiet)
 
-    # Validate PAR2 file
-    if not par2_file.exists():
-        console.print(f"[red]Error: PAR2 file not found: {par2_file}[/red]")
+    # Validate file path
+    if not file_path.exists():
+        console.print(f"[red]Error: File not found: {file_path}[/red]")
         raise typer.Exit(ExitCodes.FILE_NOT_FOUND)
+
+    # Determine if it's a PAR2 file or archive file
+    par2_file = None
+    if file_path.suffix.lower() == ".par2":
+        # Direct PAR2 file
+        par2_file = file_path
+    else:
+        # Archive file - try to find corresponding PAR2 file
+        console.print(f"[cyan]Archive file detected: {file_path}[/cyan]")
+        console.print("[cyan]Searching for PAR2 recovery files...[/cyan]")
+
+        # Look for PAR2 files in multiple locations
+        potential_par2_paths = [
+            # Same directory as archive
+            file_path.parent / f"{file_path.name}.par2",
+            # In metadata subdirectory (coldpack standard)
+            file_path.parent / "metadata" / f"{file_path.name}.par2",
+        ]
+
+        for par2_path in potential_par2_paths:
+            if par2_path.exists():
+                par2_file = par2_path
+                console.print(f"[green]Found PAR2 file: {par2_file}[/green]")
+                break
+
+        if par2_file is None:
+            console.print(
+                f"[red]Error: No PAR2 recovery files found for {file_path}[/red]"
+            )
+            console.print("[yellow]Searched locations:[/yellow]")
+            for path in potential_par2_paths:
+                console.print(f"  - {path}")
+            console.print(
+                "[yellow]For coldpack archives, PAR2 files should be in the metadata/ directory[/yellow]"
+            )
+            raise typer.Exit(ExitCodes.FILE_NOT_FOUND)
 
     try:
         # Try to load metadata for PAR2 parameter recovery

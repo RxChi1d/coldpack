@@ -219,19 +219,17 @@ class PAR2Manager:
 
         # For PAR2 files in metadata directory, use -B parameter for verification
         if par2_obj.parent.name == "metadata":
-            # PAR2 files in metadata directory should use -B parameter with the parent directory as basepath
+            # Use the directory containing the protected files (7z location) as basepath
             basepath = str(par2_obj.parent.parent.absolute())
-            work_dir = (
-                par2_obj.parent.parent
-            )  # Run from directory containing the protected files
-            par2_rel_path = f"metadata/{par2_obj.name}"  # Relative path to PAR2 file
+            work_dir = par2_obj.parent  # Run from metadata directory
+            par2_rel_path = par2_obj.name  # PAR2 file name in metadata directory
 
             cmd = [
                 self.par2_cmd,
                 "verify",
-                f"-B{basepath}",  # Use basepath parameter
+                f"-B{basepath}",  # Use the 7z directory as basepath
                 "-q",  # Quiet mode
-                par2_rel_path,  # Path to PAR2 file relative to work directory
+                par2_rel_path,
             ]
         else:
             # Standard case - PAR2 files in same directory as protected files
@@ -293,19 +291,37 @@ class PAR2Manager:
         if not par2_obj.exists():
             raise FileNotFoundError(f"PAR2 file not found: {par2_obj}")
 
-        cmd = [
-            self.par2_cmd,
-            "repair",
-            "-q",  # Quiet mode
-            par2_obj.name,  # Use relative path for consistency
-        ]
+        # For PAR2 files in metadata directory, use -B parameter for repair
+        if par2_obj.parent.name == "metadata":
+            # Use the directory containing the protected files (7z location) as basepath
+            basepath = str(par2_obj.parent.parent.absolute())
+            work_dir = par2_obj.parent  # Run from metadata directory
+
+            cmd = [
+                self.par2_cmd,
+                "repair",
+                f"-B{basepath}",  # Use the 7z directory as basepath
+                "-q",  # Quiet mode
+                par2_obj.name,  # PAR2 file name in metadata directory
+            ]
+        else:
+            # Standard case - PAR2 files in same directory as protected files
+            work_dir = par2_obj.parent
+            par2_rel_path = par2_obj.name
+
+            cmd = [
+                self.par2_cmd,
+                "repair",
+                "-q",  # Quiet mode
+                par2_rel_path,  # PAR2 file name
+            ]
 
         try:
             logger.info(f"Attempting PAR2 repair: {par2_obj}")
 
             result = subprocess.run(
                 cmd,
-                cwd=par2_obj.parent,
+                cwd=work_dir,
                 capture_output=True,
                 text=True,
                 timeout=3600,  # 1 hour timeout
