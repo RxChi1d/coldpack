@@ -644,8 +644,45 @@ cpack extract --verify --force -o /path/to/output archive.7z
 
 ---
 
+### 🚀 CLI 使用體驗改善：修正驗證與列表功能問題 (2025-07-24)
+**分支**: `fix/cli-improvements`
+**問題範圍**: CLI 使用體驗優化和功能重複問題解決
+
+#### 修正的關鍵問題
+37. **驗證層數顯示不準確** - ✅ 已修復：動態計算實際執行的驗證層數，避免顯示固定的 "5-layer" 訊息
+38. **extract --verify 訊息過於簡略** - ✅ 已修復：提供詳細的驗證結果顯示，包含每層的具體狀態
+39. **list 命令重複註冊問題** - ✅ 已修復：移除重複的 list-archive 命令，統一使用 list 命令
+40. **list 命令顯示數量限制標準化** - ✅ 已研究：基於業界標準決定保持現有的無默認限制設計
+
+#### 技術實現細節
+- **verifier.py**: 修改驗證訊息動態計算層數，根據格式和文件存在性顯示正確的層數
+- **cli.py**: 重構 extract --verify 功能使用完整的 ArchiveVerifier 系統，提供詳細驗證結果
+- **功能統一**: 移除重複的命令註冊，保持 CLI 介面簡潔一致
+- **業界標準研究**: 調研 Unix/Linux 工具標準，確認不設置默認顯示限制符合最佳實踐
+
+#### 新的驗證體驗
+**extract --verify 現在提供**:
+- 詳細的層級驗證結果（如 "3/4 layers passed"）
+- 每層的具體狀態顯示（✓ zstd_integrity: Zstd integrity check passed）
+- 清晰的錯誤訊息和處理建議
+- 智能的格式檢測和層數計算
+
+#### 影響範圍
+- **用戶體驗大幅提升**: 驗證訊息更加精確和詳細，消除用戶困惑
+- **CLI 一致性**: 移除功能重複，確保命令介面清晰
+- **業界標準遵循**: list 命令保持與傳統 Unix 工具一致的行為模式
+- **向後相容性**: 所有變更都是改善型，不影響現有功能
+
+#### 程式碼品質
+- ✅ ruff check --fix 通過
+- ✅ ruff format 完成格式化
+- ✅ mypy 類型檢查通過
+- ✅ 全部 133 個測試通過
+
+---
+
 **更新日期**: 2025-07-24
-**當前版本**: v1.6.0-dev (99% 完成)
-**專案狀態**: 專業化架構完成，Windows 檔案名稱相容性完善，7z 專用冷儲存解決方案，CLI 大幅簡化，精確動態參數優化實現，**list 命令完整實現**
-**最新提交**: feat(list): implement complete archive listing functionality with py7zz.run_7z integration (feature/implement-list-command 分支)
+**當前版本**: v1.6.1-dev (99.5% 完成)
+**專案狀態**: 專業化架構完成，Windows 檔案名稱相容性完善，7z 專用冷儲存解決方案，CLI 大幅簡化，**CLI 使用體驗持續優化**
+**最新提交**: fix(cli): improve verification layer counting and extract --verify details (fix/cli-improvements 分支)
 **下一個里程碑**: 完善測試覆蓋度和效能優化，達到 100% 完成

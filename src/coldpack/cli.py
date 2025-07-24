@@ -512,10 +512,44 @@ def extract(
         extractor = MultiFormatExtractor()
         if verify:
             console.print("[cyan]Performing pre-extraction verification...[/cyan]")
-            if extractor.validate_archive(archive):
-                console.print("[green]✓ Archive integrity verified[/green]")
-            else:
-                console.print("[red]✗ Archive integrity check failed[/red]")
+
+            # Import verifier for comprehensive verification
+            from .core.verifier import ArchiveVerifier
+
+            verifier = ArchiveVerifier()
+            try:
+                # Use auto verification for comprehensive checking
+                results = verifier.verify_auto(archive)
+
+                # Display detailed results
+                passed_layers = sum(1 for r in results if r.success)
+                total_layers = len(results)
+
+                console.print(
+                    f"[cyan]Verification complete: {passed_layers}/{total_layers} layers passed[/cyan]"
+                )
+
+                # Show each layer result
+                for result in results:
+                    status_icon = "✓" if result.success else "✗"
+                    status_color = "green" if result.success else "red"
+                    console.print(
+                        f"[{status_color}]{status_icon} {result.layer}: {result.message}[/{status_color}]"
+                    )
+
+                # Overall result
+                if passed_layers == total_layers:
+                    console.print("[green]✓ Archive integrity fully verified[/green]")
+                else:
+                    console.print(
+                        f"[yellow]⚠ Partial verification: {passed_layers}/{total_layers} layers passed[/yellow]"
+                    )
+                    console.print(
+                        "[yellow]Continuing with extraction attempt...[/yellow]"
+                    )
+
+            except Exception as e:
+                console.print(f"[red]✗ Verification failed: {e}[/red]")
                 console.print("[yellow]Continuing with extraction attempt...[/yellow]")
 
         # Step 2: Try to load coldpack metadata (standard compliant archives)
@@ -1442,7 +1476,6 @@ def display_archive_listing(result: dict, verbose: bool = False) -> None:
         console.print("[dim]  • Use --summary-only for overview[/dim]")
 
 
-@app.command()
 def list_archive(
     ctx: typer.Context,
     path: Path,
@@ -1577,8 +1610,10 @@ def list_archive(
         raise typer.Exit(ExitCodes.GENERAL_ERROR) from e
 
 
-# Register 'list' as an alias for list_archive command
-app.command(name="list")(list_archive)
+# Register list command
+app.command(name="list", help="List contents of an archive without extracting it.")(
+    list_archive
+)
 
 
 @app.command()
