@@ -82,7 +82,9 @@ def compute_file_hashes(
         file_size = file_obj.stat().st_size
         hasher = DualHasher()
 
-        logger.info(f"Computing dual hashes for {file_obj} ({file_size} bytes)")
+        from .filesystem import format_file_size
+
+        logger.info(f"Computing dual hashes ({format_file_size(file_size)})")
 
         with open(file_obj, "rb") as f:
             while True:
@@ -101,7 +103,7 @@ def compute_file_hashes(
 
         hashes = hasher.finalize()
 
-        logger.success(f"Computed hashes for {file_obj}:")
+        logger.success("Dual hash computation completed")
         logger.debug(f"  SHA-256: {hashes['sha256']}")
         logger.debug(f"  BLAKE3:  {hashes['blake3']}")
 
@@ -183,9 +185,8 @@ def generate_hash_files(
             )
             hash_files[algorithm] = hash_file_path
 
-        output_location = output_dir or Path(file_path).parent
-        logger.success(
-            f"Generated {len(hash_files)} hash files for {file_path} in {output_location}"
+        logger.debug(
+            f"Generated {len(hash_files)} hash files in {output_dir or Path(file_path).parent}"
         )
         return hash_files
 
@@ -279,9 +280,7 @@ class HashVerifier:
 
             # Compare hashes
             if actual_hash.lower() == expected_hash.lower():
-                logger.success(
-                    f"{algorithm.upper()} verification passed for {file_path}"
-                )
+                logger.success(f"{algorithm.upper()} verification passed")
                 return True
             else:
                 logger.error(f"{algorithm.upper()} verification failed for {file_path}")

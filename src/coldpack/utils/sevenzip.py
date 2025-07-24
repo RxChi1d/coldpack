@@ -67,7 +67,7 @@ class SevenZipCompressor:
         # Ensure parent directory exists
         archive_obj.parent.mkdir(parents=True, exist_ok=True)
 
-        logger.info(f"Compressing directory {source_path} to {archive_obj}")
+        logger.debug(f"Compressing directory {source_path} to {archive_obj}")
         logger.debug(f"Using compression settings: {self._config_dict}")
 
         try:
@@ -78,7 +78,8 @@ class SevenZipCompressor:
                 # Add the source directory to the archive
                 archive.add(str(source_path))
 
-            logger.success(f"Successfully compressed to {archive_obj}")
+            # Success will be logged in archiver with file size info
+            logger.debug(f"7z compression completed: {archive_obj}")
 
         except py7zz.CompressionError as e:
             raise CompressionError(f"7z compression failed: {e}") from e
@@ -334,8 +335,10 @@ def optimize_7z_compression_settings(
         )
         logger.debug("Using huge file optimization (> 2 GiB)")
 
+    # Format threads display in a more user-friendly way
+    threads_display = "all" if threads == 0 else str(threads)
     logger.info(
-        f"Optimized 7z settings: level={settings.level}, dict={settings.dictionary_size}, threads={threads}"
+        f"Optimized 7z settings: level={settings.level}, dict={settings.dictionary_size}, threads={threads_display}"
     )
     return settings
 

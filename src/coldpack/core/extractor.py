@@ -434,7 +434,7 @@ class MultiFormatExtractor:
                 # No items extracted - error
                 raise ExtractionError("No content found after 7z extraction")
 
-            logger.success(f"Successfully extracted 7z archive to: {result_path}")
+            logger.success("7z archive extracted successfully")
             return result_path
 
         except py7zz.Py7zzError as e:
