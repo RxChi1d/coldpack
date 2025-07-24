@@ -7,7 +7,13 @@ import py7zz  # type: ignore
 from loguru import logger
 
 from ..config.constants import SUPPORTED_INPUT_FORMATS
-from ..utils.filesystem import safe_file_operations
+from ..utils.filesystem import (
+    check_windows_filename_conflicts,
+    create_filename_mapping,
+    is_windows_system,
+    needs_windows_filename_handling,
+    safe_file_operations,
+)
 
 
 class ExtractionError(Exception):
@@ -370,20 +376,50 @@ class MultiFormatExtractor:
             # Ensure output directory exists
             output_dir.mkdir(parents=True, exist_ok=True)
 
-            # Extract 7z archive using py7zz with progress callback
+            # Extract 7z archive using py7zz with Windows filename handling
             with py7zz.SevenZipFile(archive_path, "r") as archive:
-                if py7zz_callback:
-                    # Use extract_all with progress callback if supported
-                    try:
-                        archive.extractall(output_dir, progress_callback=py7zz_callback)
-                    except (TypeError, AttributeError):
-                        # Fallback if progress callback not supported
-                        logger.debug(
-                            "Progress callback not supported, extracting without progress"
+                # Check if we need Windows filename handling
+                if is_windows_system():
+                    file_list = archive.namelist()
+
+                    # Check for Windows filename conflicts
+                    if needs_windows_filename_handling(file_list):
+                        logger.info(
+                            "Windows filename conflicts detected, applying filename sanitization"
                         )
-                        archive.extractall(output_dir)
+
+                        # Get conflicts details for logging
+                        conflicts = check_windows_filename_conflicts(file_list)
+                        if conflicts["reserved_names"]:
+                            logger.warning(
+                                f"Reserved names found: {len(conflicts['reserved_names'])} files"
+                            )
+                        if conflicts["invalid_chars"]:
+                            logger.warning(
+                                f"Invalid characters found: {len(conflicts['invalid_chars'])} files"
+                            )
+                        if conflicts["case_conflicts"]:
+                            logger.warning(
+                                f"Case conflicts found: {len(conflicts['case_conflicts'])} files"
+                            )
+                        if conflicts["length_conflicts"]:
+                            logger.warning(
+                                f"Length conflicts found: {len(conflicts['length_conflicts'])} files"
+                            )
+
+                        # Create filename mapping
+                        filename_mapping = create_filename_mapping(file_list)
+
+                        # Extract with filename mapping
+                        self._extract_with_filename_mapping(
+                            archive, output_dir, filename_mapping, py7zz_callback
+                        )
+                    else:
+                        # No conflicts, extract normally
+                        self._extract_normally(archive, output_dir, py7zz_callback)
                 else:
-                    archive.extractall(output_dir)
+                    # Not Windows, extract normally
+                    self._extract_normally(archive, output_dir, py7zz_callback)
 
             # Determine extracted structure
             extracted_items = list(output_dir.iterdir())
@@ -405,6 +441,83 @@ class MultiFormatExtractor:
             raise ExtractionError(f"7z extraction failed: {e}") from e
         except Exception as e:
             raise ExtractionError(f"Failed to extract 7z archive: {e}") from e
+
+    def _extract_normally(
+        self,
+        archive: py7zz.SevenZipFile,
+        output_dir: Path,
+        progress_callback: Optional[Any] = None,
+    ) -> None:
+        """Extract archive normally without filename modifications.
+
+        Args:
+            archive: Opened py7zz archive object
+            output_dir: Directory to extract to
+            progress_callback: Optional progress callback function
+        """
+        if progress_callback:
+            # Use extract_all with progress callback if supported
+            try:
+                archive.extractall(output_dir, progress_callback=progress_callback)
+            except (TypeError, AttributeError):
+                # Fallback if progress callback not supported
+                logger.debug(
+                    "Progress callback not supported, extracting without progress"
+                )
+                archive.extractall(output_dir)
+        else:
+            archive.extractall(output_dir)
+
+    def _extract_with_filename_mapping(
+        self,
+        archive: py7zz.SevenZipFile,
+        output_dir: Path,
+        filename_mapping: dict[str, str],
+        progress_callback: Optional[Any] = None,
+    ) -> None:
+        """Extract archive with filename mapping for Windows compatibility.
+
+        Args:
+            archive: Opened py7zz archive object
+            output_dir: Directory to extract to
+            filename_mapping: Mapping from original to sanitized filenames
+            progress_callback: Optional progress callback function
+        """
+        # Extract files one by one with name mapping
+        file_list = archive.namelist()
+        total_files = len(file_list)
+
+        for i, original_path in enumerate(file_list):
+            try:
+                # Get the sanitized path
+                sanitized_path = filename_mapping.get(original_path, original_path)
+                target_path = output_dir / sanitized_path
+
+                # Ensure parent directory exists
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+
+                # Extract individual file
+                archive.extract(original_path, output_dir)
+
+                # If the filename was changed, rename the extracted file
+                if sanitized_path != original_path:
+                    extracted_path = output_dir / original_path
+                    if extracted_path.exists():
+                        logger.debug(f"Renaming: {original_path} -> {sanitized_path}")
+                        extracted_path.rename(target_path)
+
+                # Update progress if callback provided
+                if progress_callback:
+                    try:
+                        percentage = int((i + 1) * 100 / total_files)
+                        progress_callback(percentage, f"Extracting: {sanitized_path}")
+                    except Exception as e:
+                        logger.debug(f"Progress callback error: {e}")
+
+            except Exception as e:
+                logger.error(f"Failed to extract file {original_path}: {e}")
+                # Continue with other files rather than failing completely
+                continue
 
     def _extract_tar_zst_archive(
         self,
@@ -772,7 +885,19 @@ class MultiFormatExtractor:
         with safe_file_operations():
             try:
                 with py7zz.SevenZipFile(archive_path, "r") as archive:
-                    archive.extractall(output_dir)
+                    # Apply Windows filename handling if needed
+                    if is_windows_system():
+                        file_list = archive.namelist()
+                        if needs_windows_filename_handling(file_list):
+                            logger.info("Applying Windows filename sanitization")
+                            filename_mapping = create_filename_mapping(file_list)
+                            self._extract_with_filename_mapping(
+                                archive, output_dir, filename_mapping
+                            )
+                        else:
+                            archive.extractall(output_dir)
+                    else:
+                        archive.extractall(output_dir)
 
                 # Find the extracted root directory
                 archive_name = self._get_clean_archive_name(archive_path)
@@ -828,9 +953,21 @@ class MultiFormatExtractor:
                 target_dir.mkdir(parents=True, exist_ok=True)
                 safe_ops.track_directory(target_dir)
 
-                # Extract to target directory
+                # Extract to target directory with Windows filename handling
                 with py7zz.SevenZipFile(archive_path, "r") as archive:
-                    archive.extractall(target_dir)
+                    # Apply Windows filename handling if needed
+                    if is_windows_system():
+                        file_list = archive.namelist()
+                        if needs_windows_filename_handling(file_list):
+                            logger.info("Applying Windows filename sanitization")
+                            filename_mapping = create_filename_mapping(file_list)
+                            self._extract_with_filename_mapping(
+                                archive, target_dir, filename_mapping
+                            )
+                        else:
+                            archive.extractall(target_dir)
+                    else:
+                        archive.extractall(target_dir)
 
                 # Verify extraction
                 if not any(target_dir.iterdir()):
