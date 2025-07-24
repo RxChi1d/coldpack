@@ -221,6 +221,22 @@ class TestWindowsSystemDetection:
 
         assert needs_windows_filename_handling(file_list) is False
 
+    @patch("coldpack.utils.filesystem.is_windows_system")
+    def test_needs_windows_filename_handling_case_conflicts_ignored(
+        self, mock_is_windows
+    ):
+        """Test that case conflicts alone don't trigger special handling.
+        
+        Since 7-Zip handles case conflicts natively, we should let it do so
+        rather than applying our own filename sanitization.
+        """
+        mock_is_windows.return_value = True
+        # Only case conflicts, no reserved names or invalid chars
+        file_list = ["File.txt", "file.txt", "FILE.TXT", "Document.pdf", "document.pdf"]
+
+        # Should return False because we now ignore case conflicts
+        assert needs_windows_filename_handling(file_list) is False
+
 
 class TestIntegrationScenarios:
     """Test real-world integration scenarios."""
