@@ -95,17 +95,22 @@ class SevenZipSettings(BaseModel):
 
     level: int = Field(default=5, ge=0, le=9, description="Compression level (0-9)")
     dictionary_size: str = Field(
-        default="16m", description="Dictionary size (1m, 4m, 8m, 16m, 32m, 64m)"
+        default="16m",
+        description="Dictionary size (128k, 1m, 4m, 16m, 64m, 256m, 512m)",
     )
     threads: int = Field(default=0, ge=0, description="Number of threads (0=auto)")
     solid: bool = Field(default=True, description="Enable solid compression")
     method: str = Field(default="LZMA2", description="Compression method")
+    manual_settings: bool = Field(
+        default=False,
+        description="Whether settings are manually specified (disables dynamic optimization)",
+    )
 
     @field_validator("dictionary_size")
     @classmethod
     def validate_dictionary_size(cls, v: str) -> str:
         """Validate dictionary size format."""
-        valid_sizes = {"1m", "4m", "8m", "16m", "32m", "64m"}
+        valid_sizes = {"128k", "1m", "4m", "16m", "64m", "256m", "512m"}
         if v.lower() not in valid_sizes:
             raise ValueError(f"Dictionary size must be one of: {valid_sizes}")
         return v.lower()

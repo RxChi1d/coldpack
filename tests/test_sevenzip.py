@@ -29,10 +29,10 @@ class TestSevenZipSettings:
     def test_custom_settings(self):
         """Test custom 7z settings."""
         settings = SevenZipSettings(
-            level=7, dictionary_size="32m", threads=4, solid=False, method="LZMA"
+            level=7, dictionary_size="64m", threads=4, solid=False, method="LZMA"
         )
         assert settings.level == 7
-        assert settings.dictionary_size == "32m"
+        assert settings.dictionary_size == "64m"
         assert settings.threads == 4
         assert settings.solid is False
         assert settings.method == "LZMA"
@@ -52,8 +52,8 @@ class TestSevenZipSettings:
 
     def test_dictionary_size_validation(self):
         """Test dictionary size validation."""
-        # Valid sizes
-        for size in ["1m", "4m", "8m", "16m", "32m", "64m"]:
+        # Valid sizes based on the updated parameter table
+        for size in ["128k", "1m", "4m", "16m", "64m", "256m", "512m"]:
             settings = SevenZipSettings(dictionary_size=size)
             assert settings.dictionary_size == size
 
@@ -78,14 +78,14 @@ class TestSevenZipSettings:
     def test_to_py7zz_config(self):
         """Test conversion to py7zz config dictionary."""
         settings = SevenZipSettings(
-            level=7, dictionary_size="32m", threads=4, solid=False, method="LZMA"
+            level=7, dictionary_size="64m", threads=4, solid=False, method="LZMA"
         )
         config = settings.to_py7zz_config()
 
         expected = {
             "level": 7,
             "compression": "lzma",  # Changed from "method" to "compression" and lowercase
-            "dictionary_size": "32m",
+            "dictionary_size": "64m",
             "solid": False,
             "threads": 4,
         }
@@ -104,10 +104,10 @@ class TestSevenZipCompressor:
 
     def test_initialization_custom_settings(self):
         """Test SevenZipCompressor initialization with custom settings."""
-        settings = SevenZipSettings(level=7, dictionary_size="32m")
+        settings = SevenZipSettings(level=7, dictionary_size="64m")
         compressor = SevenZipCompressor(settings)
         assert compressor.settings.level == 7
-        assert compressor.settings.dictionary_size == "32m"
+        assert compressor.settings.dictionary_size == "64m"
         assert compressor._config_dict["level"] == 7
 
     @patch("coldpack.utils.sevenzip.py7zz")
@@ -290,55 +290,106 @@ class TestSevenZipCompressor:
 class TestOptimization:
     """Test 7z compression optimization functions."""
 
+    def test_optimize_tiny_size(self):
+        """Test optimization for tiny files (< 256 KiB)."""
+        # 100 KiB
+        settings = optimize_7z_compression_settings(100 * 1024)
+        assert settings.level == 1
+        assert settings.dictionary_size == "128k"
+        assert settings.solid is True
+        assert settings.method == "LZMA2"
+
     def test_optimize_small_size(self):
-        """Test optimization for small files."""
-        # 50MB
-        settings = optimize_7z_compression_settings(50 * 1024 * 1024)
+        """Test optimization for small files (256 KiB – 1 MiB)."""
+        # 500 KiB
+        settings = optimize_7z_compression_settings(500 * 1024)
         assert settings.level == 3
+        assert settings.dictionary_size == "1m"
+        assert settings.solid is True
+        assert settings.method == "LZMA2"
+
+    def test_optimize_small_medium_size(self):
+        """Test optimization for small-medium files (1 – 8 MiB)."""
+        # 4 MiB
+        settings = optimize_7z_compression_settings(4 * 1024 * 1024)
+        assert settings.level == 5
         assert settings.dictionary_size == "4m"
         assert settings.solid is True
         assert settings.method == "LZMA2"
 
     def test_optimize_medium_size(self):
-        """Test optimization for medium files."""
-        # 500MB
-        settings = optimize_7z_compression_settings(500 * 1024 * 1024)
-        assert settings.level == 5
+        """Test optimization for medium files (8 – 64 MiB)."""
+        # 32 MiB
+        settings = optimize_7z_compression_settings(32 * 1024 * 1024)
+        assert settings.level == 6
         assert settings.dictionary_size == "16m"
         assert settings.solid is True
         assert settings.method == "LZMA2"
 
     def test_optimize_large_size(self):
-        """Test optimization for large files."""
-        # 2GB
-        settings = optimize_7z_compression_settings(2 * 1024 * 1024 * 1024)
+        """Test optimization for large files (64 – 512 MiB)."""
+        # 256 MiB
+        settings = optimize_7z_compression_settings(256 * 1024 * 1024)
         assert settings.level == 7
-        assert settings.dictionary_size == "32m"
-        assert settings.solid is True
-        assert settings.method == "LZMA2"
-
-    def test_optimize_very_large_size(self):
-        """Test optimization for very large files."""
-        # 10GB
-        settings = optimize_7z_compression_settings(10 * 1024 * 1024 * 1024)
-        assert settings.level == 9
         assert settings.dictionary_size == "64m"
         assert settings.solid is True
         assert settings.method == "LZMA2"
 
-    def test_optimize_boundary_conditions(self):
-        """Test optimization at boundary conditions."""
-        # Exactly 100MB - should be small
-        settings = optimize_7z_compression_settings(100 * 1024 * 1024)
-        assert settings.level == 5  # Medium
-
-        # Exactly 1GB - should be medium
+    def test_optimize_very_large_size(self):
+        """Test optimization for very large files (512 MiB – 2 GiB)."""
+        # 1 GiB
         settings = optimize_7z_compression_settings(1024 * 1024 * 1024)
-        assert settings.level == 7  # Large
+        assert settings.level == 9
+        assert settings.dictionary_size == "256m"
+        assert settings.solid is True
+        assert settings.method == "LZMA2"
 
-        # Exactly 5GB - should be large
-        settings = optimize_7z_compression_settings(5 * 1024 * 1024 * 1024)
-        assert settings.level == 9  # Very large
+    def test_optimize_huge_size(self):
+        """Test optimization for huge files (> 2 GiB)."""
+        # 4 GiB
+        settings = optimize_7z_compression_settings(4 * 1024 * 1024 * 1024)
+        assert settings.level == 9
+        assert settings.dictionary_size == "512m"
+        assert settings.solid is True
+        assert settings.method == "LZMA2"
+
+    def test_optimize_boundary_conditions(self):
+        """Test optimization at precise boundary conditions."""
+        # Exactly 256 KiB - should be tiny
+        settings = optimize_7z_compression_settings(256 * 1024)
+        assert settings.level == 3  # Small file range
+
+        # Exactly 1 MiB - should be small
+        settings = optimize_7z_compression_settings(1024 * 1024)
+        assert settings.level == 5  # Small-medium range
+
+        # Exactly 8 MiB - should be small-medium
+        settings = optimize_7z_compression_settings(8 * 1024 * 1024)
+        assert settings.level == 6  # Medium range
+
+        # Exactly 64 MiB - should be medium
+        settings = optimize_7z_compression_settings(64 * 1024 * 1024)
+        assert settings.level == 7  # Large range
+
+        # Exactly 512 MiB - should be large
+        settings = optimize_7z_compression_settings(512 * 1024 * 1024)
+        assert settings.level == 9  # Very large range
+
+        # Exactly 2 GiB - should be very large
+        settings = optimize_7z_compression_settings(2 * 1024 * 1024 * 1024)
+        assert settings.level == 9  # Huge range
+
+    def test_optimize_with_threads(self):
+        """Test optimization with custom thread count."""
+        # Test with specific thread count
+        settings = optimize_7z_compression_settings(1024 * 1024, threads=4)
+        assert settings.level == 5  # Small-medium range
+        assert settings.dictionary_size == "4m"
+        assert settings.threads == 4
+
+        # Test with auto-detect threads (default)
+        settings = optimize_7z_compression_settings(1024 * 1024)
+        assert settings.threads == 0  # Auto-detect
 
 
 class TestUtilityFunctions:

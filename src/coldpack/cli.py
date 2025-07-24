@@ -11,12 +11,10 @@ from rich.table import Table
 
 from . import __version__
 from .config.constants import (
-    DEFAULT_OUTPUT_FORMAT,
     SUPPORTED_INPUT_FORMATS,
-    SUPPORTED_OUTPUT_FORMATS,
     ExitCodes,
 )
-from .config.settings import CompressionSettings, ProcessingOptions
+from .config.settings import ProcessingOptions
 from .core.archiver import ColdStorageArchiver
 from .core.extractor import MultiFormatExtractor
 from .core.repairer import ArchiveRepairer
@@ -28,7 +26,7 @@ from .utils.progress import ProgressTracker
 # Initialize Typer app
 app = typer.Typer(
     name="cpack",
-    help="coldpack - Cross-platform cold storage CLI package for standardized 7z archives (with tar.zst legacy support)",
+    help="coldpack - Cross-platform cold storage CLI package for standardized 7z archives with PAR2 recovery",
     add_completion=False,
     rich_markup_mode="rich",
     context_settings={"help_option_names": ["-h", "--help"]},
@@ -135,7 +133,7 @@ def main(
         help="Quiet output (decrease log level)",
     ),
 ) -> None:
-    """coldpack - Cross-platform cold storage CLI package."""
+    """coldpack - Cross-platform cold storage CLI package for 7z archives."""
     # Validate that verbose and quiet are not used together
     if verbose and quiet:
         console.print("[red]Error: --verbose and --quiet cannot be used together[/red]")
@@ -175,14 +173,6 @@ def archive(
         help="Force overwrite existing files",
         rich_help_panel="Output Options",
     ),
-    level: int = typer.Option(
-        19,
-        "--level",
-        "-l",
-        help="Compression level (1-22)",
-        show_default=True,
-        rich_help_panel="Compression Options",
-    ),
     threads: int = typer.Option(
         0,
         "--threads",
@@ -191,16 +181,21 @@ def archive(
         show_default="auto-detect",
         rich_help_panel="Compression Options",
     ),
-    no_long: bool = typer.Option(
-        False,
-        "--no-long",
-        help="Disable automatic long-distance matching",
+    # 7Z compression options
+    level: Optional[int] = typer.Option(
+        None,
+        "--level",
+        "-l",
+        help="Compression level (0-9)",
+        show_default="dynamic",
         rich_help_panel="Compression Options",
     ),
-    long_distance: Optional[int] = typer.Option(
+    dict_size: Optional[str] = typer.Option(
         None,
-        "--long-distance",
-        help="Set long-distance matching value (disables auto-adjustment)",
+        "--dict",
+        "-d",
+        help="Dictionary size (128k, 1m, 4m, 16m, 64m, 256m, 512m)",
+        show_default="dynamic",
         rich_help_panel="Compression Options",
     ),
     no_par2: bool = typer.Option(
@@ -216,16 +211,10 @@ def archive(
         rich_help_panel="Verification Options",
     ),
     # Individual verification layer controls for archive creation
-    no_verify_tar: bool = typer.Option(
+    no_verify_7z: bool = typer.Option(
         False,
-        "--no-verify-tar",
-        help="Skip TAR header verification during archive creation",
-        rich_help_panel="Verification Options",
-    ),
-    no_verify_zstd: bool = typer.Option(
-        False,
-        "--no-verify-zstd",
-        help="Skip Zstd integrity verification during archive creation",
+        "--no-verify-7z",
+        help="Skip 7z integrity verification during archive creation",
         rich_help_panel="Verification Options",
     ),
     no_verify_sha256: bool = typer.Option(
@@ -254,21 +243,13 @@ def archive(
         show_default=True,
         rich_help_panel="PAR2 Options",
     ),
-    # Format Options
-    format: str = typer.Option(
-        DEFAULT_OUTPUT_FORMAT,
-        "--format",
-        help="Archive format (7z or tar.zst)",
-        show_default=True,
-        rich_help_panel="Format Options",
-    ),
     # Global Options
     verbose: Optional[bool] = typer.Option(
         None, "--verbose", "-v", help="Verbose output"
     ),
     quiet: Optional[bool] = typer.Option(None, "--quiet", "-q", help="Quiet output"),
 ) -> None:
-    """Create a cold storage archive with comprehensive verification.
+    """Create a cold storage 7z archive with comprehensive verification.
 
     Args:
         ctx: Typer context
@@ -276,19 +257,16 @@ def archive(
         output_dir: Output directory (default: current directory)
         name: Archive name (default: source name)
         force: Force overwrite existing files
-        level: Compression level (1-22)
         threads: Number of threads (0=auto)
-        no_long: Disable automatic long-distance matching
-        long_distance: Set long-distance matching value (disables auto-adjustment)
+        level: 7z compression level (0-9, dynamic optimization if not specified)
+        dict_size: 7z dictionary size (128k-512m, dynamic optimization if not specified)
         no_par2: Skip PAR2 recovery file generation
         no_verify: Skip all integrity verification (overrides individual controls)
-        no_verify_tar: Skip TAR header verification during archive creation
-        no_verify_zstd: Skip Zstd integrity verification during archive creation
+        no_verify_7z: Skip 7z integrity verification during archive creation
         no_verify_sha256: Skip SHA-256 hash verification during archive creation
         no_verify_blake3: Skip BLAKE3 hash verification during archive creation
         no_verify_par2: Skip PAR2 recovery verification during archive creation
         par2_redundancy: PAR2 redundancy percentage
-        format: Archive format (7z or tar.zst)
         verbose: Local verbose override
         quiet: Local quiet override
     """
@@ -305,25 +283,23 @@ def archive(
 
     setup_logging(final_verbose, final_quiet)
 
-    # Validate format parameter
-    if format not in SUPPORTED_OUTPUT_FORMATS:
-        console.print(
-            f"[red]Error: Unsupported format '{format}'. Supported formats: {', '.join(SUPPORTED_OUTPUT_FORMATS)}[/red]"
-        )
+    # Validate 7z compression parameters
+    if level is not None and (level < 0 or level > 9):
+        console.print("[red]Error: --level must be between 0 and 9[/red]")
         raise typer.Exit(ExitCodes.INVALID_FORMAT)
 
-    # Validate long-distance matching parameters
-    if no_long and long_distance is not None:
-        console.print(
-            "[red]Error: --no-long and --long-distance cannot be used together[/red]"
-        )
-        raise typer.Exit(1)
+    if dict_size is not None:
+        valid_dict_sizes = {"128k", "1m", "4m", "16m", "64m", "256m", "512m"}
+        if dict_size.lower() not in valid_dict_sizes:
+            console.print(
+                f"[red]Error: --dict must be one of: {', '.join(sorted(valid_dict_sizes))}[/red]"
+            )
+            raise typer.Exit(ExitCodes.INVALID_FORMAT)
 
     # Validate verification parameters
     if no_verify and any(
         [
-            no_verify_tar,
-            no_verify_zstd,
+            no_verify_7z,
             no_verify_sha256,
             no_verify_blake3,
             no_verify_par2,
@@ -355,46 +331,25 @@ def archive(
             console.print(install_par2_instructions())
             no_par2 = True
 
-        # Configure compression settings
-        # If long_distance is specified, it overrides long_mode
-        if long_distance is not None:
-            final_long_mode = True  # Enable for manual setting
-            final_long_distance = long_distance
-        else:
-            final_long_mode = not no_long
-            final_long_distance = None
-
-        compression_settings = CompressionSettings(
-            level=level,
-            threads=threads,
-            long_mode=final_long_mode,
-            long_distance=final_long_distance,
-            ultra_mode=(level >= 20),
-        )
-
-        # Configure processing options
+        # Configure processing options for 7z format
         # Handle verification settings: no_verify overrides individual controls
         if no_verify:
             # Skip all verification
             final_verify_integrity = False
-            final_verify_tar = False
-            final_verify_zstd = False
             final_verify_sha256 = False
             final_verify_blake3 = False
             final_verify_par2 = False
         else:
             # Use individual controls
             final_verify_integrity = True
-            final_verify_tar = not no_verify_tar
-            final_verify_zstd = not no_verify_zstd
             final_verify_sha256 = not no_verify_sha256
             final_verify_blake3 = not no_verify_blake3
             final_verify_par2 = not no_verify_par2
 
         processing_options = ProcessingOptions(
             verify_integrity=final_verify_integrity,
-            verify_tar=final_verify_tar,
-            verify_zstd=final_verify_zstd,
+            verify_tar=False,  # Not used for 7z format
+            verify_zstd=False,  # Not used for 7z format
             verify_sha256=final_verify_sha256,
             verify_blake3=final_verify_blake3,
             verify_par2=final_verify_par2,
@@ -409,21 +364,43 @@ def archive(
 
         par2_settings = PAR2Settings(redundancy_percent=par2_redundancy)
 
-        # Create archiver with format-specific settings
+        # Configure 7z settings
         from .config.settings import SevenZipSettings
 
-        sevenzip_settings = None
-        if format == "7z":
-            # Configure 7z settings based on compression level
-            # Map zstd level (1-22) to 7z level (0-9)
-            sevenz_level = min(9, max(0, int(level * 9 / 22)))
+        # Check if manual 7z parameters are provided
+        if level is not None or dict_size is not None:
+            # Manual configuration - disable dynamic optimization
+            manual_level = level if level is not None else 5  # 7z default
+            manual_dict = (
+                dict_size.lower() if dict_size is not None else "16m"
+            )  # 7z default
+
             sevenzip_settings = SevenZipSettings(
-                level=sevenz_level,
+                level=manual_level,
+                dictionary_size=manual_dict,
                 threads=threads,
+                manual_settings=True,  # Mark as manual to disable dynamic optimization
+            )
+            console.print(
+                f"[cyan]Using manual 7z settings: level={manual_level}, dict={manual_dict}[/cyan]"
+            )
+            console.print(
+                "[cyan]Dynamic optimization disabled due to manual parameters[/cyan]"
+            )
+        else:
+            # Automatic configuration - will use dynamic optimization
+            # Create default settings that will be overridden by dynamic optimization
+            sevenzip_settings = SevenZipSettings(
+                level=5,  # Will be overridden
+                dictionary_size="16m",  # Will be overridden
+                threads=threads,
+            )
+            console.print(
+                "[cyan]Using dynamic 7z optimization based on source size[/cyan]"
             )
 
         archiver = ColdStorageArchiver(
-            compression_settings,
+            None,  # No compression_settings for 7z format
             processing_options,
             par2_settings,
             sevenzip_settings=sevenzip_settings,
@@ -431,12 +408,13 @@ def archive(
 
         # Create progress tracker
         with ProgressTracker(console):
-            console.print(f"[cyan]Creating cold storage archive from: {source}[/cyan]")
-            console.print(f"[cyan]Format: {format}[/cyan]")
+            console.print(
+                f"[cyan]Creating cold storage 7z archive from: {source}[/cyan]"
+            )
             console.print(f"[cyan]Output directory: {output_dir}[/cyan]")
 
-            # Create archive with format selection
-            result = archiver.create_archive(source, output_dir, name, format)
+            # Create 7z archive (default and only format)
+            result = archiver.create_archive(source, output_dir, name, "7z")
 
             if result.success:
                 console.print("[green]✓ Archive created successfully![/green]")

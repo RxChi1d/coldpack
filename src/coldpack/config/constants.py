@@ -29,15 +29,14 @@ SUPPORTED_ARCHIVE_FORMATS = SUPPORTED_INPUT_FORMATS.union(
     {".gz", ".bz2", ".xz", ".zst", ".lz4", ".lzma"}
 )
 
-# Output format
+# Output format - 7z only
 DEFAULT_OUTPUT_FORMAT = "7z"
-SUPPORTED_OUTPUT_FORMATS = {"7z", "tar.zst"}
+SUPPORTED_OUTPUT_FORMATS = {"7z"}
 
-# Legacy format (for backward compatibility)
-OUTPUT_FORMAT = ".tar.zst"
+# Output extensions
+OUTPUT_FORMAT = ".7z"
 OUTPUT_EXTENSIONS = {
-    "archive_7z": ".7z",
-    "archive_tar_zst": ".tar.zst",
+    "archive": ".7z",
     "sha256": ".sha256",
     "blake3": ".blake3",
     "par2": ".par2",
@@ -57,8 +56,6 @@ HASH_CHUNK_SIZE = 65536  # 64KB chunks for hashing
 
 # External tool requirements
 REQUIRED_TOOLS = {
-    "tar": "tar --help",
-    "zstd": "zstd --help",
     "par2": "par2 --help",
     "sha256sum": "sha256sum --help",
     "b3sum": "b3sum --help",
@@ -70,8 +67,6 @@ TAR_FORMATS = ["posix", "gnu", "ustar"]
 # Verification layer names
 VERIFICATION_LAYERS = [
     "7z_integrity",
-    "tar_header",
-    "zstd_integrity",
     "sha256_hash",
     "blake3_hash",
     "par2_recovery",

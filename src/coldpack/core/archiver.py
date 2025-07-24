@@ -782,16 +782,27 @@ class ColdStorageArchiver:
         )
         logger.debug(f"Source directory size: {format_file_size(source_size)}")
 
-        # Optimize 7z compression settings based on source size
-        optimized_settings = optimize_7z_compression_settings(source_size)
-        logger.info(
-            f"Optimized 7z settings: level={optimized_settings.level}, "
-            f"dict={optimized_settings.dictionary_size}"
-        )
+        # Check if settings are manually configured
+        if self.sevenzip_settings.manual_settings:
+            # Use manual settings without optimization
+            logger.info(
+                f"Using manual 7z settings: level={self.sevenzip_settings.level}, "
+                f"dict={self.sevenzip_settings.dictionary_size}, threads={self.sevenzip_settings.threads}"
+            )
+            # Keep existing settings and compressor
+        else:
+            # Optimize 7z compression settings based on source size
+            optimized_settings = optimize_7z_compression_settings(
+                source_size, self.sevenzip_settings.threads
+            )
+            logger.info(
+                f"Optimized 7z settings: level={optimized_settings.level}, "
+                f"dict={optimized_settings.dictionary_size}, threads={optimized_settings.threads}"
+            )
 
-        # Update sevenzip_compressor with optimized settings
-        self.sevenzip_compressor = SevenZipCompressor(optimized_settings)
-        self.sevenzip_settings = optimized_settings
+            # Update sevenzip_compressor with optimized settings
+            self.sevenzip_compressor = SevenZipCompressor(optimized_settings)
+            self.sevenzip_settings = optimized_settings
 
         # Create 7z archive path
         archive_path = output_dir / f"{archive_name}.7z"

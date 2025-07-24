@@ -226,68 +226,116 @@ class SevenZipCompressor:
         return py7zz_progress_adapter
 
 
-def optimize_7z_compression_settings(source_size: int) -> SevenZipSettings:
-    """Optimize 7z compression settings based on source directory size.
+def optimize_7z_compression_settings(
+    source_size: int, threads: int = 0
+) -> SevenZipSettings:
+    """Optimize 7z compression settings based on precise source directory size.
+
+    Uses the precise dynamic parameter table for optimal 7z compression:
+    - < 256 KiB: level=1, dict=128k
+    - 256 KiB – 1 MiB: level=3, dict=1m
+    - 1 – 8 MiB: level=5, dict=4m
+    - 8 – 64 MiB: level=6, dict=16m
+    - 64 – 512 MiB: level=7, dict=64m
+    - 512 MiB – 2 GiB: level=9, dict=256m
+    - > 2 GiB: level=9, dict=512m
 
     Args:
         source_size: Size of source directory in bytes
+        threads: Number of threads to use (0=auto-detect)
 
     Returns:
-        Optimized SevenZipSettings
+        Optimized SevenZipSettings based on precise size thresholds
     """
-    # Size thresholds (in bytes)
-    SMALL_SIZE = 100 * 1024 * 1024  # 100MB
-    MEDIUM_SIZE = 1024 * 1024 * 1024  # 1GB
-    LARGE_SIZE = 5 * 1024 * 1024 * 1024  # 5GB
+    # Precise size thresholds (in bytes) based on the provided table
+    SIZE_256K = 256 * 1024
+    SIZE_1M = 1024 * 1024
+    SIZE_8M = 8 * 1024 * 1024
+    SIZE_64M = 64 * 1024 * 1024
+    SIZE_512M = 512 * 1024 * 1024
+    SIZE_2G = 2 * 1024 * 1024 * 1024
 
     logger.debug(f"Optimizing 7z settings for source size: {source_size:,} bytes")
 
-    if source_size < SMALL_SIZE:
-        # Small files: Fast compression, small dictionary
+    if source_size < SIZE_256K:
+        # < 256 KiB: Minimal compression, tiny dictionary
+        settings = SevenZipSettings(
+            level=1,
+            dictionary_size="128k",
+            threads=threads,
+            solid=True,
+            method="LZMA2",
+        )
+        logger.debug("Using tiny file optimization (< 256 KiB)")
+
+    elif source_size < SIZE_1M:
+        # 256 KiB – 1 MiB: Light compression, small dictionary
         settings = SevenZipSettings(
             level=3,
-            dictionary_size="4m",
-            threads=0,  # Auto-detect
+            dictionary_size="1m",
+            threads=threads,
             solid=True,
             method="LZMA2",
         )
-        logger.debug("Using small file optimization")
+        logger.debug("Using small file optimization (256 KiB – 1 MiB)")
 
-    elif source_size < MEDIUM_SIZE:
-        # Medium files: Balanced compression
+    elif source_size < SIZE_8M:
+        # 1 – 8 MiB: Balanced compression
         settings = SevenZipSettings(
             level=5,
-            dictionary_size="16m",
-            threads=0,  # Auto-detect
+            dictionary_size="4m",
+            threads=threads,
             solid=True,
             method="LZMA2",
         )
-        logger.debug("Using medium file optimization")
+        logger.debug("Using small-medium file optimization (1 – 8 MiB)")
 
-    elif source_size < LARGE_SIZE:
-        # Large files: Higher compression, larger dictionary
+    elif source_size < SIZE_64M:
+        # 8 – 64 MiB: Good compression, medium dictionary
+        settings = SevenZipSettings(
+            level=6,
+            dictionary_size="16m",
+            threads=threads,
+            solid=True,
+            method="LZMA2",
+        )
+        logger.debug("Using medium file optimization (8 – 64 MiB)")
+
+    elif source_size < SIZE_512M:
+        # 64 – 512 MiB: Higher compression, large dictionary
         settings = SevenZipSettings(
             level=7,
-            dictionary_size="32m",
-            threads=0,  # Auto-detect
+            dictionary_size="64m",
+            threads=threads,
             solid=True,
             method="LZMA2",
         )
-        logger.debug("Using large file optimization")
+        logger.debug("Using large file optimization (64 – 512 MiB)")
 
-    else:
-        # Very large files: Maximum compression with largest dictionary
+    elif source_size < SIZE_2G:
+        # 512 MiB – 2 GiB: Maximum compression, very large dictionary
         settings = SevenZipSettings(
             level=9,
-            dictionary_size="64m",
-            threads=0,  # Auto-detect
+            dictionary_size="256m",
+            threads=threads,
             solid=True,
             method="LZMA2",
         )
-        logger.debug("Using very large file optimization")
+        logger.debug("Using very large file optimization (512 MiB – 2 GiB)")
+
+    else:
+        # > 2 GiB: Maximum compression, maximum dictionary
+        settings = SevenZipSettings(
+            level=9,
+            dictionary_size="512m",
+            threads=threads,
+            solid=True,
+            method="LZMA2",
+        )
+        logger.debug("Using huge file optimization (> 2 GiB)")
 
     logger.info(
-        f"Optimized 7z settings: level={settings.level}, dict={settings.dictionary_size}"
+        f"Optimized 7z settings: level={settings.level}, dict={settings.dictionary_size}, threads={threads}"
     )
     return settings
 
