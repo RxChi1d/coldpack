@@ -325,6 +325,9 @@ class ColdStorageArchiver:
                     created_files=created_files,
                 )
 
+            except ArchivingError:
+                # Re-raise ArchivingError for proper error handling
+                raise
             except Exception as e:
                 logger.error(f"Archive creation failed: {e}")
                 return ArchiveResult(
@@ -806,6 +809,13 @@ class ColdStorageArchiver:
 
         # Create 7z archive path
         archive_path = output_dir / f"{archive_name}.7z"
+
+        # Check if archive file already exists
+        if archive_path.exists() and not self.processing_options.force_overwrite:
+            raise ArchivingError(
+                f"Archive already exists: {archive_path}. Use --force to overwrite."
+            )
+
         safe_ops.track_file(archive_path)
 
         try:
