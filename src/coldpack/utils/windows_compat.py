@@ -53,23 +53,31 @@ def check_windows_par2_unicode_compatibility(
         # Path contains non-ASCII characters
         pass
 
-    # Display detailed error message  
+    # Display detailed error message
     console.print("[red]ERROR: Windows PAR2 Unicode Path Compatibility[/red]")
     console.print()
-    
+
     # Try to display path safely, encoding issues with Chinese characters
     try:
         console.print(f"[yellow]Path:[/yellow] {abs_path_str}")
     except UnicodeEncodeError:
         # If path display fails, show a safe version
-        safe_path = abs_path_str.encode('ascii', errors='replace').decode('ascii')
-        console.print(f"[yellow]Path:[/yellow] {safe_path} [dim](contains Unicode chars)[/dim]")
-    
+        safe_path = abs_path_str.encode("ascii", errors="replace").decode("ascii")
+        console.print(
+            f"[yellow]Path:[/yellow] {safe_path} [dim](contains Unicode chars)[/dim]"
+        )
+
     console.print()
-    console.print("[red]The specified path contains non-ASCII characters, but the[/red]")
-    console.print("[red]Windows version of par2cmdline-turbo does not support Unicode paths.[/red]")
+    console.print(
+        "[red]The specified path contains non-ASCII characters, but the[/red]"
+    )
+    console.print(
+        "[red]Windows version of par2cmdline-turbo does not support Unicode paths.[/red]"
+    )
     console.print()
-    console.print("[yellow]This is a known limitation of the Windows par2cmdline-turbo package.[/yellow]")
+    console.print(
+        "[yellow]This is a known limitation of the Windows par2cmdline-turbo package.[/yellow]"
+    )
     console.print()
     console.print("[cyan]Recommended solutions:[/cyan]")
     console.print("  1. Move your files to a path with only ASCII characters")
@@ -77,8 +85,10 @@ def check_windows_par2_unicode_compatibility(
     console.print("  2. Use coldpack on Linux or macOS instead")
     console.print("  3. Use Windows Subsystem for Linux (WSL)")
     console.print()
-    console.print("[dim]Example ASCII-safe path: C:\\Users\\Username\\Documents\\archive\\[/dim]")
-    
+    console.print(
+        "[dim]Example ASCII-safe path: C:\\Users\\Username\\Documents\\archive\\[/dim]"
+    )
+
     # Show non-ASCII characters found, safely
     try:
         non_ascii_info = _get_non_ascii_chars(abs_path_str)
@@ -116,9 +126,9 @@ def _get_non_ascii_chars(text: str) -> str:
 
 
 def check_par2_related_paths_compatibility(
-    source_path: Union[str, Path], 
-    output_dir: Union[str, Path], 
-    console: Optional[Console] = None
+    source_path: Union[str, Path],
+    output_dir: Union[str, Path],
+    console: Optional[Console] = None,
 ) -> None:
     """Check PAR2 compatibility for both source and output paths.
 
