@@ -9,12 +9,17 @@ from typing import Any, Optional, Union
 
 from loguru import logger
 
-from ..config.constants import OUTPUT_FORMAT
+from ..config.constants import (
+    DEFAULT_OUTPUT_FORMAT,
+    OUTPUT_FORMAT,
+    SUPPORTED_OUTPUT_FORMATS,
+)
 from ..config.settings import (
     ArchiveMetadata,
     CompressionSettings,
     PAR2Settings,
     ProcessingOptions,
+    SevenZipSettings,
     TarSettings,
 )
 from ..utils.compression import ZstdCompressor, optimize_compression_settings
@@ -29,6 +34,7 @@ from ..utils.filesystem import (
 from ..utils.hashing import compute_file_hashes, generate_hash_files
 from ..utils.par2 import PAR2Manager
 from ..utils.progress import ProgressTracker
+from ..utils.sevenzip import SevenZipCompressor, optimize_7z_compression_settings
 from .extractor import MultiFormatExtractor
 from .repairer import ArchiveRepairer
 from .verifier import ArchiveVerifier
@@ -81,16 +87,19 @@ class ColdStorageArchiver:
         processing_options: Optional[ProcessingOptions] = None,
         par2_settings: Optional[PAR2Settings] = None,
         tar_settings: Optional[TarSettings] = None,
+        sevenzip_settings: Optional[SevenZipSettings] = None,
     ):
         """Initialize the cold storage archiver.
 
         Args:
-            compression_settings: Compression configuration
+            compression_settings: Zstd compression configuration (for tar.zst format)
             processing_options: Processing options
             par2_settings: PAR2 configuration
             tar_settings: TAR configuration
+            sevenzip_settings: 7z compression configuration (for 7z format)
         """
         self.compression_settings = compression_settings or CompressionSettings()
+        self.sevenzip_settings = sevenzip_settings or SevenZipSettings()
         self.processing_options = processing_options or ProcessingOptions()
         self.par2_settings = par2_settings or PAR2Settings()
         self.tar_settings = tar_settings or TarSettings()
@@ -100,14 +109,25 @@ class ColdStorageArchiver:
         self.verifier = ArchiveVerifier()
         self.repairer = ArchiveRepairer()
 
-        # Initialize compressor with settings
-        self.compressor = ZstdCompressor(self.compression_settings)
+        # Initialize compressors
+        self.zstd_compressor = ZstdCompressor(self.compression_settings)
+        self.sevenzip_compressor = SevenZipCompressor(self.sevenzip_settings)
+
+        # Legacy compatibility
+        self.compressor = self.zstd_compressor
 
         # Progress tracking
         self.progress_tracker: Optional[ProgressTracker] = None
 
+        # Log initialization with safe access to settings
+        zstd_level = (
+            self.compression_settings.level if self.compression_settings else "N/A"
+        )
+        sevenzip_level = (
+            self.sevenzip_settings.level if self.sevenzip_settings else "N/A"
+        )
         logger.debug(
-            f"ColdStorageArchiver initialized with compression level {self.compression_settings.level}"
+            f"ColdStorageArchiver initialized with zstd level {zstd_level}, 7z level {sevenzip_level}"
         )
 
         # Detect an external tar/bsdtar command that supports deterministic --sort=name
@@ -119,13 +139,15 @@ class ColdStorageArchiver:
         source: Union[str, Path],
         output_dir: Union[str, Path],
         archive_name: Optional[str] = None,
+        format: str = DEFAULT_OUTPUT_FORMAT,
     ) -> ArchiveResult:
-        """Create a complete cold storage archive with 5-layer verification.
+        """Create a complete cold storage archive with format selection and comprehensive verification.
 
         Args:
             source: Path to source file/directory/archive
             output_dir: Directory to create archive in
             archive_name: Custom archive name (defaults to source name)
+            format: Archive format ('7z' or 'tar.zst')
 
         Returns:
             Archive result with metadata and created files
@@ -133,12 +155,19 @@ class ColdStorageArchiver:
         Raises:
             FileNotFoundError: If source doesn't exist
             ArchivingError: If archiving fails
+            ValueError: If format is not supported
         """
         source_path = Path(source)
         output_path = Path(output_dir)
 
         if not source_path.exists():
             raise FileNotFoundError(f"Source not found: {source_path}")
+
+        # Validate format
+        if format not in SUPPORTED_OUTPUT_FORMATS:
+            raise ValueError(
+                f"Unsupported format: {format}. Supported formats: {SUPPORTED_OUTPUT_FORMATS}"
+            )
 
         # Determine archive name
         if archive_name is None:
@@ -147,12 +176,22 @@ class ColdStorageArchiver:
         # Ensure output directory exists
         output_path.mkdir(parents=True, exist_ok=True)
 
-        # Check for existing files if not forcing overwrite
-        archive_path = output_path / f"{archive_name}.tar.zst"
-        if archive_path.exists() and not self.processing_options.force_overwrite:
-            raise ArchivingError(
-                f"Archive already exists: {archive_path}. Use --force to overwrite."
-            )
+        # Check for existing archive directory (not just the archive file)
+        # The complete archive structure is: output_path/archive_name/
+        archive_dir = output_path / archive_name
+
+        if archive_dir.exists():
+            if not self.processing_options.force_overwrite:
+                raise ArchivingError(
+                    f"Archive directory already exists: {archive_dir}. Use --force to overwrite."
+                )
+            else:
+                # Force overwrite: remove existing directory structure
+                logger.info(f"Removing existing archive directory: {archive_dir}")
+                import shutil
+
+                shutil.rmtree(archive_dir)
+                logger.success("Successfully removed existing archive directory")
 
         # Check disk space
         try:
@@ -161,6 +200,7 @@ class ColdStorageArchiver:
             raise ArchivingError(f"Insufficient disk space: {e}") from e
 
         logger.info(f"Creating cold storage archive: {archive_name}")
+        logger.info(f"Format: {format}")
         logger.info(f"Source: {source_path}")
         logger.info(f"Output: {output_path}")
 
@@ -179,29 +219,37 @@ class ColdStorageArchiver:
                 # Step 1: Extract/prepare source content
                 extracted_dir = self._extract_source(source_path, safe_ops)
 
-                # Step 2: Optimize compression settings based on content
-                optimized_settings = self._optimize_settings(extracted_dir)
-                if optimized_settings:
-                    self.compression_settings = optimized_settings
-                    self.compressor = ZstdCompressor(self.compression_settings)
+                # Step 2: Create archive based on format
+                if format == "7z":
+                    archive_path = self._create_7z_archive(
+                        extracted_dir, output_path, archive_name, safe_ops
+                    )
+                else:
+                    # Legacy tar.zst format
+                    # Step 2a: Optimize compression settings based on content
+                    optimized_settings = self._optimize_settings(extracted_dir)
+                    if optimized_settings:
+                        self.compression_settings = optimized_settings
+                        self.zstd_compressor = ZstdCompressor(self.compression_settings)
+                        self.compressor = self.zstd_compressor
 
-                # Step 3: Create deterministic TAR archive
-                tar_path = self._create_tar_archive(
-                    extracted_dir, output_path, archive_name, safe_ops
-                )
+                    # Step 2b: Create deterministic TAR archive
+                    tar_path = self._create_tar_archive(
+                        extracted_dir, output_path, archive_name, safe_ops
+                    )
 
-                # Step 4: Verify TAR integrity
-                if self.processing_options.verify_integrity:
-                    self._verify_tar_integrity(tar_path)
+                    # Step 2c: Verify TAR integrity
+                    if self.processing_options.verify_integrity:
+                        self._verify_tar_integrity(tar_path)
 
-                # Step 5: Compress with Zstd
-                archive_path = self._compress_archive(tar_path, safe_ops)
+                    # Step 2d: Compress with Zstd
+                    archive_path = self._compress_archive(tar_path, safe_ops)
 
-                # Step 6: Verify Zstd integrity
-                if self.processing_options.verify_integrity:
-                    self._verify_zstd_integrity(archive_path)
+                    # Step 2e: Verify Zstd integrity
+                    if self.processing_options.verify_integrity:
+                        self._verify_zstd_integrity(archive_path)
 
-                # Step 7: Create final directory structure early
+                # Step 3: Create final directory structure early
                 archive_dir, metadata_dir = self._create_final_directory_structure(
                     archive_path, archive_name, safe_ops
                 )
@@ -277,6 +325,9 @@ class ColdStorageArchiver:
                     created_files=created_files,
                 )
 
+            except ArchivingError:
+                # Re-raise ArchivingError for proper error handling
+                raise
             except Exception as e:
                 logger.error(f"Archive creation failed: {e}")
                 return ArchiveResult(
@@ -578,7 +629,10 @@ class ColdStorageArchiver:
             # Optimize settings based on size
             optimized = optimize_compression_settings(total_size)
 
-            if optimized.level != self.compression_settings.level:
+            if (
+                self.compression_settings
+                and optimized.level != self.compression_settings.level
+            ):
                 logger.info(
                     f"Optimized compression level: {self.compression_settings.level} → {optimized.level}"
                 )
@@ -709,6 +763,117 @@ class ColdStorageArchiver:
         except Exception as e:
             raise ArchivingError(f"Zstd integrity verification failed: {e}") from e
 
+    def _create_7z_archive(
+        self, source_dir: Path, output_dir: Path, archive_name: str, safe_ops: Any
+    ) -> Path:
+        """Create 7z archive using SevenZipCompressor.
+
+        Args:
+            source_dir: Directory to archive
+            output_dir: Output directory
+            archive_name: Archive name
+            safe_ops: Safe file operations context
+
+        Returns:
+            Path to created 7z archive
+        """
+        logger.info("Step 2: Creating 7z archive with dynamic optimization")
+
+        # Calculate source directory size for optimization
+        source_size = sum(
+            f.stat().st_size for f in source_dir.rglob("*") if f.is_file()
+        )
+        logger.debug(f"Source directory size: {format_file_size(source_size)}")
+
+        # Check if settings are manually configured
+        if self.sevenzip_settings.manual_settings:
+            # Use manual settings without optimization
+            logger.info(
+                f"Using manual 7z settings: level={self.sevenzip_settings.level}, "
+                f"dict={self.sevenzip_settings.dictionary_size}, threads={self.sevenzip_settings.threads}"
+            )
+            # Keep existing settings and compressor
+        else:
+            # Optimize 7z compression settings based on source size
+            optimized_settings = optimize_7z_compression_settings(
+                source_size, self.sevenzip_settings.threads
+            )
+            logger.info(
+                f"Optimized 7z settings: level={optimized_settings.level}, "
+                f"dict={optimized_settings.dictionary_size}, threads={optimized_settings.threads}"
+            )
+
+            # Update sevenzip_compressor with optimized settings
+            self.sevenzip_compressor = SevenZipCompressor(optimized_settings)
+            self.sevenzip_settings = optimized_settings
+
+        # Create 7z archive path
+        archive_path = output_dir / f"{archive_name}.7z"
+
+        # Check if archive file already exists
+        if archive_path.exists() and not self.processing_options.force_overwrite:
+            raise ArchivingError(
+                f"Archive already exists: {archive_path}. Use --force to overwrite."
+            )
+
+        safe_ops.track_file(archive_path)
+
+        try:
+            # Create progress callback if needed
+            progress_callback = None
+            if self.progress_tracker:
+
+                def progress_update(percentage: int, current_file: str) -> None:
+                    if self.progress_tracker is not None:
+                        self.progress_tracker.update_task(
+                            "compression",
+                            completed=percentage,
+                            current_file=current_file,
+                        )
+
+                progress_callback = progress_update
+
+            # Perform 7z compression using py7zz
+            self.sevenzip_compressor.compress_directory(
+                source_dir, archive_path, progress_callback
+            )
+
+            # Verify 7z archive was created
+            if not archive_path.exists():
+                raise ArchivingError("7z archive file was not created")
+
+            archive_size = get_file_size(archive_path)
+            logger.success(
+                f"7z archive created: {archive_path} ({format_file_size(archive_size)})"
+            )
+
+            # Verify 7z integrity
+            if self.processing_options.verify_integrity:
+                self._verify_7z_integrity(archive_path)
+
+            return archive_path
+
+        except Exception as e:
+            raise ArchivingError(f"7z archive creation failed: {e}") from e
+
+    def _verify_7z_integrity(self, archive_path: Path) -> None:
+        """Verify 7z archive integrity.
+
+        Args:
+            archive_path: Path to 7z archive
+        """
+        logger.info("Step 2a: Verifying 7z integrity")
+
+        try:
+            result = self.verifier.verify_7z_integrity(archive_path)
+            if not result.success:
+                raise ArchivingError(f"7z verification failed: {result.message}")
+
+            logger.success("7z integrity verification passed")
+
+        except Exception as e:
+            raise ArchivingError(f"7z integrity verification failed: {e}") from e
+
     def _generate_hash_files(
         self, archive_path: Path, metadata_dir: Path, safe_ops: Any
     ) -> dict[str, Path]:
@@ -755,11 +920,22 @@ class ColdStorageArchiver:
         logger.info("Step 7: Verifying hash files")
 
         try:
-            result = self.verifier.verify_hash_files(archive_path, hash_files)
-            if not result.success:
-                raise ArchivingError(f"Hash verification failed: {result.message}")
+            results = self.verifier.verify_hash_files(archive_path, hash_files)
 
-            logger.success("Hash file verification passed")
+            # Check if all hash verifications passed
+            failed_results = [r for r in results if not r.success]
+            if failed_results:
+                failed_algorithms = [
+                    r.layer.replace("_hash", "").upper() for r in failed_results
+                ]
+                raise ArchivingError(
+                    f"Hash verification failed for: {', '.join(failed_algorithms)}"
+                )
+
+            # Log success for individual algorithms
+            for result in results:
+                algorithm = result.layer.replace("_hash", "").upper()
+                logger.success(f"{algorithm} hash verification passed")
 
         except Exception as e:
             raise ArchivingError(f"Hash verification failed: {e}") from e
@@ -862,8 +1038,7 @@ class ColdStorageArchiver:
         logger.info("Step 9: Performing final 5-layer verification")
 
         try:
-            par2_file = par2_files[0] if par2_files else None
-            results = self.verifier.verify_complete(archive_path, hash_files, par2_file)
+            results = self.verifier.verify_auto(archive_path)
 
             # Check if all layers passed
             failed_layers = [r for r in results if not r.success]
@@ -975,7 +1150,7 @@ class ColdStorageArchiver:
             processing_start_time: Start time for calculating processing duration
 
         Returns:
-            Complete archive metadata object
+            Complete archive metadata object with format-aware settings
         """
         import time
 
@@ -1027,27 +1202,41 @@ class ColdStorageArchiver:
             if processing_start_time:
                 processing_time = time.time() - processing_start_time
 
-            # Get archive name (without .tar.zst extension)
+            # Determine archive format and name
+            archive_format = "7z" if archive_path.suffix.lower() == ".7z" else "tar.zst"
+
+            # Get archive name (without extension)
             archive_name = archive_path.stem
             if archive_name.endswith(".tar"):
                 archive_name = archive_name[:-4]
 
-            # Update TAR settings with detected method
-            tar_method = self._get_tar_method_description().lower()
-            # Map method descriptions to valid enum values
-            method_mapping = {
-                "python tarfile": "python",
-                "gnu tar": "gnu",
-                "bsd tar": "bsd",
-                "external tar": "auto",
-            }
-            valid_method = method_mapping.get(tar_method, "auto")
+            # Set format-specific settings
+            compression_settings = None
+            sevenzip_settings = None
 
-            tar_settings = TarSettings(
-                method=valid_method,
-                sort_files=self.tar_settings.sort_files,
-                preserve_permissions=self.tar_settings.preserve_permissions,
-            )
+            if archive_format == "tar.zst":
+                compression_settings = self.compression_settings
+            else:  # 7z format
+                sevenzip_settings = self.sevenzip_settings
+
+            # Update TAR settings with detected method (only for tar.zst)
+            tar_settings = TarSettings()
+            if archive_format == "tar.zst":
+                tar_method = self._get_tar_method_description().lower()
+                # Map method descriptions to valid enum values
+                method_mapping = {
+                    "python tarfile": "python",
+                    "gnu tar": "gnu",
+                    "bsd tar": "bsd",
+                    "external tar": "auto",
+                }
+                valid_method = method_mapping.get(tar_method, "auto")
+
+                tar_settings = TarSettings(
+                    method=valid_method,
+                    sort_files=self.tar_settings.sort_files,
+                    preserve_permissions=self.tar_settings.preserve_permissions,
+                )
 
             # Create comprehensive metadata
             metadata = ArchiveMetadata(
@@ -1055,10 +1244,13 @@ class ColdStorageArchiver:
                 source_path=source_path,
                 archive_path=archive_path,
                 archive_name=archive_name,
+                # Archive format
+                archive_format=archive_format,
                 # Version and creation (will be auto-populated by model_post_init)
                 coldpack_version="1.0.0-dev",
                 # Processing settings
-                compression_settings=self.compression_settings,
+                compression_settings=compression_settings,
+                sevenzip_settings=sevenzip_settings,
                 par2_settings=self.par2_settings,
                 tar_settings=tar_settings,
                 # Content statistics

@@ -120,18 +120,24 @@ class ArchiveVerifier:
         # Layer 3 & 4: Hash verification (SHA-256 + BLAKE3)
         if hash_files:
             try:
-                result = self.verify_hash_files(archive_obj, hash_files)
-                results.append(result)
+                hash_results = self.verify_hash_files(archive_obj, hash_files)
+                results.extend(hash_results)
             except Exception as e:
                 results.append(
                     VerificationResult(
-                        "dual_hash", False, f"Hash verification error: {e}"
+                        "hash_verification", False, f"Hash verification error: {e}"
                     )
                 )
         else:
-            results.append(
-                VerificationResult("dual_hash", False, "Hash files not provided")
-            )
+            # Add individual failure results for each expected hash type
+            for algorithm in ["sha256", "blake3"]:
+                results.append(
+                    VerificationResult(
+                        f"{algorithm}_hash",
+                        False,
+                        f"{algorithm.upper()} hash file not provided",
+                    )
+                )
 
         # Layer 5: PAR2 recovery verification
         if par2_file:
@@ -283,23 +289,21 @@ class ArchiveVerifier:
 
     def verify_hash_files(
         self, archive_path: Union[str, Path], hash_files: dict[str, Path]
-    ) -> VerificationResult:
-        """Verify hash files against the archive.
+    ) -> list[VerificationResult]:
+        """Verify hash files against the archive with individual results.
 
         Args:
             archive_path: Path to the archive
             hash_files: Dictionary of algorithm names to hash file paths
 
         Returns:
-            Verification result
+            List of verification results, one for each algorithm
         """
         archive_obj = Path(archive_path)
+        results = []
 
         try:
             logger.debug(f"Verifying hash files for: {archive_obj}")
-
-            verified_algorithms = []
-            failed_algorithms = []
 
             for algorithm, hash_file_path in hash_files.items():
                 try:
@@ -308,33 +312,41 @@ class ArchiveVerifier:
                     )
 
                     if success:
-                        verified_algorithms.append(algorithm.upper())
+                        results.append(
+                            VerificationResult(
+                                f"{algorithm}_hash",
+                                True,
+                                f"{algorithm.upper()} hash verification passed",
+                            )
+                        )
                     else:
-                        failed_algorithms.append(algorithm.upper())
+                        results.append(
+                            VerificationResult(
+                                f"{algorithm}_hash",
+                                False,
+                                f"{algorithm.upper()} hash verification failed",
+                            )
+                        )
 
                 except Exception as e:
                     logger.error(f"{algorithm.upper()} verification failed: {e}")
-                    failed_algorithms.append(algorithm.upper())
+                    results.append(
+                        VerificationResult(
+                            f"{algorithm}_hash",
+                            False,
+                            f"{algorithm.upper()} verification error: {e}",
+                        )
+                    )
 
-            if failed_algorithms:
-                return VerificationResult(
-                    "dual_hash",
-                    False,
-                    f"Hash verification failed for: {', '.join(failed_algorithms)}",
-                    {"verified": verified_algorithms, "failed": failed_algorithms},
-                )
-            else:
-                return VerificationResult(
-                    "dual_hash",
-                    True,
-                    f"Hash verification passed for: {', '.join(verified_algorithms)}",
-                    {"verified": verified_algorithms},
-                )
+            return results
 
         except Exception as e:
-            return VerificationResult(
-                "dual_hash", False, f"Hash verification error: {e}"
-            )
+            # Return a single error result if the entire operation fails
+            return [
+                VerificationResult(
+                    "hash_verification", False, f"Hash verification error: {e}"
+                )
+            ]
 
     def verify_par2_recovery(
         self,
@@ -387,6 +399,44 @@ class ArchiveVerifier:
                 "par2_recovery", False, f"PAR2 verification error: {e}"
             )
 
+    def verify_7z_integrity(self, archive_path: Union[str, Path]) -> VerificationResult:
+        """Verify 7z archive integrity using py7zz.
+
+        Args:
+            archive_path: Path to the 7z archive
+
+        Returns:
+            Verification result
+        """
+        archive_obj = Path(archive_path)
+
+        try:
+            logger.debug(f"Verifying 7z integrity: {archive_obj}")
+
+            # Import py7zz for 7z operations
+            import py7zz  # type: ignore
+
+            # Use py7zz test_archive function to verify integrity
+            is_valid = py7zz.test_archive(str(archive_obj))
+
+            if is_valid:
+                return VerificationResult(
+                    "7z_integrity", True, "7z integrity check passed"
+                )
+            else:
+                return VerificationResult(
+                    "7z_integrity", False, "7z integrity check failed"
+                )
+
+        except ImportError:
+            return VerificationResult(
+                "7z_integrity", False, "py7zz library not available for 7z verification"
+            )
+        except Exception as e:
+            return VerificationResult(
+                "7z_integrity", False, f"7z verification error: {e}"
+            )
+
     def get_verification_summary(self, results: list[VerificationResult]) -> dict:
         """Get summary of verification results.
 
@@ -424,13 +474,14 @@ class ArchiveVerifier:
         archive_path: Union[str, Path],
         skip_layers: Optional[set[str]] = None,
     ) -> list[VerificationResult]:
-        """Perform complete verification with automatic file discovery.
+        """Perform complete verification with automatic file discovery and format detection.
 
         This method automatically discovers hash files, PAR2 files, and metadata
-        files associated with the archive, then performs comprehensive verification.
+        files associated with the archive, detects the archive format, and performs
+        appropriate verification layers.
 
         Args:
-            archive_path: Path to the tar.zst archive
+            archive_path: Path to the archive (7z or tar.zst)
             skip_layers: Optional set of layer names to skip
 
         Returns:
@@ -446,6 +497,13 @@ class ArchiveVerifier:
             raise FileNotFoundError(f"Archive not found: {archive_obj}")
 
         skip_layers = skip_layers or set()
+
+        # Detect archive format and adjust skip layers accordingly
+        archive_format = self._detect_archive_format(archive_obj)
+        skip_layers = self._adjust_skip_layers_for_format(archive_format, skip_layers)
+
+        logger.debug(f"Detected archive format: {archive_format}")
+        logger.debug(f"Skip layers for format: {skip_layers}")
 
         # Auto-discover hash files
         hash_files = self._discover_hash_files(archive_obj, skip_layers)
@@ -579,6 +637,50 @@ class ArchiveVerifier:
 
         return None
 
+    def _detect_archive_format(self, archive_obj: Path) -> str:
+        """Detect archive format based on file extension.
+
+        Args:
+            archive_obj: Path to archive file
+
+        Returns:
+            Archive format ('7z' or 'tar.zst')
+        """
+        if archive_obj.suffix.lower() == ".7z":
+            return "7z"
+        elif archive_obj.suffixes and len(archive_obj.suffixes) >= 2:
+            compound_suffix = "".join(archive_obj.suffixes[-2:]).lower()
+            if compound_suffix == ".tar.zst":
+                return "tar.zst"
+
+        # Default fallback - assume tar.zst for compatibility
+        return "tar.zst"
+
+    def _adjust_skip_layers_for_format(
+        self, archive_format: str, skip_layers: set[str]
+    ) -> set[str]:
+        """Adjust skip layers based on archive format.
+
+        Args:
+            archive_format: Detected archive format
+            skip_layers: Original set of layers to skip
+
+        Returns:
+            Adjusted set of layers to skip based on format
+        """
+        adjusted_skip_layers = skip_layers.copy()
+
+        if archive_format == "7z":
+            # For 7z format, skip tar and zstd verification layers
+            adjusted_skip_layers.update({"tar_header", "zstd_integrity"})
+            logger.debug("Skipping tar_header and zstd_integrity layers for 7z format")
+        else:
+            # For tar.zst format, skip 7z verification layer
+            adjusted_skip_layers.add("7z_integrity")
+            logger.debug("Skipping 7z_integrity layer for tar.zst format")
+
+        return adjusted_skip_layers
+
     def _verify_complete_with_skip(
         self,
         archive_path: Union[str, Path],
@@ -611,7 +713,23 @@ class ArchiveVerifier:
 
         results = []
 
-        # Layer 1: Zstd integrity verification
+        # Layer 0: 7z integrity verification (for 7z archives)
+        if "7z_integrity" not in skip_layers:
+            try:
+                result = self.verify_7z_integrity(archive_obj)
+                results.append(result)
+                if not result.success:
+                    logger.error("7z verification failed, skipping remaining layers")
+                    return results
+            except Exception as e:
+                results.append(
+                    VerificationResult(
+                        "7z_integrity", False, f"Verification error: {e}"
+                    )
+                )
+                return results
+
+        # Layer 1: Zstd integrity verification (for tar.zst archives)
         if "zstd_integrity" not in skip_layers:
             try:
                 result = self.verify_zstd_integrity(archive_obj)
@@ -653,12 +771,14 @@ class ArchiveVerifier:
 
             if filtered_hash_files:
                 try:
-                    result = self.verify_hash_files(archive_obj, filtered_hash_files)
-                    results.append(result)
+                    hash_results = self.verify_hash_files(
+                        archive_obj, filtered_hash_files
+                    )
+                    results.extend(hash_results)
                 except Exception as e:
                     results.append(
                         VerificationResult(
-                            "dual_hash", False, f"Hash verification error: {e}"
+                            "hash_verification", False, f"Hash verification error: {e}"
                         )
                     )
 

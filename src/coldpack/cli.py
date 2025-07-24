@@ -10,8 +10,11 @@ from rich.console import Console
 from rich.table import Table
 
 from . import __version__
-from .config.constants import SUPPORTED_INPUT_FORMATS, ExitCodes
-from .config.settings import CompressionSettings, ProcessingOptions
+from .config.constants import (
+    SUPPORTED_INPUT_FORMATS,
+    ExitCodes,
+)
+from .config.settings import ProcessingOptions
 from .core.archiver import ColdStorageArchiver
 from .core.extractor import MultiFormatExtractor
 from .core.repairer import ArchiveRepairer
@@ -23,7 +26,7 @@ from .utils.progress import ProgressTracker
 # Initialize Typer app
 app = typer.Typer(
     name="cpack",
-    help="coldpack - Cross-platform cold storage CLI package for standardized tar.zst archives",
+    help="coldpack - Cross-platform cold storage CLI package for standardized 7z archives with PAR2 recovery",
     add_completion=False,
     rich_markup_mode="rich",
     context_settings={"help_option_names": ["-h", "--help"]},
@@ -130,7 +133,7 @@ def main(
         help="Quiet output (decrease log level)",
     ),
 ) -> None:
-    """coldpack - Cross-platform cold storage CLI package."""
+    """coldpack - Cross-platform cold storage CLI package for 7z archives."""
     # Validate that verbose and quiet are not used together
     if verbose and quiet:
         console.print("[red]Error: --verbose and --quiet cannot be used together[/red]")
@@ -170,14 +173,6 @@ def archive(
         help="Force overwrite existing files",
         rich_help_panel="Output Options",
     ),
-    level: int = typer.Option(
-        19,
-        "--level",
-        "-l",
-        help="Compression level (1-22)",
-        show_default=True,
-        rich_help_panel="Compression Options",
-    ),
     threads: int = typer.Option(
         0,
         "--threads",
@@ -186,16 +181,21 @@ def archive(
         show_default="auto-detect",
         rich_help_panel="Compression Options",
     ),
-    no_long: bool = typer.Option(
-        False,
-        "--no-long",
-        help="Disable automatic long-distance matching",
+    # 7Z compression options
+    level: Optional[int] = typer.Option(
+        None,
+        "--level",
+        "-l",
+        help="Compression level (0-9)",
+        show_default="dynamic",
         rich_help_panel="Compression Options",
     ),
-    long_distance: Optional[int] = typer.Option(
+    dict_size: Optional[str] = typer.Option(
         None,
-        "--long-distance",
-        help="Set long-distance matching value (disables auto-adjustment)",
+        "--dict",
+        "-d",
+        help="Dictionary size (128k, 1m, 4m, 16m, 64m, 256m, 512m)",
+        show_default="dynamic",
         rich_help_panel="Compression Options",
     ),
     no_par2: bool = typer.Option(
@@ -211,16 +211,10 @@ def archive(
         rich_help_panel="Verification Options",
     ),
     # Individual verification layer controls for archive creation
-    no_verify_tar: bool = typer.Option(
+    no_verify_7z: bool = typer.Option(
         False,
-        "--no-verify-tar",
-        help="Skip TAR header verification during archive creation",
-        rich_help_panel="Verification Options",
-    ),
-    no_verify_zstd: bool = typer.Option(
-        False,
-        "--no-verify-zstd",
-        help="Skip Zstd integrity verification during archive creation",
+        "--no-verify-7z",
+        help="Skip 7z integrity verification during archive creation",
         rich_help_panel="Verification Options",
     ),
     no_verify_sha256: bool = typer.Option(
@@ -255,7 +249,7 @@ def archive(
     ),
     quiet: Optional[bool] = typer.Option(None, "--quiet", "-q", help="Quiet output"),
 ) -> None:
-    """Create a cold storage archive with comprehensive verification.
+    """Create a cold storage 7z archive with comprehensive verification.
 
     Args:
         ctx: Typer context
@@ -263,14 +257,12 @@ def archive(
         output_dir: Output directory (default: current directory)
         name: Archive name (default: source name)
         force: Force overwrite existing files
-        level: Compression level (1-22)
         threads: Number of threads (0=auto)
-        no_long: Disable automatic long-distance matching
-        long_distance: Set long-distance matching value (disables auto-adjustment)
+        level: 7z compression level (0-9, dynamic optimization if not specified)
+        dict_size: 7z dictionary size (128k-512m, dynamic optimization if not specified)
         no_par2: Skip PAR2 recovery file generation
         no_verify: Skip all integrity verification (overrides individual controls)
-        no_verify_tar: Skip TAR header verification during archive creation
-        no_verify_zstd: Skip Zstd integrity verification during archive creation
+        no_verify_7z: Skip 7z integrity verification during archive creation
         no_verify_sha256: Skip SHA-256 hash verification during archive creation
         no_verify_blake3: Skip BLAKE3 hash verification during archive creation
         no_verify_par2: Skip PAR2 recovery verification during archive creation
@@ -291,18 +283,23 @@ def archive(
 
     setup_logging(final_verbose, final_quiet)
 
-    # Validate long-distance matching parameters
-    if no_long and long_distance is not None:
-        console.print(
-            "[red]Error: --no-long and --long-distance cannot be used together[/red]"
-        )
-        raise typer.Exit(1)
+    # Validate 7z compression parameters
+    if level is not None and (level < 0 or level > 9):
+        console.print("[red]Error: --level must be between 0 and 9[/red]")
+        raise typer.Exit(ExitCodes.INVALID_FORMAT)
+
+    if dict_size is not None:
+        valid_dict_sizes = {"128k", "1m", "4m", "16m", "64m", "256m", "512m"}
+        if dict_size.lower() not in valid_dict_sizes:
+            console.print(
+                f"[red]Error: --dict must be one of: {', '.join(sorted(valid_dict_sizes))}[/red]"
+            )
+            raise typer.Exit(ExitCodes.INVALID_FORMAT)
 
     # Validate verification parameters
     if no_verify and any(
         [
-            no_verify_tar,
-            no_verify_zstd,
+            no_verify_7z,
             no_verify_sha256,
             no_verify_blake3,
             no_verify_par2,
@@ -334,46 +331,23 @@ def archive(
             console.print(install_par2_instructions())
             no_par2 = True
 
-        # Configure compression settings
-        # If long_distance is specified, it overrides long_mode
-        if long_distance is not None:
-            final_long_mode = True  # Enable for manual setting
-            final_long_distance = long_distance
-        else:
-            final_long_mode = not no_long
-            final_long_distance = None
-
-        compression_settings = CompressionSettings(
-            level=level,
-            threads=threads,
-            long_mode=final_long_mode,
-            long_distance=final_long_distance,
-            ultra_mode=(level >= 20),
-        )
-
-        # Configure processing options
+        # Configure processing options for 7z format
         # Handle verification settings: no_verify overrides individual controls
         if no_verify:
             # Skip all verification
             final_verify_integrity = False
-            final_verify_tar = False
-            final_verify_zstd = False
             final_verify_sha256 = False
             final_verify_blake3 = False
             final_verify_par2 = False
         else:
             # Use individual controls
             final_verify_integrity = True
-            final_verify_tar = not no_verify_tar
-            final_verify_zstd = not no_verify_zstd
             final_verify_sha256 = not no_verify_sha256
             final_verify_blake3 = not no_verify_blake3
             final_verify_par2 = not no_verify_par2
 
         processing_options = ProcessingOptions(
             verify_integrity=final_verify_integrity,
-            verify_tar=final_verify_tar,
-            verify_zstd=final_verify_zstd,
             verify_sha256=final_verify_sha256,
             verify_blake3=final_verify_blake3,
             verify_par2=final_verify_par2,
@@ -388,18 +362,57 @@ def archive(
 
         par2_settings = PAR2Settings(redundancy_percent=par2_redundancy)
 
-        # Create archiver
+        # Configure 7z settings
+        from .config.settings import SevenZipSettings
+
+        # Check if manual 7z parameters are provided
+        if level is not None or dict_size is not None:
+            # Manual configuration - disable dynamic optimization
+            manual_level = level if level is not None else 5  # 7z default
+            manual_dict = (
+                dict_size.lower() if dict_size is not None else "16m"
+            )  # 7z default
+
+            sevenzip_settings = SevenZipSettings(
+                level=manual_level,
+                dictionary_size=manual_dict,
+                threads=threads,
+                manual_settings=True,  # Mark as manual to disable dynamic optimization
+            )
+            console.print(
+                f"[cyan]Using manual 7z settings: level={manual_level}, dict={manual_dict}[/cyan]"
+            )
+            console.print(
+                "[cyan]Dynamic optimization disabled due to manual parameters[/cyan]"
+            )
+        else:
+            # Automatic configuration - will use dynamic optimization
+            # Create default settings that will be overridden by dynamic optimization
+            sevenzip_settings = SevenZipSettings(
+                level=5,  # Will be overridden
+                dictionary_size="16m",  # Will be overridden
+                threads=threads,
+            )
+            console.print(
+                "[cyan]Using dynamic 7z optimization based on source size[/cyan]"
+            )
+
         archiver = ColdStorageArchiver(
-            compression_settings, processing_options, par2_settings
+            None,  # No compression_settings for 7z format
+            processing_options,
+            par2_settings,
+            sevenzip_settings=sevenzip_settings,
         )
 
         # Create progress tracker
         with ProgressTracker(console):
-            console.print(f"[cyan]Creating cold storage archive from: {source}[/cyan]")
+            console.print(
+                f"[cyan]Creating cold storage 7z archive from: {source}[/cyan]"
+            )
             console.print(f"[cyan]Output directory: {output_dir}[/cyan]")
 
-            # Create archive
-            result = archiver.create_archive(source, output_dir, name)
+            # Create 7z archive (default and only format)
+            result = archiver.create_archive(source, output_dir, name, "7z")
 
             if result.success:
                 console.print("[green]✓ Archive created successfully![/green]")
@@ -441,6 +454,12 @@ def extract(
         help="Force overwrite existing files",
         rich_help_panel="Output Options",
     ),
+    verify: bool = typer.Option(
+        False,
+        "--verify",
+        help="Verify archive integrity before extraction",
+        rich_help_panel="Verification Options",
+    ),
     verbose: Optional[bool] = typer.Option(
         None, "--verbose", "-v", help="Verbose output"
     ),
@@ -448,7 +467,7 @@ def extract(
 ) -> None:
     """Extract a cold storage archive or supported archive format.
 
-    For coldpack archives (.tar.zst with metadata/metadata.toml):
+    For coldpack archives with metadata/metadata.toml:
     - Automatically uses original compression parameters from metadata
     - Falls back to direct extraction if metadata is unavailable
     - Errors if metadata is corrupted or extraction fails without metadata
@@ -458,6 +477,7 @@ def extract(
         archive: Archive file to extract
         output_dir: Output directory (default: current directory)
         force: Force overwrite existing files
+        verify: Verify archive integrity before extraction
         verbose: Local verbose override
         quiet: Local quiet override
     """
@@ -487,25 +507,47 @@ def extract(
         console.print(f"[cyan]Extracting archive: {archive}[/cyan]")
         console.print(f"[cyan]Output directory: {output_dir}[/cyan]")
 
-        # Step 1: Try to load coldpack metadata (standard compliant archives)
-        metadata, metadata_error = _load_coldpack_metadata(archive, final_verbose)
-
+        # Step 1: Optional pre-extraction verification
         extractor = MultiFormatExtractor()
+        if verify:
+            console.print("[cyan]Performing pre-extraction verification...[/cyan]")
+            if extractor.validate_archive(archive):
+                console.print("[green]✓ Archive integrity verified[/green]")
+            else:
+                console.print("[red]✗ Archive integrity check failed[/red]")
+                console.print("[yellow]Continuing with extraction attempt...[/yellow]")
+
+        # Step 2: Try to load coldpack metadata (standard compliant archives)
+        metadata, metadata_error = _load_coldpack_metadata(archive, final_verbose)
 
         if metadata:
             # Step 2a: Standard coldpack archive - use original parameters
             console.print(
                 "[cyan]Coldpack archive detected - using original compression parameters[/cyan]"
             )
-            console.print(
-                f"[cyan]  Compression level: {metadata.compression_settings.level}[/cyan]"
-            )
-            console.print(
-                f"[cyan]  Threads: {metadata.compression_settings.threads}[/cyan]"
-            )
-            console.print(
-                f"[cyan]  Long distance: {metadata.compression_settings.long_mode}[/cyan]"
-            )
+            # Display parameters based on archive format
+            if metadata.compression_settings:
+                # TAR.ZST format
+                console.print(
+                    f"[cyan]  Compression level: {metadata.compression_settings.level}[/cyan]"
+                )
+                console.print(
+                    f"[cyan]  Threads: {metadata.compression_settings.threads}[/cyan]"
+                )
+                console.print(
+                    f"[cyan]  Long distance: {metadata.compression_settings.long_mode}[/cyan]"
+                )
+            elif metadata.sevenzip_settings:
+                # 7Z format
+                console.print(
+                    f"[cyan]  Compression level: {metadata.sevenzip_settings.level}[/cyan]"
+                )
+                console.print(
+                    f"[cyan]  Threads: {metadata.sevenzip_settings.threads}[/cyan]"
+                )
+                console.print(
+                    f"[cyan]  Method: {metadata.sevenzip_settings.method}[/cyan]"
+                )
 
             # Extract with metadata
             extracted_path = extractor.extract(
@@ -580,18 +622,6 @@ def verify(
         rich_help_panel="Input Options",
     ),
     # Individual verification layer controls
-    no_tar: bool = typer.Option(
-        False,
-        "--no-tar",
-        help="Skip TAR header verification",
-        rich_help_panel="Verification Controls",
-    ),
-    no_zstd: bool = typer.Option(
-        False,
-        "--no-zstd",
-        help="Skip Zstd integrity verification",
-        rich_help_panel="Verification Controls",
-    ),
     no_sha256: bool = typer.Option(
         False,
         "--no-sha256",
@@ -623,8 +653,6 @@ def verify(
         archive: Archive file to verify
         hash_files: Hash files for verification
         par2_file: PAR2 recovery file
-        no_tar: Skip TAR header verification
-        no_zstd: Skip Zstd integrity verification
         no_sha256: Skip SHA-256 hash verification
         no_blake3: Skip BLAKE3 hash verification
         no_par2: Skip PAR2 recovery verification
@@ -656,10 +684,6 @@ def verify(
 
         # Configure which verification layers to skip
         skip_layers = set()
-        if no_tar:
-            skip_layers.add("tar_header")
-        if no_zstd:
-            skip_layers.add("zstd_integrity")
         if no_sha256:
             skip_layers.add("sha256_hash")
         if no_blake3:
@@ -707,7 +731,7 @@ def verify(
 @app.command()
 def repair(
     ctx: typer.Context,
-    par2_file: Path,
+    file_path: Path,
     verbose: Optional[bool] = typer.Option(
         None, "--verbose", "-v", help="Verbose output"
     ),
@@ -715,9 +739,13 @@ def repair(
 ) -> None:
     """Repair a corrupted archive using PAR2 recovery files.
 
+    Can accept either:
+    - PAR2 recovery file directly (.par2)
+    - Archive file (will auto-locate corresponding PAR2 files)
+
     Args:
         ctx: Typer context
-        par2_file: PAR2 recovery file
+        file_path: PAR2 recovery file or archive file
         verbose: Local verbose override
         quiet: Local quiet override
     """
@@ -734,10 +762,46 @@ def repair(
 
     setup_logging(final_verbose, final_quiet)
 
-    # Validate PAR2 file
-    if not par2_file.exists():
-        console.print(f"[red]Error: PAR2 file not found: {par2_file}[/red]")
+    # Validate file path
+    if not file_path.exists():
+        console.print(f"[red]Error: File not found: {file_path}[/red]")
         raise typer.Exit(ExitCodes.FILE_NOT_FOUND)
+
+    # Determine if it's a PAR2 file or archive file
+    par2_file = None
+    if file_path.suffix.lower() == ".par2":
+        # Direct PAR2 file
+        par2_file = file_path
+    else:
+        # Archive file - try to find corresponding PAR2 file
+        console.print(f"[cyan]Archive file detected: {file_path}[/cyan]")
+        console.print("[cyan]Searching for PAR2 recovery files...[/cyan]")
+
+        # Look for PAR2 files in multiple locations
+        potential_par2_paths = [
+            # Same directory as archive
+            file_path.parent / f"{file_path.name}.par2",
+            # In metadata subdirectory (coldpack standard)
+            file_path.parent / "metadata" / f"{file_path.name}.par2",
+        ]
+
+        for par2_path in potential_par2_paths:
+            if par2_path.exists():
+                par2_file = par2_path
+                console.print(f"[green]Found PAR2 file: {par2_file}[/green]")
+                break
+
+        if par2_file is None:
+            console.print(
+                f"[red]Error: No PAR2 recovery files found for {file_path}[/red]"
+            )
+            console.print("[yellow]Searched locations:[/yellow]")
+            for path in potential_par2_paths:
+                console.print(f"  - {path}")
+            console.print(
+                "[yellow]For coldpack archives, PAR2 files should be in the metadata/ directory[/yellow]"
+            )
+            raise typer.Exit(ExitCodes.FILE_NOT_FOUND)
 
     try:
         # Try to load metadata for PAR2 parameter recovery
@@ -874,7 +938,11 @@ def display_archive_summary(result: Any) -> None:
     table.add_row("Compressed Size", format_file_size(metadata.compressed_size))
     table.add_row("Compression Ratio", f"{metadata.compression_percentage:.1f}%")
     table.add_row("Files", str(metadata.file_count))
-    table.add_row("Compression Level", str(metadata.compression_settings.level))
+    # Display compression level based on archive format
+    if metadata.compression_settings:
+        table.add_row("Compression Level", str(metadata.compression_settings.level))
+    elif metadata.sevenzip_settings:
+        table.add_row("Compression Level", str(metadata.sevenzip_settings.level))
 
     if metadata.verification_hashes:
         for algorithm, hash_value in metadata.verification_hashes.items():
@@ -887,7 +955,7 @@ def display_archive_summary(result: Any) -> None:
 
 
 def display_verification_results(results: Any) -> None:
-    """Display verification results table."""
+    """Display verification results table with detailed failure information."""
     table = Table(
         title="Verification Results", show_header=True, header_style="bold magenta"
     )
@@ -895,8 +963,14 @@ def display_verification_results(results: Any) -> None:
     table.add_column("Status", justify="center")
     table.add_column("Message", style="dim")
 
+    failed_results = []
     for result in results:
-        status = "[green]✓ PASS[/green]" if result.success else "[red]✗ FAIL[/red]"
+        if result.success:
+            status = "[green]✓ PASS[/green]"
+        else:
+            status = "[red]✗ FAIL[/red]"
+            failed_results.append(result)
+
         table.add_row(result.layer.replace("_", " ").title(), status, result.message)
 
     console.print(table)
@@ -911,6 +985,24 @@ def display_verification_results(results: Any) -> None:
         console.print(
             f"[red]{total - passed} of {total} verification layers failed![/red]"
         )
+
+        # Display detailed failure information
+        if failed_results:
+            console.print()
+            console.print("[red]Failed Verification Details:[/red]")
+            for result in failed_results:
+                layer_name = result.layer.replace("_", " ").title()
+                console.print(f"[red]• {layer_name}:[/red] {result.message}")
+
+                # Show additional details if available
+                if hasattr(result, "details") and result.details:
+                    for key, value in result.details.items():
+                        if isinstance(value, list) and value:
+                            console.print(
+                                f"  - {key.title()}: {', '.join(map(str, value))}"
+                            )
+                        elif value:
+                            console.print(f"  - {key.title()}: {value}")
 
 
 def display_archive_info(archive_path: Path) -> None:
@@ -968,7 +1060,12 @@ def display_metadata_info(archive_path: Path, metadata: Any) -> None:
     basic_table.add_column("Value", style="white")
 
     basic_table.add_row("Path", str(archive_path))
-    basic_table.add_row("Format", "TAR + Zstandard")
+    # Display format based on archive format
+    if hasattr(metadata, "archive_format") and metadata.archive_format == "7z":
+        format_display = "7z Archive"
+    else:
+        format_display = "TAR + Zstandard"
+    basic_table.add_row("Format", format_display)
 
     # Calculate size display with compression info
     original_size_str = format_file_size(metadata.original_size)
@@ -1007,17 +1104,40 @@ def display_metadata_info(archive_path: Path, metadata: Any) -> None:
     creation_table.add_column("Setting", style="dim", no_wrap=True, width=20)
     creation_table.add_column("Value", style="yellow")
 
-    creation_table.add_row("├── Zstd Level", str(metadata.compression_settings.level))
+    # Display compression settings based on archive format
+    if metadata.compression_settings:
+        # TAR.ZST format settings
+        creation_table.add_row(
+            "├── Zstd Level", str(metadata.compression_settings.level)
+        )
 
-    # Handle long distance display
-    if metadata.compression_settings.long_distance is not None:
-        long_display = str(metadata.compression_settings.long_distance)
-    else:
-        long_display = "true" if metadata.compression_settings.long_mode else "false"
-    creation_table.add_row("├── Long Distance", long_display)
+        # Handle long distance display
+        if metadata.compression_settings.long_distance is not None:
+            long_display = str(metadata.compression_settings.long_distance)
+        else:
+            long_display = (
+                "true" if metadata.compression_settings.long_mode else "false"
+            )
+        creation_table.add_row("├── Long Distance", long_display)
 
-    creation_table.add_row("├── Threads", str(metadata.compression_settings.threads))
-    creation_table.add_row("└── TAR Method", metadata.tar_settings.method.title())
+        creation_table.add_row(
+            "├── Threads", str(metadata.compression_settings.threads)
+        )
+    elif metadata.sevenzip_settings:
+        # 7Z format settings
+        creation_table.add_row("├── 7z Level", str(metadata.sevenzip_settings.level))
+        creation_table.add_row("├── Method", metadata.sevenzip_settings.method)
+        creation_table.add_row(
+            "├── Dictionary", metadata.sevenzip_settings.dictionary_size
+        )
+        creation_table.add_row("├── Threads", str(metadata.sevenzip_settings.threads))
+        creation_table.add_row(
+            "└── Solid", "true" if metadata.sevenzip_settings.solid else "false"
+        )
+
+    # Only show TAR method for tar.zst format
+    if metadata.compression_settings and metadata.tar_settings:
+        creation_table.add_row("└── TAR Method", metadata.tar_settings.method.title())
 
     console.print(creation_table)
 
@@ -1228,7 +1348,7 @@ def formats() -> None:
         f"\n[bold]Total:[/bold] {len(SUPPORTED_INPUT_FORMATS)} formats supported"
     )
     console.print(
-        "[bold]Output Format:[/bold] .tar.zst (TAR archive compressed with Zstandard)"
+        "[bold]Output Format:[/bold] .7z (7-Zip archive with LZMA2 compression)"
     )
 
 

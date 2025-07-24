@@ -244,7 +244,15 @@ class ArchiveRepairer:
 
             if par2_name.endswith(".par2"):
                 original_name = par2_name[:-5]  # Remove .par2 extension
-                original_file = par2_file.parent / original_name
+
+                # For coldpack standard structure, check if PAR2 is in metadata directory
+                if par2_file.parent.name == "metadata":
+                    # Original file should be in parent directory
+                    original_file = par2_file.parent.parent / original_name
+                else:
+                    # Standard case - same directory
+                    original_file = par2_file.parent / original_name
+
                 return original_file
 
             return None
