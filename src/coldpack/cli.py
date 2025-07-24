@@ -23,6 +23,7 @@ from .core.verifier import ArchiveVerifier
 from .utils.filesystem import format_file_size, get_file_size
 from .utils.par2 import PAR2Manager, check_par2_availability, install_par2_instructions
 from .utils.progress import ProgressTracker
+from .utils.windows_compat import check_par2_related_paths_compatibility
 
 # Initialize Typer app
 app = typer.Typer(
@@ -323,6 +324,10 @@ def archive(
     if output_dir is None:
         output_dir = Path.cwd()
 
+    # Check Windows PAR2 Unicode compatibility for PAR2-related operations
+    if not no_par2:
+        check_par2_related_paths_compatibility(source, output_dir, console)
+
     try:
         # Check PAR2 availability if needed
         if not no_par2 and not check_par2_availability():
@@ -503,6 +508,9 @@ def extract(
     # Set default output directory
     if output_dir is None:
         output_dir = Path.cwd()
+
+    # Check Windows PAR2 Unicode compatibility (extract may use PAR2 for verification)
+    check_par2_related_paths_compatibility(archive, output_dir, console)
 
     try:
         console.print(f"[cyan]Extracting archive: {archive}[/cyan]")
@@ -712,6 +720,11 @@ def verify(
         console.print(f"[red]Error: Archive not found: {archive}[/red]")
         raise typer.Exit(ExitCodes.FILE_NOT_FOUND)
 
+    # Check Windows PAR2 Unicode compatibility (verify uses PAR2 verification)
+    from .utils.windows_compat import check_windows_par2_unicode_compatibility
+
+    check_windows_par2_unicode_compatibility(archive, console)
+
     try:
         verifier = ArchiveVerifier()
 
@@ -801,6 +814,11 @@ def repair(
     if not file_path.exists():
         console.print(f"[red]Error: File not found: {file_path}[/red]")
         raise typer.Exit(ExitCodes.FILE_NOT_FOUND)
+
+    # Check Windows PAR2 Unicode compatibility (repair uses PAR2 tools)
+    from .utils.windows_compat import check_windows_par2_unicode_compatibility
+
+    check_windows_par2_unicode_compatibility(file_path, console)
 
     # Determine if it's a PAR2 file or archive file
     par2_file = None
@@ -940,6 +958,11 @@ def info(
     if not path.exists():
         console.print(f"[red]Error: File not found: {path}[/red]")
         raise typer.Exit(ExitCodes.FILE_NOT_FOUND)
+
+    # Check Windows PAR2 Unicode compatibility (info may display PAR2 information)
+    from .utils.windows_compat import check_windows_par2_unicode_compatibility
+
+    check_windows_par2_unicode_compatibility(path, console)
 
     try:
         if path.suffix == ".par2":
@@ -1549,6 +1572,11 @@ def list_archive(
     if not path.exists():
         console.print(f"[red]Error: Archive not found: {path}[/red]")
         raise typer.Exit(ExitCodes.FILE_NOT_FOUND)
+
+    # Check Windows PAR2 Unicode compatibility (list may access PAR2 metadata)
+    from .utils.windows_compat import check_windows_par2_unicode_compatibility
+
+    check_windows_par2_unicode_compatibility(path, console)
 
     try:
         lister = ArchiveLister()

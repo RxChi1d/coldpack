@@ -725,14 +725,26 @@ def is_windows_system() -> bool:
 def needs_windows_filename_handling(file_list: list[str]) -> bool:
     """Determine if Windows filename handling is needed.
 
+    Since py7zz uses 7-Zip which handles most filename issues natively,
+    we only need special handling for severe conflicts that 7-Zip cannot resolve.
+
     Args:
         file_list: List of file paths to check
 
     Returns:
-        True if any files have Windows compatibility issues
+        True if any files have severe Windows compatibility issues
     """
     if not is_windows_system():
         return False
 
     conflicts = check_windows_filename_conflicts(file_list)
-    return any(conflicts.values())
+
+    # Only trigger special handling for reserved names and invalid characters
+    # Let 7-Zip handle case conflicts naturally (it's designed for this)
+    severe_conflicts = (
+        conflicts["reserved_names"]
+        or conflicts["invalid_chars"]
+        or conflicts["length_conflicts"]
+    )
+
+    return bool(severe_conflicts)
