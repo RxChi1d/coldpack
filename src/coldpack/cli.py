@@ -17,6 +17,7 @@ from .config.constants import (
 from .config.settings import ProcessingOptions
 from .core.archiver import ColdStorageArchiver
 from .core.extractor import MultiFormatExtractor
+from .core.lister import ArchiveLister, ListingError, UnsupportedFormatError
 from .core.repairer import ArchiveRepairer
 from .core.verifier import ArchiveVerifier
 from .utils.filesystem import format_file_size, get_file_size
@@ -511,10 +512,44 @@ def extract(
         extractor = MultiFormatExtractor()
         if verify:
             console.print("[cyan]Performing pre-extraction verification...[/cyan]")
-            if extractor.validate_archive(archive):
-                console.print("[green]✓ Archive integrity verified[/green]")
-            else:
-                console.print("[red]✗ Archive integrity check failed[/red]")
+
+            # Import verifier for comprehensive verification
+            from .core.verifier import ArchiveVerifier
+
+            verifier = ArchiveVerifier()
+            try:
+                # Use auto verification for comprehensive checking
+                results = verifier.verify_auto(archive)
+
+                # Display detailed results
+                passed_layers = sum(1 for r in results if r.success)
+                total_layers = len(results)
+
+                console.print(
+                    f"[cyan]Verification complete: {passed_layers}/{total_layers} layers passed[/cyan]"
+                )
+
+                # Show each layer result
+                for result in results:
+                    status_icon = "✓" if result.success else "✗"
+                    status_color = "green" if result.success else "red"
+                    console.print(
+                        f"[{status_color}]{status_icon} {result.layer}: {result.message}[/{status_color}]"
+                    )
+
+                # Overall result
+                if passed_layers == total_layers:
+                    console.print("[green]✓ Archive integrity fully verified[/green]")
+                else:
+                    console.print(
+                        f"[yellow]⚠ Partial verification: {passed_layers}/{total_layers} layers passed[/yellow]"
+                    )
+                    console.print(
+                        "[yellow]Continuing with extraction attempt...[/yellow]"
+                    )
+
+            except Exception as e:
+                console.print(f"[red]✗ Verification failed: {e}[/red]")
                 console.print("[yellow]Continuing with extraction attempt...[/yellow]")
 
         # Step 2: Try to load coldpack metadata (standard compliant archives)
@@ -694,7 +729,7 @@ def verify(
         # Handle explicitly provided files
         if hash_files or par2_file:
             # Build hash file dictionary from explicit files
-            hash_file_dict = {}
+            hash_file_dict: dict[str, Path] = {}
             if hash_files:
                 for hash_file in hash_files:
                     if (
@@ -1334,6 +1369,251 @@ def display_par2_info(par2_path: Path) -> None:
 
     except Exception as e:
         console.print(f"[red]Could not read PAR2 info: {e}[/red]")
+
+
+def display_archive_listing(result: dict, verbose: bool = False) -> None:
+    """Display archive listing results in a formatted table.
+
+    Args:
+        result: Dictionary containing listing results from ArchiveLister
+        verbose: Whether to show verbose output
+    """
+
+    archive_path = result["archive_path"]
+    archive_format = result["format"]
+    files = result["files"]
+
+    # Display header information
+    console.print(f"\n[bold]Archive:[/bold] {Path(archive_path).name}")
+    console.print(f"[bold]Path:[/bold] {archive_path}")
+    console.print(f"[bold]Format:[/bold] {archive_format}")
+
+    # Display summary statistics
+    summary_table = Table(title="Summary", show_header=False, box=None)
+    summary_table.add_column("Property", style="dim", width=20)
+    summary_table.add_column("Value", style="white")
+
+    summary_table.add_row("Total Files", f"{result['total_files']:,}")
+    summary_table.add_row("Total Directories", f"{result['total_directories']:,}")
+    summary_table.add_row("Total Entries", f"{result['total_entries']:,}")
+
+    if result["total_size"] > 0:
+        summary_table.add_row("Total Size", format_file_size(result["total_size"]))
+        if result["total_compressed_size"] > 0:
+            summary_table.add_row(
+                "Compressed Size", format_file_size(result["total_compressed_size"])
+            )
+            summary_table.add_row("Compression", f"{result['compression_ratio']:.1f}%")
+
+    if result["showing_range"]:
+        summary_table.add_row("Showing", result["showing_range"])
+
+    console.print(summary_table)
+
+    # If summary-only mode, stop here
+    if not files:
+        if result.get("has_more", False):
+            console.print(
+                f"\n[dim]Use --limit and --offset to paginate through all {result['total_entries']} entries[/dim]"
+            )
+        return
+
+    # Display file listing table
+    file_table = Table(
+        title="Contents", show_header=True, header_style="bold cyan", border_style="dim"
+    )
+
+    file_table.add_column("Type", width=4, justify="center")
+    file_table.add_column("Name", style="white", no_wrap=False)
+    file_table.add_column("Size", justify="right", width=12)
+    file_table.add_column("Modified", width=19)
+
+    # Sort files by path to maintain proper directory structure
+    sorted_files = sorted(files, key=lambda f: f.path.lower())
+
+    # Display files in a simple, clean format
+    for file in sorted_files:
+        # Type indicator - use text instead of icons
+        type_indicator = "DIR" if file.is_directory else "FILE"
+
+        # Clean file path display (just show the full path as-is)
+        name_display = file.path.rstrip(
+            "/"
+        )  # Remove trailing slash for cleaner display
+
+        # Size formatting
+        size_display = (
+            "-"
+            if file.is_directory
+            else (format_file_size(file.size) if file.size > 0 else "-")
+        )
+
+        # Modified time formatting
+        if file.modified:
+            modified_display = file.modified.strftime("%Y-%m-%d %H:%M:%S")
+        else:
+            modified_display = "-"
+
+        file_table.add_row(type_indicator, name_display, size_display, modified_display)
+
+    console.print(file_table)
+
+    # Show pagination info and tips
+    if result.get("has_more", False):
+        console.print(
+            "\n[yellow]More entries available. Use --limit and --offset to see more.[/yellow]"
+        )
+        console.print(
+            f'[dim]Example: cpack list --limit 50 --offset {len(files)} "{archive_path}"[/dim]'
+        )
+
+    if result["total_entries"] > 100 and not result.get("showing_range", "").startswith(
+        "All"
+    ):
+        console.print("\n[dim]Tips:[/dim]")
+        console.print("[dim]  • Use --filter '*.ext' to filter by file type[/dim]")
+        console.print("[dim]  • Use --dirs-only to show only directories[/dim]")
+        console.print("[dim]  • Use --summary-only for overview[/dim]")
+
+
+def list_archive(
+    ctx: typer.Context,
+    path: Path,
+    limit: Optional[int] = typer.Option(
+        None, "--limit", "-l", help="Maximum number of entries to show", min=1
+    ),
+    offset: int = typer.Option(
+        0, "--offset", "-o", help="Number of entries to skip", min=0
+    ),
+    filter_pattern: Optional[str] = typer.Option(
+        None, "--filter", "-f", help="Glob pattern to filter entries (e.g., '*.txt')"
+    ),
+    dirs_only: bool = typer.Option(
+        False, "--dirs-only", "-d", help="Show only directories"
+    ),
+    files_only: bool = typer.Option(
+        False, "--files-only", help="Show only files (exclude directories)"
+    ),
+    summary_only: bool = typer.Option(
+        False, "--summary-only", "-s", help="Show only summary statistics"
+    ),
+    verbose: Optional[bool] = typer.Option(
+        None, "--verbose", "-v", help="Verbose output"
+    ),
+    quiet: Optional[bool] = typer.Option(None, "--quiet", "-q", help="Quiet output"),
+) -> None:
+    """List contents of an archive without extracting it.
+
+    Shows the file and directory structure within supported archive formats.
+    Only works with formats that can be read directly (7z, zip, rar, tar, etc.).
+
+    Examples:
+        cpack list archive.7z
+        cpack list --limit 50 archive.zip
+        cpack list --filter "*.txt" --dirs-only archive.tar.gz
+        cpack list --summary-only large-archive.7z
+
+    Args:
+        ctx: Typer context
+        path: Archive file to list contents of
+        limit: Maximum number of entries to show
+        offset: Number of entries to skip (for pagination)
+        filter_pattern: Glob pattern to filter entries
+        dirs_only: Show only directories
+        files_only: Show only files (exclude directories)
+        summary_only: Show only summary statistics
+        verbose: Local verbose override
+        quiet: Local quiet override
+    """
+    # Handle verbose/quiet precedence: local overrides global
+    global_verbose, global_quiet = get_global_options(ctx)
+
+    # Local parameters override global if specified
+    if verbose is not None and quiet is not None and verbose and quiet:
+        console.print("[red]Error: --verbose and --quiet cannot be used together[/red]")
+        raise typer.Exit(1)
+
+    # Validate mutually exclusive options
+    if dirs_only and files_only:
+        console.print(
+            "[red]Error: --dirs-only and --files-only cannot be used together[/red]"
+        )
+        raise typer.Exit(1)
+
+    final_verbose = verbose if verbose is not None else global_verbose
+    final_quiet = quiet if quiet is not None else global_quiet
+
+    setup_logging(final_verbose, final_quiet)
+
+    # Validate path
+    if not path.exists():
+        console.print(f"[red]Error: Archive not found: {path}[/red]")
+        raise typer.Exit(ExitCodes.FILE_NOT_FOUND)
+
+    try:
+        lister = ArchiveLister()
+
+        # Handle large archives with automatic warnings
+        if limit is None and not summary_only:
+            # Get quick info first to check archive size
+            try:
+                quick_info = lister.get_quick_info(path)
+                total_entries = quick_info.get("total_entries", 0)
+
+                # Warn for large archives
+                if total_entries > 10000:
+                    console.print(
+                        f"[yellow]Warning: Archive contains {total_entries:,} entries.[/yellow]"
+                    )
+                    console.print(
+                        "[yellow]Consider using --limit to avoid overwhelming output.[/yellow]"
+                    )
+                    console.print(
+                        "[yellow]Use --summary-only for overview or Ctrl+C to cancel.[/yellow]"
+                    )
+                    console.print()
+                elif total_entries > 1000:
+                    console.print(
+                        f"[yellow]Info: Archive contains {total_entries:,} entries.[/yellow]"
+                    )
+                    console.print()
+
+            except Exception:
+                # If quick info fails, proceed anyway
+                pass
+
+        # List archive contents
+        result = lister.list_archive(
+            archive_path=path,
+            limit=limit,
+            offset=offset,
+            filter_pattern=filter_pattern,
+            dirs_only=dirs_only,
+            files_only=files_only,
+            summary_only=summary_only,
+        )
+
+        # Display results
+        display_archive_listing(result, final_verbose)
+
+    except UnsupportedFormatError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        console.print("\n[dim]Tip: Use 'cpack formats' to see supported formats[/dim]")
+        raise typer.Exit(ExitCodes.INVALID_FORMAT) from e
+    except ListingError as e:
+        logger.error(f"Listing failed: {e}")
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(ExitCodes.GENERAL_ERROR) from e
+    except Exception as e:
+        logger.error(f"Unexpected error during listing: {e}")
+        console.print(f"[red]Unexpected error: {e}[/red]")
+        raise typer.Exit(ExitCodes.GENERAL_ERROR) from e
+
+
+# Register list command
+app.command(name="list", help="List contents of an archive without extracting it.")(
+    list_archive
+)
 
 
 @app.command()

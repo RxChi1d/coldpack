@@ -87,7 +87,21 @@ class ArchiveVerifier:
         if not archive_obj.exists():
             raise FileNotFoundError(f"Archive not found: {archive_obj}")
 
-        logger.info(f"Starting 5-layer verification for: {archive_obj}")
+        # Calculate expected number of layers based on what will actually be checked
+        expected_layers_count = 1  # zstd_integrity
+        if hash_files:
+            expected_layers_count += len(hash_files)  # hash verifications
+        else:
+            expected_layers_count += 2  # sha256 + blake3 (will be marked as failed)
+        expected_layers_count += 1  # tar_header
+        if par2_file:
+            expected_layers_count += 1  # par2_recovery
+        else:
+            expected_layers_count += 1  # par2_recovery (will be marked as failed)
+
+        logger.info(
+            f"Starting {expected_layers_count}-layer verification for: {archive_obj}"
+        )
 
         results = []
 
@@ -709,7 +723,27 @@ class ArchiveVerifier:
             raise FileNotFoundError(f"Archive not found: {archive_obj}")
 
         skip_layers = skip_layers or set()
-        logger.info(f"Starting 5-layer verification for: {archive_obj}")
+
+        # Calculate expected number of layers based on format and skip settings
+        archive_format = self._detect_archive_format(archive_obj)
+        total_possible_layers = [
+            "7z_integrity",
+            "zstd_integrity",
+            "tar_header",
+            "sha256_hash",
+            "blake3_hash",
+            "par2_recovery",
+        ]
+        format_skip_layers = self._adjust_skip_layers_for_format(
+            archive_format, skip_layers
+        )
+        expected_layers = [
+            layer for layer in total_possible_layers if layer not in format_skip_layers
+        ]
+
+        logger.info(
+            f"Starting {len(expected_layers)}-layer verification for: {archive_obj} (format: {archive_format})"
+        )
 
         results = []
 
