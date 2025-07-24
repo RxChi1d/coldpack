@@ -88,12 +88,12 @@ class ArchiveVerifier:
             raise FileNotFoundError(f"Archive not found: {archive_obj}")
 
         # Calculate expected number of layers based on what will actually be checked
-        expected_layers_count = 1  # zstd_integrity
+        # Note: CLI only supports 7z format output, so no tar/zstd layers
+        expected_layers_count = 1  # 7z_integrity
         if hash_files:
             expected_layers_count += len(hash_files)  # hash verifications
         else:
             expected_layers_count += 2  # sha256 + blake3 (will be marked as failed)
-        expected_layers_count += 1  # tar_header
         if par2_file:
             expected_layers_count += 1  # par2_recovery
         else:
@@ -105,33 +105,20 @@ class ArchiveVerifier:
 
         results = []
 
-        # Layer 1: Zstd integrity verification
+        # Layer 1: 7z integrity verification (CLI only supports 7z format)
         try:
-            result = self.verify_zstd_integrity(archive_obj)
+            result = self.verify_7z_integrity(archive_obj)
             results.append(result)
             if not result.success:
-                logger.error("Zstd verification failed, skipping remaining layers")
+                logger.error("7z verification failed, skipping remaining layers")
                 return results
         except Exception as e:
             results.append(
-                VerificationResult("zstd_integrity", False, f"Verification error: {e}")
+                VerificationResult("7z_integrity", False, f"Verification error: {e}")
             )
             return results
 
-        # Layer 2: TAR header verification
-        try:
-            result = self.verify_tar_structure(archive_obj)
-            results.append(result)
-            if not result.success:
-                logger.warning(
-                    "TAR verification failed, continuing with remaining layers"
-                )
-        except Exception as e:
-            results.append(
-                VerificationResult("tar_header", False, f"Verification error: {e}")
-            )
-
-        # Layer 3 & 4: Hash verification (SHA-256 + BLAKE3)
+        # Layer 2 & 3: Hash verification (SHA-256 + BLAKE3)
         if hash_files:
             try:
                 hash_results = self.verify_hash_files(archive_obj, hash_files)
@@ -153,7 +140,7 @@ class ArchiveVerifier:
                     )
                 )
 
-        # Layer 5: PAR2 recovery verification
+        # Layer 4: PAR2 recovery verification
         if par2_file:
             try:
                 # Extract PAR2 settings from metadata if available
@@ -512,12 +499,8 @@ class ArchiveVerifier:
 
         skip_layers = skip_layers or set()
 
-        # Detect archive format and adjust skip layers accordingly
-        archive_format = self._detect_archive_format(archive_obj)
-        skip_layers = self._adjust_skip_layers_for_format(archive_format, skip_layers)
-
-        logger.debug(f"Detected archive format: {archive_format}")
-        logger.debug(f"Skip layers for format: {skip_layers}")
+        logger.debug(f"CLI verification for 7z archive: {archive_obj}")
+        logger.debug(f"Skip layers: {skip_layers}")
 
         # Auto-discover hash files
         hash_files = self._discover_hash_files(archive_obj, skip_layers)
@@ -724,30 +707,21 @@ class ArchiveVerifier:
 
         skip_layers = skip_layers or set()
 
-        # Calculate expected number of layers based on format and skip settings
-        archive_format = self._detect_archive_format(archive_obj)
-        total_possible_layers = [
-            "7z_integrity",
-            "zstd_integrity",
-            "tar_header",
-            "sha256_hash",
-            "blake3_hash",
-            "par2_recovery",
-        ]
-        format_skip_layers = self._adjust_skip_layers_for_format(
-            archive_format, skip_layers
-        )
+        # CLI only supports 7z format, so we only need 7z verification layers
+        from ..config.constants import VERIFICATION_LAYERS
+
+        total_possible_layers = VERIFICATION_LAYERS  # ["7z_integrity", "sha256_hash", "blake3_hash", "par2_recovery"]
         expected_layers = [
-            layer for layer in total_possible_layers if layer not in format_skip_layers
+            layer for layer in total_possible_layers if layer not in skip_layers
         ]
 
         logger.info(
-            f"Starting {len(expected_layers)}-layer verification for: {archive_obj} (format: {archive_format})"
+            f"Starting {len(expected_layers)}-layer verification for: {archive_obj} (format: 7z)"
         )
 
         results = []
 
-        # Layer 0: 7z integrity verification (for 7z archives)
+        # Layer 1: 7z integrity verification (CLI only supports 7z format)
         if "7z_integrity" not in skip_layers:
             try:
                 result = self.verify_7z_integrity(archive_obj)
@@ -763,37 +737,7 @@ class ArchiveVerifier:
                 )
                 return results
 
-        # Layer 1: Zstd integrity verification (for tar.zst archives)
-        if "zstd_integrity" not in skip_layers:
-            try:
-                result = self.verify_zstd_integrity(archive_obj)
-                results.append(result)
-                if not result.success:
-                    logger.error("Zstd verification failed, skipping remaining layers")
-                    return results
-            except Exception as e:
-                results.append(
-                    VerificationResult(
-                        "zstd_integrity", False, f"Verification error: {e}"
-                    )
-                )
-                return results
-
-        # Layer 2: TAR header verification
-        if "tar_header" not in skip_layers:
-            try:
-                result = self.verify_tar_structure(archive_obj)
-                results.append(result)
-                if not result.success:
-                    logger.warning(
-                        "TAR verification failed, continuing with remaining layers"
-                    )
-            except Exception as e:
-                results.append(
-                    VerificationResult("tar_header", False, f"Verification error: {e}")
-                )
-
-        # Layer 3 & 4: Hash verification (SHA-256 + BLAKE3)
+        # Layer 2 & 3: Hash verification (SHA-256 + BLAKE3)
         if hash_files and not (
             "sha256_hash" in skip_layers and "blake3_hash" in skip_layers
         ):
@@ -816,7 +760,7 @@ class ArchiveVerifier:
                         )
                     )
 
-        # Layer 5: PAR2 recovery verification
+        # Layer 4: PAR2 recovery verification
         if "par2_recovery" not in skip_layers:
             if par2_file:
                 try:
