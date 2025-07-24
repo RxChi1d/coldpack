@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to build (e.g., v0.1.0, v0.1.0a1, v0.2.0.dev1)'
+        description: 'Tag to build (e.g., v0.1.0, v0.1.0a1, v0.1.0b1, v0.1.0rc1, v0.2.0.dev1)'
         required: true
         type: string
 
@@ -75,12 +75,12 @@ jobs:
         echo "Git tag: $TAG"
 
         # Validate tag format (PEP 440 compliant)
-        if [[ $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\.dev[0-9]+|a[0-9]+)?$ ]]; then
+        if [[ $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\.dev[0-9]+|a[0-9]+|b[0-9]+|rc[0-9]+)?$ ]]; then
           echo "✓ Tag format is valid: $TAG"
         else
           echo "✗ Invalid tag format: $TAG"
-          echo "Expected format: v{major}.{minor}.{patch}[.dev{N}|a{N}]"
-          echo "Examples: v1.0.0, v1.0.0a1, v1.0.0.dev1"
+          echo "Expected format: v{major}.{minor}.{patch}[.dev{N}|a{N}|b{N}|rc{N}]"
+          echo "Examples: v1.0.0, v1.0.0a1, v1.0.0b1, v1.0.0rc1, v1.0.0.dev1"
           exit 1
         fi
 
@@ -105,7 +105,7 @@ jobs:
         fi
 
         # Verify version format is PEP 440 compliant
-        if [[ $GENERATED_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.dev[0-9]+|a[0-9]+)?$ ]]; then
+        if [[ $GENERATED_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.dev[0-9]+|a[0-9]+|b[0-9]+|rc[0-9]+)?$ ]]; then
           echo "✓ Generated version is PEP 440 compliant: $GENERATED_VERSION"
         else
           echo "✗ Generated version is not PEP 440 compliant: $GENERATED_VERSION"
