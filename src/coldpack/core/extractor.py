@@ -458,15 +458,17 @@ class MultiFormatExtractor:
         if progress_callback:
             # Use extract_all with progress callback if supported
             try:
-                archive.extractall(output_dir, progress_callback=progress_callback)
+                archive.extractall(
+                    path=str(output_dir), progress_callback=progress_callback
+                )
             except (TypeError, AttributeError):
                 # Fallback if progress callback not supported
                 logger.debug(
                     "Progress callback not supported, extracting without progress"
                 )
-                archive.extractall(output_dir)
+                archive.extractall(path=str(output_dir))
         else:
-            archive.extractall(output_dir)
+            archive.extractall(path=str(output_dir))
 
     def _extract_with_filename_mapping(
         self,
@@ -496,8 +498,8 @@ class MultiFormatExtractor:
                 # Ensure parent directory exists
                 target_path.parent.mkdir(parents=True, exist_ok=True)
 
-                # Extract individual file
-                archive.extract(original_path, output_dir)
+                # Extract individual file to the output directory
+                archive.extract(original_path, path=str(output_dir))
 
                 # If the filename was changed, rename the extracted file
                 if sanitized_path != original_path:
@@ -579,7 +581,7 @@ class MultiFormatExtractor:
             # if metadata is available, but py7zz should handle decompression automatically
             # The original compression parameters are mainly useful for recompression, not decompression
             with py7zz.SevenZipFile(archive_path, "r") as zst_archive:
-                zst_archive.extractall(temp_dir)
+                zst_archive.extractall(path=str(temp_dir))
 
             # Verify intermediate tar file exists
             if not intermediate_tar.exists():
@@ -596,7 +598,7 @@ class MultiFormatExtractor:
             # For tar.zst files, extract tar contents directly to output_dir
             with py7zz.SevenZipFile(intermediate_tar, "r") as tar_archive:
                 # Extract tar contents directly to the output directory
-                tar_archive.extractall(output_dir)
+                tar_archive.extractall(path=str(output_dir))
 
                 # Check what was extracted
                 extracted_items = list(output_dir.iterdir())
@@ -723,7 +725,7 @@ class MultiFormatExtractor:
 
         with safe_file_operations():
             try:
-                tar_archive.extractall(output_dir)
+                tar_archive.extractall(path=str(output_dir))
 
                 # Find the extracted root directory
                 archive_name = self._get_clean_archive_name(archive_path)
@@ -780,7 +782,7 @@ class MultiFormatExtractor:
                 safe_ops.track_directory(target_dir)
 
                 # Extract to target directory
-                tar_archive.extractall(target_dir)
+                tar_archive.extractall(path=str(target_dir))
 
                 # Verify extraction
                 if not any(target_dir.iterdir()):
@@ -895,9 +897,9 @@ class MultiFormatExtractor:
                                 archive, output_dir, filename_mapping
                             )
                         else:
-                            archive.extractall(output_dir)
+                            archive.extractall(path=str(output_dir))
                     else:
-                        archive.extractall(output_dir)
+                        archive.extractall(path=str(output_dir))
 
                 # Find the extracted root directory
                 archive_name = self._get_clean_archive_name(archive_path)
@@ -965,9 +967,9 @@ class MultiFormatExtractor:
                                 archive, target_dir, filename_mapping
                             )
                         else:
-                            archive.extractall(target_dir)
+                            archive.extractall(path=str(target_dir))
                     else:
-                        archive.extractall(target_dir)
+                        archive.extractall(path=str(target_dir))
 
                 # Verify extraction
                 if not any(target_dir.iterdir()):
@@ -1109,7 +1111,7 @@ class MultiFormatExtractor:
             # Step 1: Extract outer compression to get .tar file
             logger.debug("Step 1: Extracting outer compression")
             with py7zz.SevenZipFile(archive_path, "r") as compressed_archive:
-                compressed_archive.extractall(temp_dir)
+                compressed_archive.extractall(path=str(temp_dir))
 
                 # Find the intermediate tar file
                 extracted_files = list(temp_dir.iterdir())
@@ -1132,7 +1134,7 @@ class MultiFormatExtractor:
             # For compound tar files, extract tar contents directly to output_dir
             with py7zz.SevenZipFile(tar_file, "r") as tar_archive:
                 # Extract tar contents directly to the output directory
-                tar_archive.extractall(output_dir)
+                tar_archive.extractall(path=str(output_dir))
 
                 # Check what was extracted and determine final structure
                 extracted_items = list(output_dir.iterdir())
