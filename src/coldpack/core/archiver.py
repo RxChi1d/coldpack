@@ -254,28 +254,28 @@ class ColdStorageArchiver:
                     archive_path, archive_name, safe_ops
                 )
 
-                # Step 8: Move archive to final location
+                # Step 4: Move archive to final location
                 final_archive_path = self._move_archive_to_final_location(
                     archive_path, archive_dir, safe_ops
                 )
 
-                # Step 9: Generate dual hash files directly in metadata directory
+                # Step 5: Generate dual hash files directly in metadata directory
                 hash_files = self._generate_hash_files(
                     final_archive_path, metadata_dir, safe_ops
                 )
 
-                # Step 10: Verify hash files
+                # Step 6: Verify hash files
                 if self.processing_options.verify_integrity:
                     self._verify_hash_files(final_archive_path, hash_files)
 
-                # Step 11: Generate PAR2 recovery files directly in metadata directory
+                # Step 7: Generate PAR2 recovery files directly in metadata directory
                 par2_files = []
                 if self.processing_options.generate_par2:
                     par2_files = self._generate_par2_files(
                         final_archive_path, metadata_dir, safe_ops
                     )
 
-                # Step 12: Final verification with files in final locations
+                # Step 8: Final verification with files in final locations
                 if self.processing_options.verify_integrity:
                     self._perform_final_verification(
                         final_archive_path, hash_files, par2_files
@@ -290,7 +290,7 @@ class ColdStorageArchiver:
                     "metadata_dir": metadata_dir,
                 }
 
-                # Step 13: Create comprehensive metadata
+                # Step 9: Create comprehensive metadata
                 metadata = self._create_metadata(
                     source_path,
                     final_archive_path,
@@ -300,7 +300,7 @@ class ColdStorageArchiver:
                     processing_start_time,
                 )
 
-                # Step 14: Generate metadata.toml file
+                # Step 10: Generate metadata.toml file
                 metadata_file = metadata_dir / "metadata.toml"
                 metadata.save_to_toml(metadata_file)
                 safe_ops.track_file(metadata_file)
@@ -314,9 +314,7 @@ class ColdStorageArchiver:
                     + [metadata_file]
                 )
 
-                logger.success(
-                    f"Cold storage archive created successfully: {final_archive_path}"
-                )
+                logger.success("Cold storage archive created successfully")
 
                 return ArchiveResult(
                     success=True,
@@ -606,7 +604,8 @@ class ColdStorageArchiver:
             logger.debug(f"Extracting {source_path} to {temp_dir}")
             extracted_dir = self.extractor.extract(source_path, temp_dir)
 
-            logger.success(f"Extraction complete: {extracted_dir}")
+            # Extraction already logged in extractor
+            logger.debug(f"Extraction complete: {extracted_dir}")
             return extracted_dir
 
     def _optimize_settings(self, content_dir: Path) -> Optional[CompressionSettings]:
@@ -788,9 +787,14 @@ class ColdStorageArchiver:
         # Check if settings are manually configured
         if self.sevenzip_settings.manual_settings:
             # Use manual settings without optimization
+            threads_display = (
+                "all"
+                if self.sevenzip_settings.threads == 0
+                else str(self.sevenzip_settings.threads)
+            )
             logger.info(
                 f"Using manual 7z settings: level={self.sevenzip_settings.level}, "
-                f"dict={self.sevenzip_settings.dictionary_size}, threads={self.sevenzip_settings.threads}"
+                f"dict={self.sevenzip_settings.dictionary_size}, threads={threads_display}"
             )
             # Keep existing settings and compressor
         else:
@@ -798,10 +802,7 @@ class ColdStorageArchiver:
             optimized_settings = optimize_7z_compression_settings(
                 source_size, self.sevenzip_settings.threads
             )
-            logger.info(
-                f"Optimized 7z settings: level={optimized_settings.level}, "
-                f"dict={optimized_settings.dictionary_size}, threads={optimized_settings.threads}"
-            )
+            # Note: the optimize function already logs the optimized settings
 
             # Update sevenzip_compressor with optimized settings
             self.sevenzip_compressor = SevenZipCompressor(optimized_settings)
@@ -844,7 +845,7 @@ class ColdStorageArchiver:
 
             archive_size = get_file_size(archive_path)
             logger.success(
-                f"7z archive created: {archive_path} ({format_file_size(archive_size)})"
+                f"Successfully compressed to {archive_path} ({format_file_size(archive_size)})"
             )
 
             # Verify 7z integrity
@@ -862,7 +863,7 @@ class ColdStorageArchiver:
         Args:
             archive_path: Path to 7z archive
         """
-        logger.info("Step 2a: Verifying 7z integrity")
+        logger.debug("Step 2a: Verifying 7z integrity")
 
         try:
             result = self.verifier.verify_7z_integrity(archive_path)
@@ -887,7 +888,7 @@ class ColdStorageArchiver:
         Returns:
             Dictionary of algorithm names to hash file paths
         """
-        logger.info("Step 6: Generating dual hash files (SHA-256 + BLAKE3)")
+        logger.info("Step 5: Generating dual hash files (SHA-256 + BLAKE3)")
 
         try:
             # Compute hashes
@@ -902,7 +903,7 @@ class ColdStorageArchiver:
             for hash_file in hash_files.values():
                 safe_ops.track_file(hash_file)
 
-            logger.success(f"Generated {len(hash_files)} hash files in {metadata_dir}")
+            logger.success(f"Generated {len(hash_files)} hash files")
             return hash_files
 
         except Exception as e:
@@ -917,7 +918,7 @@ class ColdStorageArchiver:
             archive_path: Path to archive
             hash_files: Dictionary of hash files
         """
-        logger.info("Step 7: Verifying hash files")
+        logger.info("Step 6: Verifying hash files")
 
         try:
             results = self.verifier.verify_hash_files(archive_path, hash_files)
@@ -954,7 +955,7 @@ class ColdStorageArchiver:
             List of created PAR2 file paths
         """
         logger.info(
-            f"Step 8: Generating PAR2 recovery files ({self.processing_options.par2_redundancy}%)"
+            f"Step 7: Generating PAR2 recovery files ({self.processing_options.par2_redundancy}%)"
         )
 
         try:
@@ -967,9 +968,7 @@ class ColdStorageArchiver:
             for par2_file in par2_files:
                 safe_ops.track_file(par2_file)
 
-            logger.success(
-                f"Generated {len(par2_files)} PAR2 recovery files in {metadata_dir}"
-            )
+            logger.success(f"Generated {len(par2_files)} PAR2 recovery files")
             return par2_files
 
         except Exception as e:
@@ -988,7 +987,7 @@ class ColdStorageArchiver:
         Returns:
             Tuple of (archive_dir, metadata_dir) paths
         """
-        logger.info("Step 7: Creating final directory structure")
+        logger.info("Step 3: Creating final directory structure")
 
         # Create directory structure
         output_base = archive_path.parent
@@ -1016,7 +1015,7 @@ class ColdStorageArchiver:
         Returns:
             Final archive path
         """
-        logger.info("Step 8: Moving archive to final location")
+        logger.info("Step 4: Moving archive to final location")
 
         final_archive_path = archive_dir / archive_path.name
         archive_path.rename(final_archive_path)
@@ -1035,7 +1034,7 @@ class ColdStorageArchiver:
             hash_files: Dictionary of hash files
             par2_files: List of PAR2 files
         """
-        logger.info("Step 9: Performing final 5-layer verification")
+        logger.info("Step 8: Performing final 5-layer verification")
 
         try:
             results = self.verifier.verify_auto(archive_path)
@@ -1048,7 +1047,7 @@ class ColdStorageArchiver:
                     f"Final verification failed for layers: {', '.join(failed_names)}"
                 )
 
-            logger.success("Final 5-layer verification passed")
+            logger.success("Final 4-layer verification passed")
 
         except Exception as e:
             raise ArchivingError(f"Final verification failed: {e}") from e

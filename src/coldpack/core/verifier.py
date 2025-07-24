@@ -715,9 +715,7 @@ class ArchiveVerifier:
             layer for layer in total_possible_layers if layer not in skip_layers
         ]
 
-        logger.info(
-            f"Starting {len(expected_layers)}-layer verification for: {archive_obj} (format: 7z)"
-        )
+        logger.info(f"Starting {len(expected_layers)}-layer verification (format: 7z)")
 
         results = []
 

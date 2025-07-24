@@ -146,10 +146,8 @@ class PAR2Manager:
             ]
 
         try:
-            output_location = output_dir or file_obj.parent
             logger.info(
-                f"Creating PAR2 recovery files for {file_obj} "
-                f"({self.redundancy_percent}% redundancy) in {output_location}"
+                f"Creating PAR2 recovery files ({self.redundancy_percent}% redundancy)"
             )
 
             # Debug: Log the command and working directory
@@ -183,7 +181,7 @@ class PAR2Manager:
             if not par2_files:
                 raise PAR2Error("No PAR2 files were created")
 
-            logger.success(f"Created {len(par2_files)} PAR2 recovery files")
+            logger.debug(f"Created {len(par2_files)} PAR2 recovery files")
             for par2_file in par2_files:
                 file_size = par2_file.stat().st_size
                 logger.debug(f"  {par2_file.name} ({file_size} bytes)")
@@ -244,7 +242,7 @@ class PAR2Manager:
             ]
 
         try:
-            logger.info(f"Verifying PAR2 recovery files: {par2_obj}")
+            logger.info("Verifying PAR2 recovery files")
             logger.debug(f"Running PAR2 verify from directory: {work_dir}")
             logger.debug(f"PAR2 file path: {par2_rel_path}")
             if par2_obj.parent.name == "metadata":
@@ -259,7 +257,7 @@ class PAR2Manager:
             )
 
             if result.returncode == 0:
-                logger.success(f"PAR2 verification passed: {par2_obj}")
+                logger.success("PAR2 verification passed")
                 return True
             else:
                 logger.error(
