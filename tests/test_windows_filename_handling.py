@@ -170,8 +170,12 @@ class TestCreateFilenameMapping:
         file_list = ["folder/CON.txt", "another/folder/PRN.pdf"]
         mapping = create_filename_mapping(file_list)
 
-        assert mapping["folder/CON.txt"].startswith("folder/")
-        assert mapping["another/folder/PRN.pdf"].startswith("another/folder/")
+        # On Windows, paths use backslashes, so we need to normalize for comparison
+        mapped_path_1 = mapping["folder/CON.txt"].replace("\\", "/")
+        mapped_path_2 = mapping["another/folder/PRN.pdf"].replace("\\", "/")
+
+        assert mapped_path_1.startswith("folder/")
+        assert mapped_path_2.startswith("another/folder/")
 
 
 class TestWindowsSystemDetection:
@@ -271,8 +275,9 @@ class TestIntegrationScenarios:
             mapped_path = mapping[original_path]
 
             # Directory structure should be preserved
-            original_parent = str(Path(original_path).parent)
-            mapped_parent = str(Path(mapped_path).parent)
+            # Normalize path separators for cross-platform comparison
+            original_parent = str(Path(original_path).parent).replace("\\", "/")
+            mapped_parent = str(Path(mapped_path).parent).replace("\\", "/")
 
             if original_parent != ".":
                 assert mapped_parent == original_parent
