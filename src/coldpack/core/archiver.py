@@ -5,6 +5,15 @@ from typing import Any, Optional, Union
 
 from loguru import logger
 
+# Import version detection
+try:
+    from importlib.metadata import version as _get_version
+
+    _coldpack_version = _get_version("coldpack")
+except Exception:
+    # Fallback for edge cases
+    _coldpack_version = "0.0.0+unknown"
+
 from ..config.constants import (
     DEFAULT_OUTPUT_FORMAT,
     SUPPORTED_OUTPUT_FORMATS,
@@ -815,7 +824,7 @@ class ColdStorageArchiver:
                 # Archive format
                 archive_format=archive_format,
                 # Version and creation (will be auto-populated by model_post_init)
-                coldpack_version="1.0.0-dev",
+                coldpack_version=_coldpack_version,
                 # Processing settings
                 sevenzip_settings=sevenzip_settings,
                 par2_settings=self.par2_settings,

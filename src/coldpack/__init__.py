@@ -1,6 +1,6 @@
 """coldpack - Cross-platform cold storage CLI package.
 
-This package provides a standardized solution for creating tar.zst cold storage
+This package provides a standardized solution for creating 7z cold storage
 archives with comprehensive verification and repair mechanisms.
 """
 
@@ -9,7 +9,7 @@ from importlib.metadata import PackageNotFoundError
 # Dynamic version detection using hatch-vcs
 from importlib.metadata import version as _get_version
 
-from .config.settings import ArchiveMetadata, CompressionSettings
+from .config.settings import ArchiveMetadata
 from .core.archiver import ColdStorageArchiver
 from .core.extractor import MultiFormatExtractor
 from .core.repairer import ArchiveRepairer
@@ -29,7 +29,6 @@ __all__ = [
     "MultiFormatExtractor",
     "ArchiveVerifier",
     "ArchiveRepairer",
-    "CompressionSettings",
     "ArchiveMetadata",
     "__version__",
 ]
@@ -49,6 +48,6 @@ def get_package_info() -> dict[str, str]:
         "author": __author__,
         "license": __license__,
         "description": "Cross-platform cold storage CLI package",
-        "supported_formats": "7z, zip, tar.gz, rar, tar.zst",
-        "verification_layers": "tar header, zstd, SHA-256, BLAKE3, PAR2",
+        "supported_formats": "7z, zip, tar.gz, rar",
+        "verification_layers": "7z header, SHA-256, BLAKE3, PAR2",
     }

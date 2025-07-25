@@ -8,6 +8,15 @@ from typing import Any, Optional
 import toml
 from pydantic import BaseModel, Field, field_validator
 
+# Import version detection
+try:
+    from importlib.metadata import version as _get_version
+
+    _coldpack_version = _get_version("coldpack")
+except Exception:
+    # Fallback for edge cases
+    _coldpack_version = "0.0.0+unknown"
+
 # Handle tomllib compatibility (Python 3.11+ has tomllib built-in)
 if sys.version_info >= (3, 11):
     import tomllib
@@ -168,7 +177,7 @@ class ArchiveMetadata(BaseModel):
 
     # Version and creation info
     coldpack_version: str = Field(
-        default="1.0.0-dev", description="coldpack version used"
+        default_factory=lambda: _coldpack_version, description="coldpack version used"
     )
     created_at: datetime = Field(
         default_factory=datetime.now, description="Creation timestamp"
