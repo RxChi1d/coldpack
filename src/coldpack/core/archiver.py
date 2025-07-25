@@ -202,7 +202,7 @@ class ColdStorageArchiver:
                 # Step 2: Create archive based on format
                 if format == "7z":
                     # Step 2a: Create final directory structure first for 7z
-                    archive_dir, metadata_dir = (
+                    final_archive_dir, metadata_dir = (
                         self._create_final_directory_structure_early(
                             output_path, archive_name, safe_ops
                         )
@@ -210,7 +210,12 @@ class ColdStorageArchiver:
 
                     # Step 2b: Create 7z archive directly in final location
                     archive_path = self._create_7z_archive(
-                        extracted_dir, archive_dir, archive_name, safe_ops
+                        extracted_dir, final_archive_dir, archive_name, safe_ops
+                    )
+                else:
+                    # This should never happen due to format validation earlier
+                    raise ArchivingError(
+                        f"Unsupported archive format: {format}. This should have been caught earlier."
                     )
 
                 # Step 3: Directory structure was already created and file is in final location
@@ -243,7 +248,7 @@ class ColdStorageArchiver:
                     "archive": final_archive_path,
                     "hash_files": hash_files,
                     "par2_files": par2_files,
-                    "archive_dir": archive_dir,
+                    "archive_dir": final_archive_dir,
                     "metadata_dir": metadata_dir,
                 }
 
