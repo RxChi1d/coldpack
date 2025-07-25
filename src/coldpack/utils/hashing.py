@@ -84,7 +84,7 @@ def compute_file_hashes(
 
         from .filesystem import format_file_size
 
-        logger.info(f"Computing dual hashes ({format_file_size(file_size)})")
+        logger.debug(f"Computing dual hashes for {format_file_size(file_size)} file")
 
         with open(file_obj, "rb") as f:
             while True:
@@ -103,9 +103,9 @@ def compute_file_hashes(
 
         hashes = hasher.finalize()
 
-        logger.success("Dual hash computation completed")
-        logger.debug(f"  SHA-256: {hashes['sha256']}")
-        logger.debug(f"  BLAKE3:  {hashes['blake3']}")
+        logger.debug("Dual hash computation completed")
+        logger.debug(f"SHA-256: {hashes['sha256']}")
+        logger.debug(f"BLAKE3:  {hashes['blake3']}")
 
         return hashes
 
@@ -151,7 +151,7 @@ def write_hash_file(
         with open(hash_file, "w", encoding="utf-8") as f:
             f.write(content)
 
-        logger.debug(f"Created {algorithm.upper()} hash file: {hash_file}")
+        logger.debug(f"{algorithm.upper()} hash file created: {hash_file.name}")
         return hash_file
 
     except OSError as e:
@@ -280,10 +280,12 @@ class HashVerifier:
 
             # Compare hashes
             if actual_hash.lower() == expected_hash.lower():
-                logger.success(f"{algorithm.upper()} verification passed")
+                logger.debug(f"{algorithm.upper()} hash verification passed")
                 return True
             else:
-                logger.error(f"{algorithm.upper()} verification failed for {file_path}")
+                logger.error(
+                    f"{algorithm.upper()} hash mismatch for {Path(file_path).name}"
+                )
                 logger.error(f"Expected: {expected_hash}")
                 logger.error(f"Actual:   {actual_hash}")
                 return False
@@ -310,14 +312,16 @@ class HashVerifier:
         Raises:
             HashingError: If verification fails
         """
-        logger.info(f"Verifying dual hashes for {file_path}")
+        logger.debug(f"Verifying dual hashes for {Path(file_path).name}")
 
         try:
             sha256_ok = HashVerifier.verify_file_hash(file_path, sha256_file, "sha256")
             blake3_ok = HashVerifier.verify_file_hash(file_path, blake3_file, "blake3")
 
             if sha256_ok and blake3_ok:
-                logger.success(f"Dual hash verification passed for {file_path}")
+                logger.debug(
+                    f"Dual hash verification passed for {Path(file_path).name}"
+                )
                 return True
             else:
                 failed_algorithms = []

@@ -49,8 +49,7 @@ class PAR2Manager:
         self.par2_cmd = par2_cmd
 
         logger.debug(
-            f"PAR2Manager initialized with {redundancy_percent}% redundancy "
-            f"using command: {self.par2_cmd}"
+            f"PAR2Manager initialized: {redundancy_percent}% redundancy, command: {self.par2_cmd}"
         )
 
     def _find_par2_command(self) -> Optional[str]:
@@ -70,7 +69,7 @@ class PAR2Manager:
                         [cmd, "--help"], capture_output=True, text=True, timeout=5
                     )
                     if result.returncode == 0:
-                        logger.debug(f"Found working par2 command: {cmd}")
+                        logger.debug(f"Found PAR2 command: {cmd}")
                         return cmd
                 except (subprocess.TimeoutExpired, subprocess.SubprocessError):
                     continue
@@ -146,7 +145,7 @@ class PAR2Manager:
             ]
 
         try:
-            logger.info(
+            logger.debug(
                 f"Creating PAR2 recovery files ({self.redundancy_percent}% redundancy)"
             )
 
@@ -181,7 +180,7 @@ class PAR2Manager:
             if not par2_files:
                 raise PAR2Error("No PAR2 files were created")
 
-            logger.debug(f"Created {len(par2_files)} PAR2 recovery files")
+            logger.debug(f"Generated {len(par2_files)} PAR2 recovery files")
             for par2_file in par2_files:
                 file_size = par2_file.stat().st_size
                 logger.debug(f"  {par2_file.name} ({file_size} bytes)")
@@ -242,9 +241,7 @@ class PAR2Manager:
             ]
 
         try:
-            logger.info("Verifying PAR2 recovery files")
-            logger.debug(f"Running PAR2 verify from directory: {work_dir}")
-            logger.debug(f"PAR2 file path: {par2_rel_path}")
+            logger.debug(f"PAR2 verification: {par2_rel_path} from {work_dir}")
             if par2_obj.parent.name == "metadata":
                 logger.debug(f"Using basepath: {basepath}")
 
@@ -257,12 +254,11 @@ class PAR2Manager:
             )
 
             if result.returncode == 0:
-                logger.success("PAR2 verification passed")
+                logger.success("PAR2 integrity check passed")
                 return True
             else:
                 logger.error(
-                    f"PAR2 verification failed (exit code {result.returncode}): "
-                    f"stdout: {result.stdout}, stderr: {result.stderr}"
+                    f"PAR2 verification failed (exit code {result.returncode}): {result.stderr}"
                 )
                 return False
 
@@ -315,7 +311,7 @@ class PAR2Manager:
             ]
 
         try:
-            logger.info(f"Attempting PAR2 repair: {par2_obj}")
+            logger.info(f"Attempting PAR2 repair using: {par2_obj.name}")
 
             result = subprocess.run(
                 cmd,
@@ -326,12 +322,11 @@ class PAR2Manager:
             )
 
             if result.returncode == 0:
-                logger.success(f"PAR2 repair completed successfully: {par2_obj}")
+                logger.success("PAR2 repair completed successfully")
                 return True
             else:
                 logger.error(
-                    f"PAR2 repair failed (exit code {result.returncode}): "
-                    f"{result.stderr}"
+                    f"PAR2 repair failed (exit code {result.returncode}): {result.stderr}"
                 )
                 return False
 

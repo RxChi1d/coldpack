@@ -40,10 +40,13 @@ class TestSevenZipSettings:
     def test_level_bounds_validation(self):
         """Test compression level bounds validation."""
         # Valid levels
-        SevenZipSettings(level=0)
+        SevenZipSettings(level=1)
         SevenZipSettings(level=9)
 
         # Invalid levels should raise validation error
+        with pytest.raises(ValueError):
+            SevenZipSettings(level=0)  # Below minimum
+
         with pytest.raises(ValueError):
             SevenZipSettings(level=-1)
 

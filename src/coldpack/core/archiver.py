@@ -1,37 +1,38 @@
 """Main cold storage archiver that coordinates the entire archiving pipeline."""
 
-import platform
-import shutil
-import subprocess
-import tarfile
 from pathlib import Path
 from typing import Any, Optional, Union
 
 from loguru import logger
 
+# Import version detection
+try:
+    from importlib.metadata import version as _get_version
+
+    _coldpack_version = _get_version("coldpack")
+except Exception:
+    # Fallback for edge cases
+    _coldpack_version = "0.0.0+unknown"
+
 from ..config.constants import (
     DEFAULT_OUTPUT_FORMAT,
-    OUTPUT_FORMAT,
     SUPPORTED_OUTPUT_FORMATS,
 )
 from ..config.settings import (
     ArchiveMetadata,
-    CompressionSettings,
     PAR2Settings,
     ProcessingOptions,
     SevenZipSettings,
-    TarSettings,
 )
-from ..utils.compression import ZstdCompressor, optimize_compression_settings
 from ..utils.filesystem import (
     check_disk_space,
     create_temp_directory,
-    filter_files_for_archive,
     format_file_size,
     get_file_size,
     safe_file_operations,
 )
-from ..utils.hashing import compute_file_hashes, generate_hash_files
+
+# Hash functions imported individually as needed
 from ..utils.par2 import PAR2Manager
 from ..utils.progress import ProgressTracker
 from ..utils.sevenzip import SevenZipCompressor, optimize_7z_compression_settings
@@ -83,56 +84,37 @@ class ColdStorageArchiver:
 
     def __init__(
         self,
-        compression_settings: Optional[CompressionSettings] = None,
         processing_options: Optional[ProcessingOptions] = None,
         par2_settings: Optional[PAR2Settings] = None,
-        tar_settings: Optional[TarSettings] = None,
         sevenzip_settings: Optional[SevenZipSettings] = None,
     ):
         """Initialize the cold storage archiver.
 
         Args:
-            compression_settings: Zstd compression configuration (for tar.zst format)
             processing_options: Processing options
             par2_settings: PAR2 configuration
-            tar_settings: TAR configuration
-            sevenzip_settings: 7z compression configuration (for 7z format)
+            sevenzip_settings: 7z compression configuration
         """
-        self.compression_settings = compression_settings or CompressionSettings()
         self.sevenzip_settings = sevenzip_settings or SevenZipSettings()
         self.processing_options = processing_options or ProcessingOptions()
         self.par2_settings = par2_settings or PAR2Settings()
-        self.tar_settings = tar_settings or TarSettings()
 
         # Initialize components
         self.extractor = MultiFormatExtractor()
         self.verifier = ArchiveVerifier()
         self.repairer = ArchiveRepairer()
 
-        # Initialize compressors
-        self.zstd_compressor = ZstdCompressor(self.compression_settings)
+        # Initialize 7z compressor
         self.sevenzip_compressor = SevenZipCompressor(self.sevenzip_settings)
-
-        # Legacy compatibility
-        self.compressor = self.zstd_compressor
 
         # Progress tracking
         self.progress_tracker: Optional[ProgressTracker] = None
 
-        # Log initialization with safe access to settings
-        zstd_level = (
-            self.compression_settings.level if self.compression_settings else "N/A"
-        )
+        # Log initialization
         sevenzip_level = (
             self.sevenzip_settings.level if self.sevenzip_settings else "N/A"
         )
-        logger.debug(
-            f"ColdStorageArchiver initialized with zstd level {zstd_level}, 7z level {sevenzip_level}"
-        )
-
-        # Detect an external tar/bsdtar command that supports deterministic --sort=name
-        self._external_tar_cmd: Optional[list[str]] = self._detect_tar_sort_command()
-        self._tar_method = self._get_tar_method_description()
+        logger.debug(f"Archiver initialized with compression level {sevenzip_level}")
 
     def create_archive(
         self,
@@ -141,13 +123,13 @@ class ColdStorageArchiver:
         archive_name: Optional[str] = None,
         format: str = DEFAULT_OUTPUT_FORMAT,
     ) -> ArchiveResult:
-        """Create a complete cold storage archive with format selection and comprehensive verification.
+        """Create a complete cold storage archive with comprehensive verification.
 
         Args:
             source: Path to source file/directory/archive
             output_dir: Directory to create archive in
             archive_name: Custom archive name (defaults to source name)
-            format: Archive format ('7z' or 'tar.zst')
+            format: Archive format (7z only)
 
         Returns:
             Archive result with metadata and created files
@@ -187,11 +169,11 @@ class ColdStorageArchiver:
                 )
             else:
                 # Force overwrite: remove existing directory structure
-                logger.info(f"Removing existing archive directory: {archive_dir}")
+                logger.info(f"Removing existing archive: {archive_dir}")
                 import shutil
 
                 shutil.rmtree(archive_dir)
-                logger.success("Successfully removed existing archive directory")
+                logger.success("Existing archive removed")
 
         # Check disk space
         try:
@@ -200,9 +182,7 @@ class ColdStorageArchiver:
             raise ArchivingError(f"Insufficient disk space: {e}") from e
 
         logger.info(f"Creating cold storage archive: {archive_name}")
-        # logger.info(f"Format: {format}")
-        logger.info(f"Source: {source_path}")
-        logger.info(f"Output: {output_path}")
+        logger.info(f"Source: {source_path} → Output: {output_path}")
 
         # Record processing start time for metadata
         import time
@@ -221,64 +201,46 @@ class ColdStorageArchiver:
 
                 # Step 2: Create archive based on format
                 if format == "7z":
+                    # Step 2a: Create final directory structure first for 7z
+                    final_archive_dir, metadata_dir = (
+                        self._create_final_directory_structure_early(
+                            output_path, archive_name, safe_ops
+                        )
+                    )
+
+                    # Step 2b: Create 7z archive directly in final location
                     archive_path = self._create_7z_archive(
-                        extracted_dir, output_path, archive_name, safe_ops
+                        extracted_dir, final_archive_dir, archive_name, safe_ops
                     )
                 else:
-                    # Legacy tar.zst format
-                    # Step 2a: Optimize compression settings based on content
-                    optimized_settings = self._optimize_settings(extracted_dir)
-                    if optimized_settings:
-                        self.compression_settings = optimized_settings
-                        self.zstd_compressor = ZstdCompressor(self.compression_settings)
-                        self.compressor = self.zstd_compressor
-
-                    # Step 2b: Create deterministic TAR archive
-                    tar_path = self._create_tar_archive(
-                        extracted_dir, output_path, archive_name, safe_ops
+                    # This should never happen due to format validation earlier
+                    raise ArchivingError(
+                        f"Unsupported archive format: {format}. This should have been caught earlier."
                     )
 
-                    # Step 2c: Verify TAR integrity
-                    if self.processing_options.verify_integrity:
-                        self._verify_tar_integrity(tar_path)
+                # Step 3: Directory structure was already created and file is in final location
+                final_archive_path = archive_path
 
-                    # Step 2d: Compress with Zstd
-                    archive_path = self._compress_archive(tar_path, safe_ops)
-
-                    # Step 2e: Verify Zstd integrity
-                    if self.processing_options.verify_integrity:
-                        self._verify_zstd_integrity(archive_path)
-
-                # Step 3: Create final directory structure early
-                archive_dir, metadata_dir = self._create_final_directory_structure(
-                    archive_path, archive_name, safe_ops
+                # Step 5: Generate and verify SHA-256 hash
+                hash_files = {}
+                sha256_file = self._generate_and_verify_single_hash(
+                    final_archive_path, metadata_dir, "sha256", safe_ops
                 )
+                if sha256_file:
+                    hash_files["sha256"] = sha256_file
 
-                # Step 4: Move archive to final location
-                final_archive_path = self._move_archive_to_final_location(
-                    archive_path, archive_dir, safe_ops
+                # Step 6: Generate and verify BLAKE3 hash
+                blake3_file = self._generate_and_verify_single_hash(
+                    final_archive_path, metadata_dir, "blake3", safe_ops
                 )
+                if blake3_file:
+                    hash_files["blake3"] = blake3_file
 
-                # Step 5: Generate dual hash files directly in metadata directory
-                hash_files = self._generate_hash_files(
-                    final_archive_path, metadata_dir, safe_ops
-                )
-
-                # Step 6: Verify hash files
-                if self.processing_options.verify_integrity:
-                    self._verify_hash_files(final_archive_path, hash_files)
-
-                # Step 7: Generate PAR2 recovery files directly in metadata directory
+                # Step 7: Generate and verify PAR2 recovery files
                 par2_files = []
                 if self.processing_options.generate_par2:
-                    par2_files = self._generate_par2_files(
+                    par2_files = self._generate_and_verify_par2_files(
                         final_archive_path, metadata_dir, safe_ops
-                    )
-
-                # Step 8: Final verification with files in final locations
-                if self.processing_options.verify_integrity:
-                    self._perform_final_verification(
-                        final_archive_path, hash_files, par2_files
                     )
 
                 # Prepare organized files info for metadata creation
@@ -286,11 +248,11 @@ class ColdStorageArchiver:
                     "archive": final_archive_path,
                     "hash_files": hash_files,
                     "par2_files": par2_files,
-                    "archive_dir": archive_dir,
+                    "archive_dir": final_archive_dir,
                     "metadata_dir": metadata_dir,
                 }
 
-                # Step 9: Create comprehensive metadata
+                # Step 5: Create comprehensive metadata
                 metadata = self._create_metadata(
                     source_path,
                     final_archive_path,
@@ -300,7 +262,7 @@ class ColdStorageArchiver:
                     processing_start_time,
                 )
 
-                # Step 10: Generate metadata.toml file
+                # Step 6: Generate metadata.toml file
                 metadata_file = metadata_dir / "metadata.toml"
                 metadata.save_to_toml(metadata_file)
                 safe_ops.track_file(metadata_file)
@@ -314,7 +276,7 @@ class ColdStorageArchiver:
                     + [metadata_file]
                 )
 
-                logger.success("Cold storage archive created successfully")
+                logger.success(f"Cold storage archive created: {archive_name}")
 
                 return ArchiveResult(
                     success=True,
@@ -404,182 +366,6 @@ class ColdStorageArchiver:
         # No known archive extension, use stem
         return source_path.stem
 
-    # ---------------------------------------------------------------------
-    # External tar detection helpers
-    # ---------------------------------------------------------------------
-    def _detect_tar_sort_command(self) -> Optional[list[str]]:
-        """Detect a platform‑appropriate tar/bsdtar command that supports deterministic sorted output.
-
-        Only returns commands that support sorting to ensure consistent hash generation.
-
-        Returns:
-            A command list (program plus required sort arguments) suitable for subprocess,
-            or ``None`` if no such command is available (falls back to Python tarfile with sorting).
-        """
-        system = platform.system().lower()
-
-        # Linux ── try GNU tar with --sort=name only
-        if system == "linux":
-            tar_path = shutil.which("tar")
-            if tar_path and self._supports_gnu_sort(tar_path):
-                return [tar_path, "--sort=name"]
-
-        # macOS ── prefer gtar, then bsdtar (only if they support sorting)
-        if system == "darwin":
-            # First try: gtar (GNU tar with --sort=name)
-            gtar_path = shutil.which("gtar")
-            if gtar_path and self._supports_gnu_sort(gtar_path):
-                return [gtar_path, "--sort=name"]
-
-            # Second try: bsdtar with sorting
-            bsdtar_path = shutil.which("bsdtar")
-            if bsdtar_path and self._supports_bsdtar_sort(bsdtar_path):
-                return [bsdtar_path, "--options", "sort=name"]
-
-        # Windows 或其他系統：嘗試檢測支援排序的 tar
-        tar_path = shutil.which("tar")
-        if tar_path and self._supports_gnu_sort(tar_path):
-            return [tar_path, "--sort=name"]
-
-        # 沒有找到支援排序的外部 tar，回退到 Python tarfile（Python 確保排序）
-        logger.debug(
-            "No external tar with sorting support found, using Python tarfile with deterministic sorting"
-        )
-        return None
-
-    def _get_tar_method_description(self) -> str:
-        """Get a description of the TAR method that will be used.
-
-        Returns:
-            Human-readable description of the TAR creation method
-        """
-        if self._external_tar_cmd is None:
-            return "Python tarfile"
-
-        base_exe = Path(self._external_tar_cmd[0]).name.lower()
-        if "gtar" in base_exe:
-            return "GNU tar"
-        elif "bsdtar" in base_exe:
-            return "BSD tar"
-        elif "tar" in base_exe:
-            return "GNU tar"
-        else:
-            return "External tar"
-
-    @staticmethod
-    def _supports_gnu_sort(tar_exe: str) -> bool:
-        """Return ``True`` if *tar_exe* understands ``--sort=name``."""
-        try:
-            test_cmd = [tar_exe, "--sort=name", "-cf", "/dev/null", "/dev/null"]
-            return (
-                subprocess.run(
-                    test_cmd, capture_output=True, text=True, timeout=5
-                ).returncode
-                == 0
-            )
-        except Exception:
-            return False
-
-    @staticmethod
-    def _supports_bsdtar_sort(bsdtar_exe: str) -> bool:
-        """Return ``True`` if *bsdtar_exe* understands ``--options sort=name``."""
-        try:
-            test_cmd = [
-                bsdtar_exe,
-                "--options",
-                "sort=name",
-                "-cf",
-                "/dev/null",
-                "/dev/null",
-            ]
-            return (
-                subprocess.run(
-                    test_cmd, capture_output=True, text=True, timeout=5
-                ).returncode
-                == 0
-            )
-        except Exception:
-            return False
-
-    # ---------------------------------------------------------------------
-    # External tar execution helper
-    # ---------------------------------------------------------------------
-    def _create_tar_with_external(self, source_dir: Path, tar_path: Path) -> None:
-        """Create a TAR archive using the detected external command with deterministic sorting and system file filtering.
-
-        Args:
-            source_dir: Directory whose contents will be archived
-            tar_path: Destination TAR file path
-        """
-        assert self._external_tar_cmd is not None, "_external_tar_cmd must not be None"
-        assert len(self._external_tar_cmd) > 1, (
-            "External tar command must include sorting arguments"
-        )
-
-        # Get filtered file list
-        files_to_archive = filter_files_for_archive(source_dir)
-
-        if not files_to_archive:
-            logger.warning("No files to archive after filtering")
-            # Create empty tar file
-            with tarfile.open(tar_path, "w", format=tarfile.PAX_FORMAT):
-                pass
-            return
-
-        # Create temporary file list for tar
-        import tempfile
-
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
-            files_list_path = Path(f.name)
-            for file_path in files_to_archive:
-                # Calculate relative path from source_dir
-                rel_path = file_path.relative_to(source_dir)
-                f.write(f"{rel_path}\n")
-
-        try:
-            # Decide on a POSIX‑compliant format flag
-            base_exe = Path(self._external_tar_cmd[0]).name.lower()
-            sort_args = self._external_tar_cmd[1:]  # Required sorting arguments
-
-            if "bsdtar" in base_exe:
-                format_args = ["--format", "pax"]  # bsdtar syntax
-            else:
-                # GNU tar / gtar syntax
-                format_args = ["--format=posix"]
-
-            # Build command with file list and guaranteed sorting
-            cmd = [
-                self._external_tar_cmd[0],
-                *sort_args,  # Required sorting args (--sort=name or --options sort=name)
-                *format_args,
-                "-cf",
-                str(tar_path),
-                "--directory",
-                str(source_dir),
-                "-T",  # Read file list from file
-                str(files_list_path),
-            ]
-
-            logger.debug(
-                f"Running deterministic tar with filtered file list: {' '.join(cmd)}"
-            )
-
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=3600,
-            )
-            if result.returncode != 0:
-                raise ArchivingError(f"tar command failed: {result.stderr}")
-
-        finally:
-            # Clean up temporary file list
-            from contextlib import suppress
-
-            with suppress(OSError):
-                files_list_path.unlink()
-
     def _extract_source(self, source_path: Path, safe_ops: Any) -> Path:
         """Extract source content to temporary directory.
 
@@ -590,186 +376,32 @@ class ColdStorageArchiver:
         Returns:
             Path to extracted content directory
         """
-        logger.info("Step 1: Extracting/preparing source content")
+        logger.info("Step 1: Preparing source content")
 
         if source_path.is_dir():
             # Source is already a directory
-            logger.debug(f"Source is directory: {source_path}")
+            logger.debug(f"Using directory directly: {source_path}")
             return source_path
         else:
             # Source is an archive, extract it
             temp_dir = create_temp_directory(suffix="_extract")
             safe_ops.track_directory(temp_dir)
 
-            logger.debug(f"Extracting {source_path} to {temp_dir}")
+            logger.debug(f"Extracting archive: {source_path}")
             extracted_dir = self.extractor.extract(source_path, temp_dir)
 
             # Extraction already logged in extractor
-            logger.debug(f"Extraction complete: {extracted_dir}")
+            logger.debug(f"Content extracted to: {extracted_dir}")
             return extracted_dir
 
-    def _optimize_settings(self, content_dir: Path) -> Optional[CompressionSettings]:
-        """Optimize compression settings based on content.
-
-        Args:
-            content_dir: Directory containing content to analyze
-
-        Returns:
-            Optimized compression settings or None to keep current
-        """
-        try:
-            # Estimate total size
-            total_size = sum(
-                f.stat().st_size for f in content_dir.rglob("*") if f.is_file()
-            )
-
-            logger.debug(f"Content analysis: {format_file_size(total_size)}")
-
-            # Optimize settings based on size
-            optimized = optimize_compression_settings(total_size)
-
-            if (
-                self.compression_settings
-                and optimized.level != self.compression_settings.level
-            ):
-                logger.info(
-                    f"Optimized compression level: {self.compression_settings.level} → {optimized.level}"
-                )
-                return optimized
-
-            return None
-
-        except Exception as e:
-            logger.warning(f"Could not optimize settings: {e}")
-            return None
-
-    def _create_tar_archive(
-        self, source_dir: Path, output_dir: Path, archive_name: str, safe_ops: Any
-    ) -> Path:
-        """Create deterministic TAR archive.
-
-        Args:
-            source_dir: Directory to archive
-            output_dir: Output directory
-            archive_name: Archive name
-            safe_ops: Safe file operations context
-
-        Returns:
-            Path to created TAR file
-        """
-        logger.info(f"Step 2: Creating deterministic TAR archive ({self._tar_method})")
-
-        tar_path = output_dir / f"{archive_name}.tar"
-        safe_ops.track_file(tar_path)
-
-        try:
-            # Prefer external tar (GNU tar / bsdtar) if we found one; otherwise fall back to Python tarfile.
-            if self._external_tar_cmd:
-                self._create_tar_with_external(source_dir, tar_path)
-            else:
-                self._create_tar_with_python(source_dir, tar_path)
-
-            # Verify TAR was created
-            if not tar_path.exists():
-                raise ArchivingError("TAR file was not created")
-
-            tar_size = get_file_size(tar_path)
-            logger.success(
-                f"TAR archive created: {tar_path} ({format_file_size(tar_size)})"
-            )
-
-            return tar_path
-
-        except Exception as e:
-            raise ArchivingError(f"TAR creation failed: {e}") from e
-
-    def _create_tar_with_python(self, source_dir: Path, tar_path: Path) -> None:
-        """Create TAR using Python tarfile (POSIX/PAX format) with system file filtering."""
-        with tarfile.open(tar_path, "w", format=tarfile.PAX_FORMAT) as tar:
-            # Use filtered file list to exclude system files
-            files_to_add = filter_files_for_archive(source_dir)
-
-            for file_path in files_to_add:
-                # Calculate relative path from source_dir (archive contents, not directory itself)
-                arcname = file_path.relative_to(source_dir)
-                tar.add(file_path, arcname=arcname, recursive=False)
-
-    def _verify_tar_integrity(self, tar_path: Path) -> None:
-        """Verify TAR file integrity.
-
-        Args:
-            tar_path: Path to TAR file
-        """
-        logger.info("Step 3: Verifying TAR integrity")
-
-        try:
-            with tarfile.open(tar_path, "r") as tar:
-                # Try to read the entire archive
-                members = tar.getmembers()
-                logger.debug(f"TAR contains {len(members)} members")
-
-            logger.success("TAR integrity verification passed")
-
-        except Exception as e:
-            raise ArchivingError(f"TAR integrity verification failed: {e}") from e
-
-    def _compress_archive(self, tar_path: Path, safe_ops: Any) -> Path:
-        """Compress TAR file with Zstd.
-
-        Args:
-            tar_path: Path to TAR file
-            safe_ops: Safe file operations context
-
-        Returns:
-            Path to compressed archive
-        """
-        logger.info("Step 4: Compressing with Zstd")
-
-        archive_path = tar_path.with_suffix(OUTPUT_FORMAT)
-        safe_ops.track_file(archive_path)
-
-        try:
-            self.compressor.compress_file(tar_path, archive_path)
-
-            # Remove original TAR file to save space
-            tar_path.unlink()
-
-            compressed_size = get_file_size(archive_path)
-            logger.success(
-                f"Compression complete: {archive_path} ({format_file_size(compressed_size)})"
-            )
-
-            return archive_path
-
-        except Exception as e:
-            raise ArchivingError(f"Compression failed: {e}") from e
-
-    def _verify_zstd_integrity(self, archive_path: Path) -> None:
-        """Verify Zstd compression integrity.
-
-        Args:
-            archive_path: Path to compressed archive
-        """
-        logger.info("Step 5: Verifying Zstd integrity")
-
-        try:
-            result = self.verifier.verify_zstd_integrity(archive_path)
-            if not result.success:
-                raise ArchivingError(f"Zstd verification failed: {result.message}")
-
-            logger.success("Zstd integrity verification passed")
-
-        except Exception as e:
-            raise ArchivingError(f"Zstd integrity verification failed: {e}") from e
-
     def _create_7z_archive(
-        self, source_dir: Path, output_dir: Path, archive_name: str, safe_ops: Any
+        self, source_dir: Path, archive_dir: Path, archive_name: str, safe_ops: Any
     ) -> Path:
-        """Create 7z archive using SevenZipCompressor.
+        """Create 7z archive using SevenZipCompressor directly in final location.
 
         Args:
             source_dir: Directory to archive
-            output_dir: Output directory
+            archive_dir: Final archive directory where 7z file will be created
             archive_name: Archive name
             safe_ops: Safe file operations context
 
@@ -782,7 +414,7 @@ class ColdStorageArchiver:
         source_size = sum(
             f.stat().st_size for f in source_dir.rglob("*") if f.is_file()
         )
-        logger.debug(f"Source directory size: {format_file_size(source_size)}")
+        logger.debug(f"Compressing {format_file_size(source_size)} of content")
 
         # Check if settings are manually configured
         if self.sevenzip_settings.manual_settings:
@@ -792,7 +424,7 @@ class ColdStorageArchiver:
                 if self.sevenzip_settings.threads == 0
                 else str(self.sevenzip_settings.threads)
             )
-            logger.info(
+            logger.debug(
                 f"Using manual 7z settings: level={self.sevenzip_settings.level}, "
                 f"dict={self.sevenzip_settings.dictionary_size}, threads={threads_display}"
             )
@@ -808,8 +440,8 @@ class ColdStorageArchiver:
             self.sevenzip_compressor = SevenZipCompressor(optimized_settings)
             self.sevenzip_settings = optimized_settings
 
-        # Create 7z archive path
-        archive_path = output_dir / f"{archive_name}.7z"
+        # Create 7z archive path directly in final location
+        archive_path = archive_dir / f"{archive_name}.7z"
 
         # Check if archive file already exists
         if archive_path.exists() and not self.processing_options.force_overwrite:
@@ -845,7 +477,7 @@ class ColdStorageArchiver:
 
             archive_size = get_file_size(archive_path)
             logger.success(
-                f"Successfully compressed to {archive_path} ({format_file_size(archive_size)})"
+                f"7z archive created: {archive_path.name} ({format_file_size(archive_size)})"
             )
 
             # Verify 7z integrity
@@ -863,88 +495,86 @@ class ColdStorageArchiver:
         Args:
             archive_path: Path to 7z archive
         """
-        logger.debug("Step 2a: Verifying 7z integrity")
+        logger.debug("Verifying 7z archive integrity")
 
         try:
             result = self.verifier.verify_7z_integrity(archive_path)
             if not result.success:
                 raise ArchivingError(f"7z verification failed: {result.message}")
 
-            logger.success("7z integrity verification passed")
-
         except Exception as e:
             raise ArchivingError(f"7z integrity verification failed: {e}") from e
 
-    def _generate_hash_files(
-        self, archive_path: Path, metadata_dir: Path, safe_ops: Any
-    ) -> dict[str, Path]:
-        """Generate dual hash files directly in metadata directory.
+    def _generate_and_verify_single_hash(
+        self, archive_path: Path, metadata_dir: Path, algorithm: str, safe_ops: Any
+    ) -> Optional[Path]:
+        """Generate and immediately verify a single hash file.
 
         Args:
             archive_path: Path to archive
-            metadata_dir: Path to metadata directory where hash files should be created
+            metadata_dir: Path to metadata directory where hash file should be created
+            algorithm: Hash algorithm (sha256 or blake3)
             safe_ops: Safe file operations context
 
         Returns:
-            Dictionary of algorithm names to hash file paths
+            Path to created hash file, or None if skipped
+
+        Raises:
+            ArchivingError: If hash generation or verification fails
         """
-        logger.info("Step 5: Generating dual hash files (SHA-256 + BLAKE3)")
+        if algorithm == "sha256" and not hasattr(self, "_hash_step_started"):
+            logger.info("Step 3: Generating hash files")
+            self._hash_step_started = True
+        logger.debug(f"Generating {algorithm.upper()} hash file")
 
         try:
-            # Compute hashes
-            hashes = compute_file_hashes(archive_path)
+            # Generate single hash
+            if algorithm == "sha256":
+                from ..utils.hashing import compute_sha256_hash
 
-            # Generate hash files directly in metadata directory
+                hash_value = compute_sha256_hash(archive_path)
+            elif algorithm == "blake3":
+                from ..utils.hashing import compute_blake3_hash
+
+                hash_value = compute_blake3_hash(archive_path)
+            else:
+                raise ArchivingError(f"Unsupported hash algorithm: {algorithm}")
+
+            # Create hash file
+            from ..utils.hashing import generate_hash_files
+
+            single_hash = {algorithm: hash_value}
             hash_files = generate_hash_files(
-                archive_path, hashes, output_dir=metadata_dir
+                archive_path, single_hash, output_dir=metadata_dir
             )
+            hash_file_path = hash_files[algorithm]
+            safe_ops.track_file(hash_file_path)
 
-            # Track files for cleanup on error
-            for hash_file in hash_files.values():
-                safe_ops.track_file(hash_file)
+            logger.success(f"{algorithm.upper()} hash file generated")
 
-            logger.success(f"Generated {len(hash_files)} hash files")
-            return hash_files
+            # Immediately verify if verification is enabled
+            if self.processing_options.verify_integrity:
+                logger.debug(f"Verifying {algorithm.upper()} hash")
+                from ..utils.hashing import HashVerifier
 
-        except Exception as e:
-            raise ArchivingError(f"Hash file generation failed: {e}") from e
-
-    def _verify_hash_files(
-        self, archive_path: Path, hash_files: dict[str, Path]
-    ) -> None:
-        """Verify hash files against archive.
-
-        Args:
-            archive_path: Path to archive
-            hash_files: Dictionary of hash files
-        """
-        logger.info("Step 6: Verifying hash files")
-
-        try:
-            results = self.verifier.verify_hash_files(archive_path, hash_files)
-
-            # Check if all hash verifications passed
-            failed_results = [r for r in results if not r.success]
-            if failed_results:
-                failed_algorithms = [
-                    r.layer.replace("_hash", "").upper() for r in failed_results
-                ]
-                raise ArchivingError(
-                    f"Hash verification failed for: {', '.join(failed_algorithms)}"
+                success = HashVerifier.verify_file_hash(
+                    archive_path, hash_file_path, algorithm
                 )
+                if not success:
+                    raise ArchivingError(f"{algorithm.upper()} verification failed")
+                logger.success(f"{algorithm.upper()} hash verified")
 
-            # Log success for individual algorithms
-            for result in results:
-                algorithm = result.layer.replace("_hash", "").upper()
-                logger.success(f"{algorithm} hash verification passed")
+            return hash_file_path
 
         except Exception as e:
-            raise ArchivingError(f"Hash verification failed: {e}") from e
+            raise ArchivingError(
+                f"{algorithm.upper()} hash generation/verification failed: {e}"
+            ) from e
 
-    def _generate_par2_files(
+    def _generate_and_verify_par2_files(
         self, archive_path: Path, metadata_dir: Path, safe_ops: Any
     ) -> list[Path]:
-        """Generate PAR2 recovery files directly in metadata directory.
+        """Generate and immediately verify PAR2 recovery files.
 
         Args:
             archive_path: Path to archive
@@ -953,9 +583,12 @@ class ColdStorageArchiver:
 
         Returns:
             List of created PAR2 file paths
+
+        Raises:
+            ArchivingError: If PAR2 generation or verification fails
         """
         logger.info(
-            f"Step 7: Generating PAR2 recovery files ({self.processing_options.par2_redundancy}%)"
+            f"Step 4: Generating PAR2 recovery files ({self.processing_options.par2_redundancy}% redundancy)"
         )
 
         try:
@@ -968,29 +601,39 @@ class ColdStorageArchiver:
             for par2_file in par2_files:
                 safe_ops.track_file(par2_file)
 
-            logger.success(f"Generated {len(par2_files)} PAR2 recovery files")
+            logger.success(f"PAR2 recovery files generated ({len(par2_files)} files)")
+
+            # Immediately verify if verification is enabled
+            if self.processing_options.verify_integrity and par2_files:
+                logger.debug("Verifying PAR2 recovery files")
+                success = par2_manager.verify_recovery_files(
+                    par2_files[0]  # Use main PAR2 file for verification
+                )
+                if not success:
+                    raise ArchivingError("PAR2 verification failed")
+                logger.success("PAR2 recovery files verified")
+
             return par2_files
 
         except Exception as e:
-            raise ArchivingError(f"PAR2 generation failed: {e}") from e
+            raise ArchivingError(f"PAR2 generation/verification failed: {e}") from e
 
-    def _create_final_directory_structure(
-        self, archive_path: Path, archive_name: str, safe_ops: Any
+    def _create_final_directory_structure_early(
+        self, output_base: Path, archive_name: str, safe_ops: Any
     ) -> tuple[Path, Path]:
-        """Create the final directory structure early in the process.
+        """Create the final directory structure early for 7z format.
 
         Args:
-            archive_path: Current archive file path
+            output_base: Base output directory
             archive_name: Name of the archive
             safe_ops: Safe file operations context
 
         Returns:
             Tuple of (archive_dir, metadata_dir) paths
         """
-        logger.info("Step 3: Creating final directory structure")
+        logger.debug("Creating archive directory structure")
 
         # Create directory structure
-        output_base = archive_path.parent
         archive_dir = output_base / archive_name
         metadata_dir = archive_dir / "metadata"
 
@@ -999,58 +642,8 @@ class ColdStorageArchiver:
         safe_ops.track_directory(archive_dir)
         safe_ops.track_directory(metadata_dir)
 
-        logger.success(f"Created directory structure: {archive_dir}")
+        logger.debug(f"Created directory structure: {archive_dir}")
         return archive_dir, metadata_dir
-
-    def _move_archive_to_final_location(
-        self, archive_path: Path, archive_dir: Path, safe_ops: Any
-    ) -> Path:
-        """Move archive file to its final location.
-
-        Args:
-            archive_path: Current archive file path
-            archive_dir: Target archive directory
-            safe_ops: Safe file operations context
-
-        Returns:
-            Final archive path
-        """
-        logger.info("Step 4: Moving archive to final location")
-
-        final_archive_path = archive_dir / archive_path.name
-        archive_path.rename(final_archive_path)
-        safe_ops.track_file(final_archive_path)
-
-        logger.success(f"Moved archive to: {final_archive_path}")
-        return final_archive_path
-
-    def _perform_final_verification(
-        self, archive_path: Path, hash_files: dict[str, Path], par2_files: list[Path]
-    ) -> None:
-        """Perform final 5-layer verification.
-
-        Args:
-            archive_path: Path to archive
-            hash_files: Dictionary of hash files
-            par2_files: List of PAR2 files
-        """
-        logger.info("Step 8: Performing final 5-layer verification")
-
-        try:
-            results = self.verifier.verify_auto(archive_path)
-
-            # Check if all layers passed
-            failed_layers = [r for r in results if not r.success]
-            if failed_layers:
-                failed_names = [r.layer for r in failed_layers]
-                raise ArchivingError(
-                    f"Final verification failed for layers: {', '.join(failed_names)}"
-                )
-
-            logger.success("Final 4-layer verification passed")
-
-        except Exception as e:
-            raise ArchivingError(f"Final verification failed: {e}") from e
 
     def _organize_output_files(
         self,
@@ -1188,7 +781,7 @@ class ColdStorageArchiver:
                             hash_value = hash_line.split()[0]
                         verification_hashes[algorithm] = hash_value
                 except Exception as e:
-                    logger.warning(f"Could not read {algorithm} hash file: {e}")
+                    logger.warning(f"Failed to read {algorithm.upper()} hash file: {e}")
 
             # Create hash files mapping (algorithm -> filename)
             hash_files_dict = {
@@ -1201,41 +794,14 @@ class ColdStorageArchiver:
             if processing_start_time:
                 processing_time = time.time() - processing_start_time
 
-            # Determine archive format and name
-            archive_format = "7z" if archive_path.suffix.lower() == ".7z" else "tar.zst"
+            # Determine archive format and name (7z only)
+            archive_format = "7z"
 
             # Get archive name (without extension)
             archive_name = archive_path.stem
-            if archive_name.endswith(".tar"):
-                archive_name = archive_name[:-4]
 
-            # Set format-specific settings
-            compression_settings = None
-            sevenzip_settings = None
-
-            if archive_format == "tar.zst":
-                compression_settings = self.compression_settings
-            else:  # 7z format
-                sevenzip_settings = self.sevenzip_settings
-
-            # Update TAR settings with detected method (only for tar.zst)
-            tar_settings = TarSettings()
-            if archive_format == "tar.zst":
-                tar_method = self._get_tar_method_description().lower()
-                # Map method descriptions to valid enum values
-                method_mapping = {
-                    "python tarfile": "python",
-                    "gnu tar": "gnu",
-                    "bsd tar": "bsd",
-                    "external tar": "auto",
-                }
-                valid_method = method_mapping.get(tar_method, "auto")
-
-                tar_settings = TarSettings(
-                    method=valid_method,
-                    sort_files=self.tar_settings.sort_files,
-                    preserve_permissions=self.tar_settings.preserve_permissions,
-                )
+            # Set 7z settings
+            sevenzip_settings = self.sevenzip_settings
 
             # Create comprehensive metadata
             metadata = ArchiveMetadata(
@@ -1246,12 +812,10 @@ class ColdStorageArchiver:
                 # Archive format
                 archive_format=archive_format,
                 # Version and creation (will be auto-populated by model_post_init)
-                coldpack_version="1.0.0-dev",
+                coldpack_version=_coldpack_version,
                 # Processing settings
-                compression_settings=compression_settings,
                 sevenzip_settings=sevenzip_settings,
                 par2_settings=self.par2_settings,
-                tar_settings=tar_settings,
                 # Content statistics
                 file_count=file_count,
                 directory_count=directory_count,
@@ -1271,23 +835,21 @@ class ColdStorageArchiver:
                 else None,
             )
 
-            logger.info(f"Created comprehensive metadata for {archive_name}")
-            logger.info(
-                f"Files: {file_count}, Directories: {directory_count}, Size: {format_file_size(original_size)}"
+            logger.debug(
+                f"Metadata created: {file_count} files, {directory_count} directories, {format_file_size(original_size)}"
             )
 
             return metadata
 
         except Exception as e:
-            logger.warning(f"Could not create complete metadata: {e}")
+            logger.warning(f"Metadata creation incomplete: {e}")
             # Return minimal metadata for backward compatibility
             return ArchiveMetadata(
                 source_path=source_path,
                 archive_path=archive_path,
-                archive_name=archive_path.stem.replace(".tar", ""),
-                compression_settings=self.compression_settings,
+                archive_name=archive_path.stem,
+                sevenzip_settings=self.sevenzip_settings,
                 par2_settings=self.par2_settings,
-                tar_settings=TarSettings(),
             )
 
 
@@ -1295,7 +857,7 @@ def create_cold_storage_archive(
     source: Union[str, Path],
     output_dir: Union[str, Path],
     archive_name: Optional[str] = None,
-    compression_level: int = 19,
+    compression_level: int = 5,
     verify: bool = True,
     generate_par2: bool = True,
 ) -> ArchiveResult:
@@ -1305,17 +867,19 @@ def create_cold_storage_archive(
         source: Path to source file/directory/archive
         output_dir: Directory to create archive in
         archive_name: Custom archive name
-        compression_level: Zstd compression level (1-22)
+        compression_level: 7z compression level (1-9)
         verify: Whether to perform verification
         generate_par2: Whether to generate PAR2 recovery files
 
     Returns:
         Archive result
     """
-    compression_settings = CompressionSettings(level=compression_level)
+    sevenzip_settings = SevenZipSettings(level=compression_level)
     processing_options = ProcessingOptions(
         verify_integrity=verify, generate_par2=generate_par2
     )
 
-    archiver = ColdStorageArchiver(compression_settings, processing_options)
+    archiver = ColdStorageArchiver(
+        processing_options, sevenzip_settings=sevenzip_settings
+    )
     return archiver.create_archive(source, output_dir, archive_name)

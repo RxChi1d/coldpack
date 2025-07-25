@@ -58,7 +58,7 @@ class ArchiveVerifier:
         self.decompressor = ZstdDecompressor()
         self.hash_verifier = HashVerifier()
         self.par2_manager: Optional[Any] = None  # Initialized when needed
-        logger.debug("ArchiveVerifier initialized")
+        logger.debug("Archive verifier initialized")
 
     def verify_complete(
         self,
@@ -100,7 +100,7 @@ class ArchiveVerifier:
             expected_layers_count += 1  # par2_recovery (will be marked as failed)
 
         logger.info(
-            f"Starting {expected_layers_count}-layer verification for: {archive_obj}"
+            f"Starting {expected_layers_count}-layer verification: {archive_obj.name}"
         )
 
         results = []
@@ -110,7 +110,7 @@ class ArchiveVerifier:
             result = self.verify_7z_integrity(archive_obj)
             results.append(result)
             if not result.success:
-                logger.error("7z verification failed, skipping remaining layers")
+                logger.error("7z integrity check failed, aborting verification")
                 return results
         except Exception as e:
             results.append(
@@ -162,9 +162,12 @@ class ArchiveVerifier:
         passed_layers = sum(1 for r in results if r.success)
         total_layers = len(results)
 
-        logger.info(
-            f"Verification complete: {passed_layers}/{total_layers} layers passed"
-        )
+        if passed_layers == total_layers:
+            logger.success(f"Verification complete: all {total_layers} layers passed")
+        else:
+            logger.error(
+                f"Verification failed: {passed_layers}/{total_layers} layers passed"
+            )
 
         return results
 
@@ -304,15 +307,17 @@ class ArchiveVerifier:
         results = []
 
         try:
-            logger.debug(f"Verifying hash files for: {archive_obj}")
+            logger.debug(f"Verifying hash files for: {archive_obj.name}")
 
             for algorithm, hash_file_path in hash_files.items():
                 try:
+                    logger.debug(f"Verifying {algorithm.upper()} hash")
                     success = self.hash_verifier.verify_file_hash(
                         archive_obj, hash_file_path, algorithm
                     )
 
                     if success:
+                        logger.success(f"{algorithm.upper()} hash verification passed")
                         results.append(
                             VerificationResult(
                                 f"{algorithm}_hash",
@@ -321,6 +326,7 @@ class ArchiveVerifier:
                             )
                         )
                     else:
+                        logger.error(f"{algorithm.upper()} hash verification failed")
                         results.append(
                             VerificationResult(
                                 f"{algorithm}_hash",
@@ -330,7 +336,7 @@ class ArchiveVerifier:
                         )
 
                 except Exception as e:
-                    logger.error(f"{algorithm.upper()} verification failed: {e}")
+                    logger.error(f"{algorithm.upper()} hash verification failed: {e}")
                     results.append(
                         VerificationResult(
                             f"{algorithm}_hash",
@@ -366,7 +372,7 @@ class ArchiveVerifier:
         par2_obj = Path(par2_file)
 
         try:
-            logger.debug(f"Verifying PAR2 recovery: {par2_obj}")
+            logger.debug(f"Checking PAR2 recovery files: {par2_obj.name}")
 
             # Initialize PAR2 manager with original parameters if available
             if self.par2_manager is None:
@@ -377,7 +383,7 @@ class ArchiveVerifier:
                 if par2_settings:
                     redundancy_percent = par2_settings.redundancy_percent
                     logger.debug(
-                        f"Using PAR2 parameters from metadata: {redundancy_percent}% redundancy"
+                        f"Using PAR2 settings from metadata: {redundancy_percent}% redundancy"
                     )
 
                 self.par2_manager = PAR2Manager(redundancy_percent=redundancy_percent)
@@ -412,7 +418,7 @@ class ArchiveVerifier:
         archive_obj = Path(archive_path)
 
         try:
-            logger.debug(f"Verifying 7z integrity: {archive_obj}")
+            logger.debug(f"Checking 7z integrity: {archive_obj.name}")
 
             # Import py7zz for 7z operations
             import py7zz  # type: ignore
@@ -421,6 +427,7 @@ class ArchiveVerifier:
             is_valid = py7zz.test_archive(str(archive_obj))
 
             if is_valid:
+                logger.success("7z integrity check passed")
                 return VerificationResult(
                     "7z_integrity", True, "7z integrity check passed"
                 )
@@ -715,7 +722,7 @@ class ArchiveVerifier:
             layer for layer in total_possible_layers if layer not in skip_layers
         ]
 
-        logger.info(f"Starting {len(expected_layers)}-layer verification (format: 7z)")
+        logger.info(f"Starting {len(expected_layers)}-layer verification")
 
         results = []
 
@@ -725,7 +732,7 @@ class ArchiveVerifier:
                 result = self.verify_7z_integrity(archive_obj)
                 results.append(result)
                 if not result.success:
-                    logger.error("7z verification failed, skipping remaining layers")
+                    logger.error("7z integrity check failed, aborting verification")
                     return results
             except Exception as e:
                 results.append(
@@ -781,9 +788,12 @@ class ArchiveVerifier:
         passed_layers = sum(1 for r in results if r.success)
         total_layers = len(results)
 
-        logger.info(
-            f"Verification complete: {passed_layers}/{total_layers} layers passed"
-        )
+        if passed_layers == total_layers:
+            logger.success(f"Verification complete: all {total_layers} layers passed")
+        else:
+            logger.error(
+                f"Verification failed: {passed_layers}/{total_layers} layers passed"
+            )
 
         return results
 

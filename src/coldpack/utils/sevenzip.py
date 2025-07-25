@@ -34,9 +34,7 @@ class SevenZipCompressor:
         self._config_dict = self.settings.to_py7zz_config()
         # Create py7zz Config object
         self._py7zz_config = py7zz.Config(**self._config_dict)
-        logger.debug(
-            f"SevenZipCompressor initialized with settings: {self._config_dict}"
-        )
+        logger.debug(f"7z compressor initialized: {self._config_dict}")
 
     def compress_directory(
         self,
@@ -67,8 +65,8 @@ class SevenZipCompressor:
         # Ensure parent directory exists
         archive_obj.parent.mkdir(parents=True, exist_ok=True)
 
-        logger.debug(f"Compressing directory {source_path} to {archive_obj}")
-        logger.debug(f"Using compression settings: {self._config_dict}")
+        logger.debug(f"Compressing directory: {source_path.name} → {archive_obj.name}")
+        logger.debug(f"7z settings: {self._config_dict}")
 
         try:
             # Use SevenZipFile for compression with Config
@@ -79,7 +77,7 @@ class SevenZipCompressor:
                 archive.add(str(source_path))
 
             # Success will be logged in archiver with file size info
-            logger.debug(f"7z compression completed: {archive_obj}")
+            logger.debug(f"7z compression completed: {archive_obj.name}")
 
         except py7zz.CompressionError as e:
             raise CompressionError(f"7z compression failed: {e}") from e
@@ -125,8 +123,10 @@ class SevenZipCompressor:
         archive_obj = Path(archive_path)
         archive_obj.parent.mkdir(parents=True, exist_ok=True)
 
-        logger.info(f"Compressing {len(files)} files to {archive_obj}")
-        logger.debug(f"Files: {[str(p) for p in file_paths]}")
+        logger.debug(f"Compressing {len(files)} files to {archive_obj.name}")
+        logger.debug(
+            f"File list: {[p.name for p in file_paths[:10]]}{' (+more)' if len(file_paths) > 10 else ''}"
+        )
 
         try:
             # Use SevenZipFile for compression with Config
@@ -137,9 +137,7 @@ class SevenZipCompressor:
                 for file_path in file_paths:
                     archive.add(str(file_path))
 
-            logger.success(
-                f"Successfully compressed {len(files)} files to {archive_obj}"
-            )
+            logger.debug(f"7z archive created: {archive_obj.name} ({len(files)} files)")
 
         except py7zz.CompressionError as e:
             raise CompressionError(f"7z compression failed: {e}") from e
@@ -168,23 +166,23 @@ class SevenZipCompressor:
         archive_obj = Path(archive_path)
 
         if not archive_obj.exists():
-            logger.warning(f"Archive not found for integrity test: {archive_obj}")
+            logger.warning(f"Archive not found for integrity test: {archive_obj.name}")
             return False
 
         try:
-            logger.debug(f"Testing 7z archive integrity: {archive_obj}")
+            logger.debug(f"Testing 7z integrity: {archive_obj.name}")
             # py7zz expects string paths
             result = py7zz.test_archive(str(archive_obj))
 
             if result:
                 logger.debug(f"7z integrity test passed: {archive_obj}")
             else:
-                logger.warning(f"7z integrity test failed: {archive_obj}")
+                logger.warning(f"7z integrity test failed: {archive_obj.name}")
 
             return bool(result)
 
         except Exception as e:
-            logger.error(f"Error during 7z integrity test: {e}")
+            logger.error(f"7z integrity test error: {e}")
             return False
 
     def _create_progress_adapter(

@@ -96,7 +96,7 @@ def _load_coldpack_metadata(
         try:
             metadata = ArchiveMetadata.load_from_toml(metadata_path)
             if verbose:
-                logger.info(f"Loading coldpack metadata from: {metadata_path}")
+                logger.debug(f"Loading metadata from: {metadata_path}")
             return metadata, None
         except Exception as e:
             # If metadata.toml exists but is corrupted, return error but don't raise
@@ -404,9 +404,8 @@ def archive(
             )
 
         archiver = ColdStorageArchiver(
-            None,  # No compression_settings for 7z format
-            processing_options,
-            par2_settings,
+            processing_options=processing_options,
+            par2_settings=par2_settings,
             sevenzip_settings=sevenzip_settings,
         )
 
@@ -568,26 +567,17 @@ def extract(
             console.print(
                 "[cyan]Coldpack archive detected - using original compression parameters[/cyan]"
             )
-            # Display parameters based on archive format
-            if metadata.compression_settings:
-                # TAR.ZST format
-                console.print(
-                    f"[cyan]  Compression level: {metadata.compression_settings.level}[/cyan]"
-                )
-                console.print(
-                    f"[cyan]  Threads: {metadata.compression_settings.threads}[/cyan]"
-                )
-                console.print(
-                    f"[cyan]  Long distance: {metadata.compression_settings.long_mode}[/cyan]"
-                )
-            elif metadata.sevenzip_settings:
-                # 7Z format
+            # Display 7z compression parameters
+            if metadata.sevenzip_settings:
                 console.print(
                     f"[cyan]  Compression level: {metadata.sevenzip_settings.level}[/cyan]"
                 )
-                console.print(
-                    f"[cyan]  Threads: {metadata.sevenzip_settings.threads}[/cyan]"
+                threads_display = (
+                    "all"
+                    if metadata.sevenzip_settings.threads == 0
+                    else str(metadata.sevenzip_settings.threads)
                 )
+                console.print(f"[cyan]  Threads: {threads_display}[/cyan]")
                 console.print(
                     f"[cyan]  Method: {metadata.sevenzip_settings.method}[/cyan]"
                 )
@@ -996,10 +986,8 @@ def display_archive_summary(result: Any) -> None:
     table.add_row("Compressed Size", format_file_size(metadata.compressed_size))
     table.add_row("Compression Ratio", f"{metadata.compression_percentage:.1f}%")
     table.add_row("Files", str(metadata.file_count))
-    # Display compression level based on archive format
-    if metadata.compression_settings:
-        table.add_row("Compression Level", str(metadata.compression_settings.level))
-    elif metadata.sevenzip_settings:
+    # Display 7z compression level
+    if metadata.sevenzip_settings:
         table.add_row("Compression Level", str(metadata.sevenzip_settings.level))
 
     if metadata.verification_hashes:
@@ -1162,26 +1150,8 @@ def display_metadata_info(archive_path: Path, metadata: Any) -> None:
     creation_table.add_column("Setting", style="dim", no_wrap=True, width=20)
     creation_table.add_column("Value", style="yellow")
 
-    # Display compression settings based on archive format
-    if metadata.compression_settings:
-        # TAR.ZST format settings
-        creation_table.add_row(
-            "├── Zstd Level", str(metadata.compression_settings.level)
-        )
-
-        # Handle long distance display
-        if metadata.compression_settings.long_distance is not None:
-            long_display = str(metadata.compression_settings.long_distance)
-        else:
-            long_display = (
-                "true" if metadata.compression_settings.long_mode else "false"
-            )
-        creation_table.add_row("├── Long Distance", long_display)
-
-        creation_table.add_row(
-            "├── Threads", str(metadata.compression_settings.threads)
-        )
-    elif metadata.sevenzip_settings:
+    # Display 7z compression settings
+    if metadata.sevenzip_settings:
         # 7Z format settings
         creation_table.add_row("├── 7z Level", str(metadata.sevenzip_settings.level))
         creation_table.add_row("├── Method", metadata.sevenzip_settings.method)
@@ -1193,9 +1163,7 @@ def display_metadata_info(archive_path: Path, metadata: Any) -> None:
             "└── Solid", "true" if metadata.sevenzip_settings.solid else "false"
         )
 
-    # Only show TAR method for tar.zst format
-    if metadata.compression_settings and metadata.tar_settings:
-        creation_table.add_row("└── TAR Method", metadata.tar_settings.method.title())
+    # No additional settings to display for 7z format
 
     console.print(creation_table)
 
@@ -1629,11 +1597,11 @@ def list_archive(
         console.print("\n[dim]Tip: Use 'cpack formats' to see supported formats[/dim]")
         raise typer.Exit(ExitCodes.INVALID_FORMAT) from e
     except ListingError as e:
-        logger.error(f"Listing failed: {e}")
+        logger.error(f"Archive listing failed: {e}")
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(ExitCodes.GENERAL_ERROR) from e
     except Exception as e:
-        logger.error(f"Unexpected error during listing: {e}")
+        logger.error(f"Unexpected listing error: {e}")
         console.print(f"[red]Unexpected error: {e}[/red]")
         raise typer.Exit(ExitCodes.GENERAL_ERROR) from e
 
