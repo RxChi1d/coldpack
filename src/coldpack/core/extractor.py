@@ -547,17 +547,26 @@ class MultiFormatExtractor:
         logger.info(f"Extracting tar.zst archive: {archive_path}")
 
         if metadata:
-            logger.info("Using original compression parameters from metadata")
-            if metadata.compression_settings:
-                # TAR.ZST format metadata
-                logger.debug(f"  Level: {metadata.compression_settings.level}")
-                logger.debug(f"  Threads: {metadata.compression_settings.threads}")
-                logger.debug(f"  Long mode: {metadata.compression_settings.long_mode}")
+            logger.info("Using metadata from coldpack archive")
+            # Legacy support: Check for old compression_settings (for backward compatibility)
+            if (
+                hasattr(metadata, "compression_settings")
+                and metadata.compression_settings
+            ):
+                logger.debug(
+                    f"  Legacy Zstd Level: {metadata.compression_settings.level}"
+                )
+                logger.debug(
+                    f"  Legacy Threads: {metadata.compression_settings.threads}"
+                )
+                logger.debug(
+                    f"  Legacy Long mode: {metadata.compression_settings.long_mode}"
+                )
             elif metadata.sevenzip_settings:
                 # 7Z format metadata (shouldn't occur in tar.zst extraction, but handle gracefully)
-                logger.debug(f"  Level: {metadata.sevenzip_settings.level}")
-                logger.debug(f"  Threads: {metadata.sevenzip_settings.threads}")
-                logger.debug(f"  Method: {metadata.sevenzip_settings.method}")
+                logger.debug(f"  7z Level: {metadata.sevenzip_settings.level}")
+                logger.debug(f"  7z Threads: {metadata.sevenzip_settings.threads}")
+                logger.debug(f"  7z Method: {metadata.sevenzip_settings.method}")
 
         # Use a temporary directory for the intermediate tar file
         import tempfile

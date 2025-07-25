@@ -3,7 +3,11 @@
 import pytest
 
 from coldpack.config.constants import DEFAULT_COMPRESSION_LEVEL, SUPPORTED_INPUT_FORMATS
-from coldpack.config.settings import ArchiveMetadata, CompressionSettings
+from coldpack.config.settings import (
+    ArchiveMetadata,
+    CompressionSettings,
+    SevenZipSettings,
+)
 
 
 class TestCompressionSettings:
@@ -60,14 +64,13 @@ class TestArchiveMetadata:
     def test_metadata_creation(self, tmp_path):
         """Test creating archive metadata."""
         source_path = tmp_path / "source"
-        archive_path = tmp_path / "archive.tar.zst"
-        settings = CompressionSettings()
+        archive_path = tmp_path / "archive.7z"
 
         metadata = ArchiveMetadata(
             source_path=source_path,
             archive_path=archive_path,
             archive_name="test_archive",
-            compression_settings=settings,
+            sevenzip_settings=SevenZipSettings(),
             original_size=1000,
             compressed_size=600,
         )
@@ -81,9 +84,9 @@ class TestArchiveMetadata:
         """Test compression ratio calculation."""
         metadata = ArchiveMetadata(
             source_path=tmp_path / "source",
-            archive_path=tmp_path / "archive.tar.zst",
+            archive_path=tmp_path / "archive.7z",
             archive_name="test_archive",
-            compression_settings=CompressionSettings(),
+            sevenzip_settings=SevenZipSettings(),
             original_size=1000,
             compressed_size=600,
         )
