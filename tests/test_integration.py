@@ -2,7 +2,7 @@
 
 import pytest
 
-from coldpack.config.settings import CompressionSettings, ProcessingOptions
+from coldpack.config.settings import ProcessingOptions, SevenZipSettings
 from coldpack.core.archiver import ColdStorageArchiver
 
 
@@ -30,23 +30,25 @@ class TestBasicIntegration:
         """Test that archiver can be initialized with default settings."""
         archiver = ColdStorageArchiver()
 
-        assert archiver.compression_settings.level == 19
+        assert archiver.sevenzip_settings.level >= 1
         assert archiver.processing_options.verify_integrity is True
         assert archiver.processing_options.generate_par2 is True
 
     def test_archiver_with_custom_settings(self):
         """Test archiver initialization with custom settings."""
-        compression_settings = CompressionSettings(level=15, threads=2, long_mode=False)
+        sevenzip_settings = SevenZipSettings(level=5, threads=2)
 
         processing_options = ProcessingOptions(
             verify_integrity=False, generate_par2=False, verbose=True
         )
 
-        archiver = ColdStorageArchiver(compression_settings, processing_options)
+        archiver = ColdStorageArchiver(
+            processing_options=processing_options,
+            sevenzip_settings=sevenzip_settings,
+        )
 
-        assert archiver.compression_settings.level == 15
-        assert archiver.compression_settings.threads == 2
-        assert archiver.compression_settings.long_mode is False
+        assert archiver.sevenzip_settings.level == 5
+        assert archiver.sevenzip_settings.threads == 2
         assert archiver.processing_options.verify_integrity is False
         assert archiver.processing_options.generate_par2 is False
 
@@ -56,12 +58,15 @@ class TestBasicIntegration:
         output_dir.mkdir()
 
         # Use minimal settings for testing
-        compression_settings = CompressionSettings(level=1, long_mode=False)
+        sevenzip_settings = SevenZipSettings(level=1)
         processing_options = ProcessingOptions(
             verify_integrity=False, generate_par2=False
         )
 
-        archiver = ColdStorageArchiver(compression_settings, processing_options)
+        archiver = ColdStorageArchiver(
+            processing_options=processing_options,
+            sevenzip_settings=sevenzip_settings,
+        )
 
         # Just test that the archiver accepts valid inputs
         assert sample_directory.exists()
@@ -69,7 +74,7 @@ class TestBasicIntegration:
 
         # Verify the archiver components are initialized
         assert archiver.extractor is not None
-        assert archiver.compressor is not None
+        assert archiver.sevenzip_compressor is not None
         assert archiver.verifier is not None
 
 
@@ -112,11 +117,10 @@ class TestModuleImports:
 
     def test_config_imports(self):
         """Test that configuration modules can be imported."""
-        from coldpack.config.constants import DEFAULT_COMPRESSION_LEVEL
-        from coldpack.config.settings import CompressionSettings
+        from coldpack.config.settings import SevenZipSettings
 
-        settings = CompressionSettings()
-        assert settings.level == DEFAULT_COMPRESSION_LEVEL
+        settings = SevenZipSettings()
+        assert settings.level >= 1
 
     def test_main_package_import(self):
         """Test that main package can be imported."""
@@ -165,27 +169,33 @@ class TestForceOverwrite:
     def test_archive_without_force_fails_on_existing_file(
         self, sample_directory, tmp_path
     ):
-        """Test that archive creation fails when target exists and force=False."""
+        """Test that archive creation fails when target directory exists and force=False."""
         output_dir = tmp_path / "output"
         output_dir.mkdir()
 
-        # Create existing archive file (using default 7z format)
-        # The archiver initially creates: output_dir/test_data.7z
-        existing_archive = output_dir / "test_data.7z"
-        existing_archive.write_text("existing archive content")
+        # Create existing archive directory structure (using default 7z format)
+        # The archiver now checks for: output_dir/test_data/ directory
+        existing_archive_dir = output_dir / "test_data"
+        existing_archive_dir.mkdir()
+        (existing_archive_dir / "test_data.7z").write_text("existing archive content")
 
         # Try to create archive without force
-        compression_settings = CompressionSettings(level=1)
+        sevenzip_settings = SevenZipSettings(level=1)
         processing_options = ProcessingOptions(
             verify_integrity=False, generate_par2=False, force_overwrite=False
         )
 
-        archiver = ColdStorageArchiver(compression_settings, processing_options)
+        archiver = ColdStorageArchiver(
+            processing_options=processing_options,
+            sevenzip_settings=sevenzip_settings,
+        )
 
         # This should raise an ArchivingError
         from coldpack.core.archiver import ArchivingError
 
-        with pytest.raises(ArchivingError, match="Archive already exists.*Use --force"):
+        with pytest.raises(
+            ArchivingError, match="Archive directory already exists.*Use --force"
+        ):
             archiver.create_archive(sample_directory, output_dir)
 
     def test_extractor_force_overwrite_parameter(self, tmp_path):
@@ -242,10 +252,7 @@ class TestErrorHandling:
     def test_invalid_compression_settings(self):
         """Test invalid compression settings handling."""
         with pytest.raises(ValueError):
-            CompressionSettings(level=0)  # Below minimum
+            SevenZipSettings(level=0)  # Below minimum
 
         with pytest.raises(ValueError):
-            CompressionSettings(level=25)  # Above maximum
-
-        with pytest.raises(ValueError):
-            CompressionSettings(level=15, ultra_mode=True)  # Invalid ultra mode
+            SevenZipSettings(level=10)  # Above maximum

@@ -404,9 +404,8 @@ def archive(
             )
 
         archiver = ColdStorageArchiver(
-            None,  # No compression_settings for 7z format
-            processing_options,
-            par2_settings,
+            processing_options=processing_options,
+            par2_settings=par2_settings,
             sevenzip_settings=sevenzip_settings,
         )
 

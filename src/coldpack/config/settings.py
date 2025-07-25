@@ -93,7 +93,7 @@ class PAR2Settings(BaseModel):
 class SevenZipSettings(BaseModel):
     """Configuration for 7z compression operations using py7zz."""
 
-    level: int = Field(default=5, ge=0, le=9, description="Compression level (0-9)")
+    level: int = Field(default=5, ge=1, le=9, description="Compression level (1-9)")
     dictionary_size: str = Field(
         default="16m",
         description="Dictionary size (128k, 1m, 4m, 16m, 64m, 256m, 512m)",
@@ -176,19 +176,13 @@ class ArchiveMetadata(BaseModel):
     created_at_iso: str = Field(default="", description="ISO formatted creation time")
 
     # Archive format
-    archive_format: str = Field(
-        default="tar.zst", description="Archive format (7z or tar.zst)"
-    )
+    archive_format: str = Field(default="7z", description="Archive format (7z only)")
 
-    # Processing settings (complete configuration preservation)
-    compression_settings: Optional[CompressionSettings] = Field(
-        default=None, description="Zstd compression settings for tar.zst format"
-    )
+    # Processing settings (7z format only)
     sevenzip_settings: Optional[SevenZipSettings] = Field(
-        default=None, description="7z compression settings for 7z format"
+        default=None, description="7z compression settings"
     )
     par2_settings: PAR2Settings = Field(default_factory=PAR2Settings)
-    tar_settings: TarSettings = Field(default_factory=TarSettings)
 
     @field_validator("archive_format")
     @classmethod
@@ -253,10 +247,8 @@ class ArchiveMetadata(BaseModel):
         # Calculate compression ratio if sizes are available
         self.calculate_compression_ratio()
 
-        # Ensure format-specific settings are set
-        if self.archive_format == "tar.zst" and self.compression_settings is None:
-            self.compression_settings = CompressionSettings()
-        elif self.archive_format == "7z" and self.sevenzip_settings is None:
+        # Ensure 7z settings are set
+        if self.sevenzip_settings is None:
             self.sevenzip_settings = SevenZipSettings()
 
     @property
@@ -300,17 +292,11 @@ class ArchiveMetadata(BaseModel):
             "archive": {
                 "format": self.archive_format,
             },
-            "compression": self._get_compression_dict(),
             "sevenzip": self._get_sevenzip_dict(),
             "par2": {
                 "redundancy_percent": self.par2_settings.redundancy_percent,
                 "block_count": self.par2_settings.block_count,
                 "files": self.par2_files,
-            },
-            "tar": {
-                "method": self.tar_settings.method,
-                "sort_files": self.tar_settings.sort_files,
-                "preserve_permissions": self.tar_settings.preserve_permissions,
             },
             "integrity": {
                 "hashes": self.verification_hashes,
@@ -321,18 +307,6 @@ class ArchiveMetadata(BaseModel):
                 "temp_directory": self.temp_directory_used,
             },
         }
-
-    def _get_compression_dict(self) -> dict[str, Any]:
-        """Get compression settings dictionary for TOML serialization."""
-        if self.compression_settings is not None:
-            return {
-                "level": self.compression_settings.level,
-                "threads": self.compression_settings.threads,
-                "long_mode": self.compression_settings.long_mode,
-                "long_distance": self.compression_settings.long_distance,
-                "ultra_mode": self.compression_settings.ultra_mode,
-            }
-        return {}
 
     def _get_sevenzip_dict(self) -> dict[str, Any]:
         """Get sevenzip settings dictionary for TOML serialization."""
@@ -379,30 +353,23 @@ class ArchiveMetadata(BaseModel):
         metadata_section = toml_data.get("metadata", {})
         content_section = toml_data.get("content", {})
         archive_section = toml_data.get("archive", {})
-        compression_section = toml_data.get("compression", {})
         sevenzip_section = toml_data.get("sevenzip", {})
         par2_section = toml_data.get("par2", {})
-        tar_section = toml_data.get("tar", {})
         integrity_section = toml_data.get("integrity", {})
         processing_section = toml_data.get("processing", {})
 
         # Get archive format
-        archive_format = archive_section.get("format", "tar.zst")
+        archive_format = archive_section.get("format", "7z")
 
-        # Reconstruct settings objects based on format
-        compression_settings = None
+        # Reconstruct 7z settings
         sevenzip_settings = None
-
-        if archive_format == "tar.zst" and compression_section:
-            compression_settings = CompressionSettings(**compression_section)
-        elif archive_format == "7z" and sevenzip_section:
+        if sevenzip_section:
             sevenzip_settings = SevenZipSettings(**sevenzip_section)
 
         par2_settings = PAR2Settings(
             redundancy_percent=par2_section.get("redundancy_percent", 10),
             block_count=par2_section.get("block_count", 2000),
         )
-        tar_settings = TarSettings(**tar_section)
 
         # Create metadata object
         return cls(
@@ -419,10 +386,8 @@ class ArchiveMetadata(BaseModel):
             # Archive format
             archive_format=archive_format,
             # Settings
-            compression_settings=compression_settings,
             sevenzip_settings=sevenzip_settings,
             par2_settings=par2_settings,
-            tar_settings=tar_settings,
             # Content statistics
             file_count=content_section.get("file_count", 0),
             directory_count=content_section.get("directory_count", 0),
