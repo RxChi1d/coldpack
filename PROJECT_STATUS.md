@@ -6,7 +6,7 @@ coldpack 是一個跨平台的冷儲存 Python CLI 套件，專門用於將指�
 
 **目標**：提供一個可靠、標準化的 7z 冷儲存解決方案，透過簡潔的 `cpack` 命令確保重要資料的長期保存安全性。
 
-**專案成熟度**: **99% 完成** - 7z 專用架構完全實現，Windows 檔案名稱相容性完善，CLI 大幅簡化，核心功能高度完善，list 命令完整實現，程式碼品質達標
+**專案成熟度**: **99.8% 完成** - 7z 專用架構完全實現，Windows 檔案名稱相容性完善，CLI 大幅簡化，核心功能高度完善，list 命令完整實現，**日誌系統全面優化**，程式碼品質達標
 
 ## 功能實現狀況
 
@@ -444,7 +444,7 @@ Total: 23 files, 4 directories (40.96 KB)
 
 ## 結論與專案狀態總結
 
-### **專案成熟度評估: 98% 完成 (v1.4.0-dev)**
+### **專案成熟度評估: 99.8% 完成 (v1.6.2-dev)**
 
 coldpack 專案已經是一個**專業、純淨、極度簡化的 7z 冷儲存解決方案**。透過徹底移除 CLI 對 tar.zst 的支援、精確動態參數優化的實現、CLI 介面的大幅簡化，coldpack 現在專注於成為**業界最佳的 7z 冷儲存工具**。
 
@@ -679,10 +679,75 @@ cpack extract --verify --force -o /path/to/output archive.7z
 - ✅ mypy 類型檢查通過
 - ✅ 全部 133 個測試通過
 
+### 🚀 重大改善：日誌系統全面優化 (2025-07-26)
+**分支**: `refactor/optimize-logging-and-workflow`
+**問題範圍**: 使用者體驗和日誌訊息專業化
+
+#### 實現的關鍵改善
+41. **步驟編號整合** - ✅ 已實現：合併 Step 2a/2b 為「Step 2: Creating 7z archive」，合併 Step 5/6 為「Step 3: Generating hash files」
+42. **創建與驗證分離** - ✅ 已實現：Hash 和 PAR2 操作分別顯示「generated」和「verified」訊息，提升錯誤定位能力
+43. **修復缺失的驗證日誌** - ✅ 已修復：SHA256 和 BLAKE3 驗證現在正確顯示進度訊息
+44. **用戶友好顯示改善** - ✅ 已實現："Threads: 0" 改為 "Threads: all"，提升可讀性
+45. **專業術語統一** - ✅ 已完成：統一使用 "integrity check" vs "verification"，優化檔案引用格式
+
+#### 技術實現細節
+- **archiver.py**: 重構步驟編號，分離 hash 創建和驗證日誌訊息
+- **verifier.py**: 新增 SHA256/BLAKE3 驗證進度日誌，統一驗證完成訊息格式
+- **cli.py**: 改善 threads 顯示邏輯，優化 metadata 載入日誌
+- **全模組優化**: 統一日誌層級使用（INFO/SUCCESS/DEBUG/ERROR），提升訊息一致性
+- **類型安全**: 修復 mypy 類型檢查錯誤，移除未使用的 imports
+
+#### 新的日誌輸出效果
+**封存流程**:
+```
+INFO     | Creating cold storage archive: test_sample
+INFO     | Step 1: Preparing source content
+INFO     | Step 2: Creating 7z archive with dynamic optimization
+SUCCESS  | 7z archive created: test_sample.7z (397 bytes)
+INFO     | Step 3: Generating hash files
+SUCCESS  | SHA256 hash file generated
+SUCCESS  | SHA256 hash verified
+SUCCESS  | BLAKE3 hash file generated
+SUCCESS  | BLAKE3 hash verified
+INFO     | Step 4: Generating PAR2 recovery files (10% redundancy)
+SUCCESS  | PAR2 recovery files generated (2 files)
+SUCCESS  | PAR2 recovery files verified
+```
+
+**驗證流程**:
+```
+INFO     | Starting 4-layer verification
+SUCCESS  | 7z integrity check passed
+SUCCESS  | SHA256 hash verification passed
+SUCCESS  | BLAKE3 hash verification passed
+SUCCESS  | PAR2 integrity check passed
+SUCCESS  | Verification complete: all 4 layers passed
+```
+
+**解壓縮參數顯示**:
+```
+Coldpack archive detected - using original compression parameters
+  Compression level: 1
+  Threads: all  ← 從 "Threads: 0" 改善
+  Method: LZMA2
+```
+
+#### 影響範圍
+- **用戶體驗大幅提升**: 日誌輸出更加專業、清晰、一致
+- **錯誤診斷改善**: 分離的創建/驗證訊息讓問題定位更精確
+- **專業形象提升**: 統一的術語和格式化風格提升軟體專業度
+- **維護性改善**: 一致的日誌系統降低維護成本
+
+#### 程式碼品質提升
+- ✅ 通過所有 pre-commit hooks (ruff check, ruff format, mypy)
+- ✅ 修復類型安全問題和未使用的 imports
+- ✅ 134 個測試全部通過，功能完整性保持
+- ✅ 符合 Conventional Commits 規範
+
 ---
 
-**更新日期**: 2025-07-24
-**當前版本**: v1.6.1-dev (99.5% 完成)
-**專案狀態**: 專業化架構完成，Windows 檔案名稱相容性完善，7z 專用冷儲存解決方案，CLI 大幅簡化，**CLI 使用體驗持續優化**
-**最新提交**: fix(cli): improve verification layer counting and extract --verify details (fix/cli-improvements 分支)
-**下一個里程碑**: 完善測試覆蓋度和效能優化，達到 100% 完成
+**更新日期**: 2025-07-26
+**當前版本**: v1.6.2-dev (99.8% 完成)
+**專案狀態**: 專業化架構完成，Windows 檔案名稱相容性完善，7z 專用冷儲存解決方案，CLI 大幅簡化，**日誌系統全面優化**
+**最新提交**: refactor: optimize logging messages across all modules for better user experience (refactor/optimize-logging-and-workflow 分支)
+**下一個里程碑**: 完善測試覆蓋度，達到 100% 完成
