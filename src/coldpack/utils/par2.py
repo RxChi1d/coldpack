@@ -242,7 +242,6 @@ class PAR2Manager:
             ]
 
         try:
-            logger.info("Verifying PAR2 recovery files")
             logger.debug(f"Running PAR2 verify from directory: {work_dir}")
             logger.debug(f"PAR2 file path: {par2_rel_path}")
             if par2_obj.parent.name == "metadata":

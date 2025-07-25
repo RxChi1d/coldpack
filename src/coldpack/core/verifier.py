@@ -421,6 +421,7 @@ class ArchiveVerifier:
             is_valid = py7zz.test_archive(str(archive_obj))
 
             if is_valid:
+                logger.success("7z integrity verification passed")
                 return VerificationResult(
                     "7z_integrity", True, "7z integrity check passed"
                 )
