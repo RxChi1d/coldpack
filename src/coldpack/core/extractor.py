@@ -33,7 +33,7 @@ class MultiFormatExtractor:
 
     def __init__(self) -> None:
         """Initialize the extractor."""
-        logger.debug("MultiFormatExtractor initialized")
+        logger.debug("Multi-format extractor initialized")
 
     def _get_clean_archive_name(self, source_path: Path) -> str:
         """Get clean archive name by removing known archive extensions.
@@ -149,7 +149,7 @@ class MultiFormatExtractor:
         Returns:
             Path to the source directory
         """
-        logger.info(f"Source is directory, using directly: {source_dir}")
+        logger.info(f"Using directory directly: {source_dir}")
         return source_dir
 
     def _extract_archive(
@@ -327,14 +327,14 @@ class MultiFormatExtractor:
         Raises:
             ExtractionError: If extraction fails
         """
-        logger.info(f"Extracting 7z archive: {archive_path}")
+        logger.info(f"Extracting 7z archive: {archive_path.name}")
 
         if (
             metadata
             and hasattr(metadata, "sevenzip_settings")
             and metadata.sevenzip_settings
         ):
-            logger.info("Using 7z settings from metadata")
+            logger.debug("Using 7z settings from metadata")
             logger.debug(f"  Level: {metadata.sevenzip_settings.level}")
             logger.debug(f"  Dictionary: {metadata.sevenzip_settings.dictionary_size}")
             logger.debug(f"  Method: {metadata.sevenzip_settings.method}")
@@ -385,26 +385,26 @@ class MultiFormatExtractor:
                     # Check for Windows filename conflicts
                     if needs_windows_filename_handling(file_list):
                         logger.info(
-                            "Windows filename conflicts detected, applying filename sanitization"
+                            "Applying Windows filename sanitization for conflicts"
                         )
 
                         # Get conflicts details for logging
                         conflicts = check_windows_filename_conflicts(file_list)
                         if conflicts["reserved_names"]:
-                            logger.warning(
-                                f"Reserved names found: {len(conflicts['reserved_names'])} files"
+                            logger.debug(
+                                f"Reserved names: {len(conflicts['reserved_names'])} files"
                             )
                         if conflicts["invalid_chars"]:
-                            logger.warning(
-                                f"Invalid characters found: {len(conflicts['invalid_chars'])} files"
+                            logger.debug(
+                                f"Invalid characters: {len(conflicts['invalid_chars'])} files"
                             )
                         if conflicts["case_conflicts"]:
-                            logger.warning(
-                                f"Case conflicts found: {len(conflicts['case_conflicts'])} files"
+                            logger.debug(
+                                f"Case conflicts: {len(conflicts['case_conflicts'])} files"
                             )
                         if conflicts["length_conflicts"]:
-                            logger.warning(
-                                f"Length conflicts found: {len(conflicts['length_conflicts'])} files"
+                            logger.debug(
+                                f"Length conflicts: {len(conflicts['length_conflicts'])} files"
                             )
 
                         # Create filename mapping
@@ -434,7 +434,7 @@ class MultiFormatExtractor:
                 # No items extracted - error
                 raise ExtractionError("No content found after 7z extraction")
 
-            logger.success("7z archive extracted successfully")
+            logger.success(f"7z archive extracted: {archive_path.name}")
             return result_path
 
         except py7zz.Py7zzError as e:
@@ -517,7 +517,7 @@ class MultiFormatExtractor:
                         logger.debug(f"Progress callback error: {e}")
 
             except Exception as e:
-                logger.error(f"Failed to extract file {original_path}: {e}")
+                logger.error(f"Extraction failed for {original_path.name}: {e}")
                 # Continue with other files rather than failing completely
                 continue
 
@@ -544,10 +544,10 @@ class MultiFormatExtractor:
         Raises:
             ExtractionError: If extraction fails at any stage
         """
-        logger.info(f"Extracting tar.zst archive: {archive_path}")
+        logger.info(f"Extracting tar.zst archive: {archive_path.name}")
 
         if metadata:
-            logger.info("Using metadata from coldpack archive")
+            logger.debug("Using metadata from coldpack archive")
             # Legacy support: Check for old compression_settings (for backward compatibility)
             if (
                 hasattr(metadata, "compression_settings")
@@ -638,7 +638,7 @@ class MultiFormatExtractor:
                     # No items extracted - error
                     raise ExtractionError("No content found after tar extraction")
 
-            logger.success(f"Successfully extracted tar.zst to: {result_path}")
+            logger.success(f"tar.zst archive extracted: {archive_path.name}")
             return result_path
 
         except Exception as e:
@@ -653,7 +653,7 @@ class MultiFormatExtractor:
                     logger.debug(f"Cleaned up temporary directory: {temp_dir}")
                 except Exception as cleanup_error:
                     logger.warning(
-                        f"Failed to clean up temp directory: {cleanup_error}"
+                        f"Cleanup failed for temp directory: {cleanup_error}"
                     )
 
     def _check_archive_structure_from_filelist(
@@ -669,7 +669,7 @@ class MultiFormatExtractor:
             True if archive has single root directory matching the archive name
         """
         if not file_list:
-            logger.warning("Archive is empty")
+            logger.warning("Archive contains no files")
             return False
 
         # Extract first-level items (no path separators)
@@ -722,7 +722,7 @@ class MultiFormatExtractor:
         Returns:
             Path to the extracted root directory
         """
-        logger.info(f"Extracting tar with preserved structure: {archive_path}")
+        logger.debug(f"Extracting tar with preserved structure: {archive_path.name}")
 
         # Check for existing files if not forcing overwrite
         archive_name = self._get_clean_archive_name(archive_path)
@@ -741,13 +741,13 @@ class MultiFormatExtractor:
                 extracted_root = output_dir / archive_name
 
                 if extracted_root.exists() and extracted_root.is_dir():
-                    logger.success(f"Extracted to: {extracted_root}")
+                    logger.success(f"Archive extracted to: {extracted_root.name}")
                     return extracted_root
                 else:
                     # Fallback: find the first directory in output
                     for item in output_dir.iterdir():
                         if item.is_dir():
-                            logger.success(f"Extracted to: {item}")
+                            logger.success(f"Archive extracted to: {item.name}")
                             return item
 
                     raise ExtractionError("No directory found after extraction")
@@ -782,7 +782,7 @@ class MultiFormatExtractor:
                 f"Target directory already exists: {target_dir}. Use --force to overwrite."
             )
 
-        logger.info(f"Extracting tar to named directory: {target_dir}")
+        logger.debug(f"Extracting tar to named directory: {target_dir.name}")
 
         with safe_file_operations() as safe_ops:
             try:
@@ -797,7 +797,7 @@ class MultiFormatExtractor:
                 if not any(target_dir.iterdir()):
                     raise ExtractionError("Target directory is empty after extraction")
 
-                logger.success(f"Extracted to: {target_dir}")
+                logger.success(f"Archive extracted to: {target_dir.name}")
                 return target_dir
 
             except Exception as e:
@@ -824,7 +824,7 @@ class MultiFormatExtractor:
                 file_list = archive.namelist()
 
                 if not file_list:
-                    logger.warning(f"Archive is empty: {archive_path}")
+                    logger.warning(f"Archive contains no files: {archive_path.name}")
                     return False
 
                 # Extract first-level items (no path separators)
@@ -883,7 +883,7 @@ class MultiFormatExtractor:
         Returns:
             Path to the extracted root directory
         """
-        logger.info(f"Extracting with preserved structure: {archive_path}")
+        logger.debug(f"Extracting with preserved structure: {archive_path.name}")
 
         # Check for existing files if not forcing overwrite
         archive_name = self._get_clean_archive_name(archive_path)
@@ -900,7 +900,7 @@ class MultiFormatExtractor:
                     if is_windows_system():
                         file_list = archive.namelist()
                         if needs_windows_filename_handling(file_list):
-                            logger.info("Applying Windows filename sanitization")
+                            logger.debug("Applying Windows filename sanitization")
                             filename_mapping = create_filename_mapping(file_list)
                             self._extract_with_filename_mapping(
                                 archive, output_dir, filename_mapping
@@ -915,13 +915,13 @@ class MultiFormatExtractor:
                 extracted_root = output_dir / archive_name
 
                 if extracted_root.exists() and extracted_root.is_dir():
-                    logger.success(f"Extracted to: {extracted_root}")
+                    logger.success(f"Archive extracted to: {extracted_root.name}")
                     return extracted_root
                 else:
                     # Fallback: find the first directory in output
                     for item in output_dir.iterdir():
                         if item.is_dir():
-                            logger.success(f"Extracted to: {item}")
+                            logger.success(f"Archive extracted to: {item.name}")
                             return item
 
                     raise ExtractionError("No directory found after extraction")
@@ -956,7 +956,7 @@ class MultiFormatExtractor:
                 f"Target directory already exists: {target_dir}. Use --force to overwrite."
             )
 
-        logger.info(f"Extracting to named directory: {target_dir}")
+        logger.debug(f"Extracting to named directory: {target_dir.name}")
 
         with safe_file_operations() as safe_ops:
             try:
@@ -970,7 +970,7 @@ class MultiFormatExtractor:
                     if is_windows_system():
                         file_list = archive.namelist()
                         if needs_windows_filename_handling(file_list):
-                            logger.info("Applying Windows filename sanitization")
+                            logger.debug("Applying Windows filename sanitization")
                             filename_mapping = create_filename_mapping(file_list)
                             self._extract_with_filename_mapping(
                                 archive, target_dir, filename_mapping
@@ -984,7 +984,7 @@ class MultiFormatExtractor:
                 if not any(target_dir.iterdir()):
                     raise ExtractionError("Target directory is empty after extraction")
 
-                logger.success(f"Extracted to: {target_dir}")
+                logger.success(f"Archive extracted to: {target_dir.name}")
                 return target_dir
 
             except Exception as e:
@@ -1074,7 +1074,7 @@ class MultiFormatExtractor:
 
                 # Basic validation: archive should have files
                 if not file_list:
-                    logger.warning(f"Archive is empty: {archive_obj}")
+                    logger.warning(f"Archive contains no files: {archive_obj.name}")
                     return False
 
                 logger.debug(f"Archive validation passed: {len(file_list)} files")
@@ -1105,7 +1105,7 @@ class MultiFormatExtractor:
         Raises:
             ExtractionError: If extraction fails at any stage
         """
-        logger.info(f"Extracting compound tar archive: {archive_path}")
+        logger.info(f"Extracting compound tar archive: {archive_path.name}")
 
         # Use a temporary directory for the intermediate tar file
         import tempfile
@@ -1174,7 +1174,7 @@ class MultiFormatExtractor:
                     # No items extracted - error
                     raise ExtractionError("No content found after tar extraction")
 
-            logger.success(f"Successfully extracted compound tar to: {result_path}")
+            logger.success(f"Compound tar extracted: {archive_path.name}")
             return result_path
 
         except Exception as e:
@@ -1189,7 +1189,7 @@ class MultiFormatExtractor:
                     logger.debug(f"Cleaned up temporary directory: {temp_dir}")
                 except Exception as cleanup_error:
                     logger.warning(
-                        f"Failed to clean up temporary directory {temp_dir}: {cleanup_error}"
+                        f"Cleanup failed for temporary directory: {cleanup_error}"
                     )
 
 

@@ -31,7 +31,8 @@ from ..utils.filesystem import (
     get_file_size,
     safe_file_operations,
 )
-from ..utils.hashing import compute_file_hashes, generate_hash_files
+
+# Hash functions imported individually as needed
 from ..utils.par2 import PAR2Manager
 from ..utils.progress import ProgressTracker
 from ..utils.sevenzip import SevenZipCompressor, optimize_7z_compression_settings
@@ -113,7 +114,7 @@ class ColdStorageArchiver:
         sevenzip_level = (
             self.sevenzip_settings.level if self.sevenzip_settings else "N/A"
         )
-        logger.debug(f"ColdStorageArchiver initialized with 7z level {sevenzip_level}")
+        logger.debug(f"Archiver initialized with compression level {sevenzip_level}")
 
     def create_archive(
         self,
@@ -168,11 +169,11 @@ class ColdStorageArchiver:
                 )
             else:
                 # Force overwrite: remove existing directory structure
-                logger.info(f"Removing existing archive directory: {archive_dir}")
+                logger.info(f"Removing existing archive: {archive_dir}")
                 import shutil
 
                 shutil.rmtree(archive_dir)
-                logger.success("Successfully removed existing archive directory")
+                logger.success("Existing archive removed")
 
         # Check disk space
         try:
@@ -181,9 +182,7 @@ class ColdStorageArchiver:
             raise ArchivingError(f"Insufficient disk space: {e}") from e
 
         logger.info(f"Creating cold storage archive: {archive_name}")
-        # logger.info(f"Format: {format}")
-        logger.info(f"Source: {source_path}")
-        logger.info(f"Output: {output_path}")
+        logger.info(f"Source: {source_path} → Output: {output_path}")
 
         # Record processing start time for metadata
         import time
@@ -217,26 +216,26 @@ class ColdStorageArchiver:
                 # Step 3: Directory structure was already created and file is in final location
                 final_archive_path = archive_path
 
-                # Step 5: Generate dual hash files directly in metadata directory
-                hash_files = self._generate_hash_files(
-                    final_archive_path, metadata_dir, safe_ops
+                # Step 5: Generate and verify SHA-256 hash
+                hash_files = {}
+                sha256_file = self._generate_and_verify_single_hash(
+                    final_archive_path, metadata_dir, "sha256", safe_ops
                 )
+                if sha256_file:
+                    hash_files["sha256"] = sha256_file
 
-                # Step 6: Verify hash files
-                if self.processing_options.verify_integrity:
-                    self._verify_hash_files(final_archive_path, hash_files)
+                # Step 6: Generate and verify BLAKE3 hash
+                blake3_file = self._generate_and_verify_single_hash(
+                    final_archive_path, metadata_dir, "blake3", safe_ops
+                )
+                if blake3_file:
+                    hash_files["blake3"] = blake3_file
 
-                # Step 7: Generate PAR2 recovery files directly in metadata directory
+                # Step 7: Generate and verify PAR2 recovery files
                 par2_files = []
                 if self.processing_options.generate_par2:
-                    par2_files = self._generate_par2_files(
+                    par2_files = self._generate_and_verify_par2_files(
                         final_archive_path, metadata_dir, safe_ops
-                    )
-
-                # Step 8: Final verification with files in final locations
-                if self.processing_options.verify_integrity:
-                    self._perform_final_verification(
-                        final_archive_path, hash_files, par2_files
                     )
 
                 # Prepare organized files info for metadata creation
@@ -248,7 +247,7 @@ class ColdStorageArchiver:
                     "metadata_dir": metadata_dir,
                 }
 
-                # Step 9: Create comprehensive metadata
+                # Step 5: Create comprehensive metadata
                 metadata = self._create_metadata(
                     source_path,
                     final_archive_path,
@@ -258,7 +257,7 @@ class ColdStorageArchiver:
                     processing_start_time,
                 )
 
-                # Step 10: Generate metadata.toml file
+                # Step 6: Generate metadata.toml file
                 metadata_file = metadata_dir / "metadata.toml"
                 metadata.save_to_toml(metadata_file)
                 safe_ops.track_file(metadata_file)
@@ -272,7 +271,7 @@ class ColdStorageArchiver:
                     + [metadata_file]
                 )
 
-                logger.success("Cold storage archive created successfully")
+                logger.success(f"Cold storage archive created: {archive_name}")
 
                 return ArchiveResult(
                     success=True,
@@ -372,22 +371,22 @@ class ColdStorageArchiver:
         Returns:
             Path to extracted content directory
         """
-        logger.info("Step 1: Extracting/preparing source content")
+        logger.info("Step 1: Preparing source content")
 
         if source_path.is_dir():
             # Source is already a directory
-            logger.debug(f"Source is directory: {source_path}")
+            logger.debug(f"Using directory directly: {source_path}")
             return source_path
         else:
             # Source is an archive, extract it
             temp_dir = create_temp_directory(suffix="_extract")
             safe_ops.track_directory(temp_dir)
 
-            logger.debug(f"Extracting {source_path} to {temp_dir}")
+            logger.debug(f"Extracting archive: {source_path}")
             extracted_dir = self.extractor.extract(source_path, temp_dir)
 
             # Extraction already logged in extractor
-            logger.debug(f"Extraction complete: {extracted_dir}")
+            logger.debug(f"Content extracted to: {extracted_dir}")
             return extracted_dir
 
     def _create_7z_archive(
@@ -404,13 +403,13 @@ class ColdStorageArchiver:
         Returns:
             Path to created 7z archive
         """
-        logger.info("Step 2b: Creating 7z archive with dynamic optimization")
+        logger.info("Step 2: Creating 7z archive with dynamic optimization")
 
         # Calculate source directory size for optimization
         source_size = sum(
             f.stat().st_size for f in source_dir.rglob("*") if f.is_file()
         )
-        logger.debug(f"Source directory size: {format_file_size(source_size)}")
+        logger.debug(f"Compressing {format_file_size(source_size)} of content")
 
         # Check if settings are manually configured
         if self.sevenzip_settings.manual_settings:
@@ -420,7 +419,7 @@ class ColdStorageArchiver:
                 if self.sevenzip_settings.threads == 0
                 else str(self.sevenzip_settings.threads)
             )
-            logger.info(
+            logger.debug(
                 f"Using manual 7z settings: level={self.sevenzip_settings.level}, "
                 f"dict={self.sevenzip_settings.dictionary_size}, threads={threads_display}"
             )
@@ -473,7 +472,7 @@ class ColdStorageArchiver:
 
             archive_size = get_file_size(archive_path)
             logger.success(
-                f"Successfully compressed to {archive_path} ({format_file_size(archive_size)})"
+                f"7z archive created: {archive_path.name} ({format_file_size(archive_size)})"
             )
 
             # Verify 7z integrity
@@ -491,88 +490,86 @@ class ColdStorageArchiver:
         Args:
             archive_path: Path to 7z archive
         """
-        logger.debug("Step 2a: Verifying 7z integrity")
+        logger.debug("Verifying 7z archive integrity")
 
         try:
             result = self.verifier.verify_7z_integrity(archive_path)
             if not result.success:
                 raise ArchivingError(f"7z verification failed: {result.message}")
 
-            logger.success("7z integrity verification passed")
-
         except Exception as e:
             raise ArchivingError(f"7z integrity verification failed: {e}") from e
 
-    def _generate_hash_files(
-        self, archive_path: Path, metadata_dir: Path, safe_ops: Any
-    ) -> dict[str, Path]:
-        """Generate dual hash files directly in metadata directory.
+    def _generate_and_verify_single_hash(
+        self, archive_path: Path, metadata_dir: Path, algorithm: str, safe_ops: Any
+    ) -> Optional[Path]:
+        """Generate and immediately verify a single hash file.
 
         Args:
             archive_path: Path to archive
-            metadata_dir: Path to metadata directory where hash files should be created
+            metadata_dir: Path to metadata directory where hash file should be created
+            algorithm: Hash algorithm (sha256 or blake3)
             safe_ops: Safe file operations context
 
         Returns:
-            Dictionary of algorithm names to hash file paths
+            Path to created hash file, or None if skipped
+
+        Raises:
+            ArchivingError: If hash generation or verification fails
         """
-        logger.info("Step 5: Generating dual hash files (SHA-256 + BLAKE3)")
+        if algorithm == "sha256" and not hasattr(self, "_hash_step_started"):
+            logger.info("Step 3: Generating hash files")
+            self._hash_step_started = True
+        logger.debug(f"Generating {algorithm.upper()} hash file")
 
         try:
-            # Compute hashes
-            hashes = compute_file_hashes(archive_path)
+            # Generate single hash
+            if algorithm == "sha256":
+                from ..utils.hashing import compute_sha256_hash
 
-            # Generate hash files directly in metadata directory
+                hash_value = compute_sha256_hash(archive_path)
+            elif algorithm == "blake3":
+                from ..utils.hashing import compute_blake3_hash
+
+                hash_value = compute_blake3_hash(archive_path)
+            else:
+                raise ArchivingError(f"Unsupported hash algorithm: {algorithm}")
+
+            # Create hash file
+            from ..utils.hashing import generate_hash_files
+
+            single_hash = {algorithm: hash_value}
             hash_files = generate_hash_files(
-                archive_path, hashes, output_dir=metadata_dir
+                archive_path, single_hash, output_dir=metadata_dir
             )
+            hash_file_path = hash_files[algorithm]
+            safe_ops.track_file(hash_file_path)
 
-            # Track files for cleanup on error
-            for hash_file in hash_files.values():
-                safe_ops.track_file(hash_file)
+            logger.success(f"{algorithm.upper()} hash file generated")
 
-            logger.success(f"Generated {len(hash_files)} hash files")
-            return hash_files
+            # Immediately verify if verification is enabled
+            if self.processing_options.verify_integrity:
+                logger.debug(f"Verifying {algorithm.upper()} hash")
+                from ..utils.hashing import HashVerifier
 
-        except Exception as e:
-            raise ArchivingError(f"Hash file generation failed: {e}") from e
-
-    def _verify_hash_files(
-        self, archive_path: Path, hash_files: dict[str, Path]
-    ) -> None:
-        """Verify hash files against archive.
-
-        Args:
-            archive_path: Path to archive
-            hash_files: Dictionary of hash files
-        """
-        logger.info("Step 6: Verifying hash files")
-
-        try:
-            results = self.verifier.verify_hash_files(archive_path, hash_files)
-
-            # Check if all hash verifications passed
-            failed_results = [r for r in results if not r.success]
-            if failed_results:
-                failed_algorithms = [
-                    r.layer.replace("_hash", "").upper() for r in failed_results
-                ]
-                raise ArchivingError(
-                    f"Hash verification failed for: {', '.join(failed_algorithms)}"
+                success = HashVerifier.verify_file_hash(
+                    archive_path, hash_file_path, algorithm
                 )
+                if not success:
+                    raise ArchivingError(f"{algorithm.upper()} verification failed")
+                logger.success(f"{algorithm.upper()} hash verified")
 
-            # Log success for individual algorithms
-            for result in results:
-                algorithm = result.layer.replace("_hash", "").upper()
-                logger.success(f"{algorithm} hash verification passed")
+            return hash_file_path
 
         except Exception as e:
-            raise ArchivingError(f"Hash verification failed: {e}") from e
+            raise ArchivingError(
+                f"{algorithm.upper()} hash generation/verification failed: {e}"
+            ) from e
 
-    def _generate_par2_files(
+    def _generate_and_verify_par2_files(
         self, archive_path: Path, metadata_dir: Path, safe_ops: Any
     ) -> list[Path]:
-        """Generate PAR2 recovery files directly in metadata directory.
+        """Generate and immediately verify PAR2 recovery files.
 
         Args:
             archive_path: Path to archive
@@ -581,9 +578,12 @@ class ColdStorageArchiver:
 
         Returns:
             List of created PAR2 file paths
+
+        Raises:
+            ArchivingError: If PAR2 generation or verification fails
         """
         logger.info(
-            f"Step 7: Generating PAR2 recovery files ({self.processing_options.par2_redundancy}%)"
+            f"Step 4: Generating PAR2 recovery files ({self.processing_options.par2_redundancy}% redundancy)"
         )
 
         try:
@@ -596,11 +596,22 @@ class ColdStorageArchiver:
             for par2_file in par2_files:
                 safe_ops.track_file(par2_file)
 
-            logger.success(f"Generated {len(par2_files)} PAR2 recovery files")
+            logger.success(f"PAR2 recovery files generated ({len(par2_files)} files)")
+
+            # Immediately verify if verification is enabled
+            if self.processing_options.verify_integrity and par2_files:
+                logger.debug("Verifying PAR2 recovery files")
+                success = par2_manager.verify_recovery_files(
+                    par2_files[0]  # Use main PAR2 file for verification
+                )
+                if not success:
+                    raise ArchivingError("PAR2 verification failed")
+                logger.success("PAR2 recovery files verified")
+
             return par2_files
 
         except Exception as e:
-            raise ArchivingError(f"PAR2 generation failed: {e}") from e
+            raise ArchivingError(f"PAR2 generation/verification failed: {e}") from e
 
     def _create_final_directory_structure_early(
         self, output_base: Path, archive_name: str, safe_ops: Any
@@ -615,7 +626,7 @@ class ColdStorageArchiver:
         Returns:
             Tuple of (archive_dir, metadata_dir) paths
         """
-        logger.info("Step 2a: Creating final directory structure")
+        logger.debug("Creating archive directory structure")
 
         # Create directory structure
         archive_dir = output_base / archive_name
@@ -626,36 +637,8 @@ class ColdStorageArchiver:
         safe_ops.track_directory(archive_dir)
         safe_ops.track_directory(metadata_dir)
 
-        logger.success(f"Created directory structure: {archive_dir}")
+        logger.debug(f"Created directory structure: {archive_dir}")
         return archive_dir, metadata_dir
-
-    def _perform_final_verification(
-        self, archive_path: Path, hash_files: dict[str, Path], par2_files: list[Path]
-    ) -> None:
-        """Perform final 5-layer verification.
-
-        Args:
-            archive_path: Path to archive
-            hash_files: Dictionary of hash files
-            par2_files: List of PAR2 files
-        """
-        logger.info("Step 8: Performing final 5-layer verification")
-
-        try:
-            results = self.verifier.verify_auto(archive_path)
-
-            # Check if all layers passed
-            failed_layers = [r for r in results if not r.success]
-            if failed_layers:
-                failed_names = [r.layer for r in failed_layers]
-                raise ArchivingError(
-                    f"Final verification failed for layers: {', '.join(failed_names)}"
-                )
-
-            logger.success("Final 4-layer verification passed")
-
-        except Exception as e:
-            raise ArchivingError(f"Final verification failed: {e}") from e
 
     def _organize_output_files(
         self,
@@ -793,7 +776,7 @@ class ColdStorageArchiver:
                             hash_value = hash_line.split()[0]
                         verification_hashes[algorithm] = hash_value
                 except Exception as e:
-                    logger.warning(f"Could not read {algorithm} hash file: {e}")
+                    logger.warning(f"Failed to read {algorithm.upper()} hash file: {e}")
 
             # Create hash files mapping (algorithm -> filename)
             hash_files_dict = {
@@ -847,15 +830,14 @@ class ColdStorageArchiver:
                 else None,
             )
 
-            logger.info(f"Created comprehensive metadata for {archive_name}")
-            logger.info(
-                f"Files: {file_count}, Directories: {directory_count}, Size: {format_file_size(original_size)}"
+            logger.debug(
+                f"Metadata created: {file_count} files, {directory_count} directories, {format_file_size(original_size)}"
             )
 
             return metadata
 
         except Exception as e:
-            logger.warning(f"Could not create complete metadata: {e}")
+            logger.warning(f"Metadata creation incomplete: {e}")
             # Return minimal metadata for backward compatibility
             return ArchiveMetadata(
                 source_path=source_path,

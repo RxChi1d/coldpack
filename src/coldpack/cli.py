@@ -96,7 +96,7 @@ def _load_coldpack_metadata(
         try:
             metadata = ArchiveMetadata.load_from_toml(metadata_path)
             if verbose:
-                logger.info(f"Loading coldpack metadata from: {metadata_path}")
+                logger.debug(f"Loading metadata from: {metadata_path}")
             return metadata, None
         except Exception as e:
             # If metadata.toml exists but is corrupted, return error but don't raise
@@ -572,9 +572,12 @@ def extract(
                 console.print(
                     f"[cyan]  Compression level: {metadata.sevenzip_settings.level}[/cyan]"
                 )
-                console.print(
-                    f"[cyan]  Threads: {metadata.sevenzip_settings.threads}[/cyan]"
+                threads_display = (
+                    "all"
+                    if metadata.sevenzip_settings.threads == 0
+                    else str(metadata.sevenzip_settings.threads)
                 )
+                console.print(f"[cyan]  Threads: {threads_display}[/cyan]")
                 console.print(
                     f"[cyan]  Method: {metadata.sevenzip_settings.method}[/cyan]"
                 )
@@ -1594,11 +1597,11 @@ def list_archive(
         console.print("\n[dim]Tip: Use 'cpack formats' to see supported formats[/dim]")
         raise typer.Exit(ExitCodes.INVALID_FORMAT) from e
     except ListingError as e:
-        logger.error(f"Listing failed: {e}")
+        logger.error(f"Archive listing failed: {e}")
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(ExitCodes.GENERAL_ERROR) from e
     except Exception as e:
-        logger.error(f"Unexpected error during listing: {e}")
+        logger.error(f"Unexpected listing error: {e}")
         console.print(f"[red]Unexpected error: {e}[/red]")
         raise typer.Exit(ExitCodes.GENERAL_ERROR) from e
 
