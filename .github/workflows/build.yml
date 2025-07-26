@@ -275,7 +275,7 @@ jobs:
       if: ${{ contains(github.ref_name, 'dev') || contains(github.ref_name, 'a') }}
       with:
         tag: ${{ github.ref_name }}
-        name: "coldpack ${{ github.ref_name }}"
+        name: "${{ github.ref_name }}"
         body: ${{ steps.dev_release_notes.outputs.notes }}
         artifacts: "dist/*.whl"
         draft: false
@@ -290,7 +290,7 @@ jobs:
       if: ${{ !contains(github.ref_name, 'dev') && !contains(github.ref_name, 'a') }}
       with:
         tag: ${{ github.ref_name }}
-        name: "coldpack ${{ github.ref_name }}"
+        name: "${{ github.ref_name }}"
         body: ${{ steps.get_release_draft.outputs.body }}
         artifacts: "dist/*.whl"
         draft: false
