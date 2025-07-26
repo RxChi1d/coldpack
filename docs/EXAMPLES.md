@@ -1,639 +1,867 @@
 # Usage Examples
 
-Comprehensive examples for using coldpack in various scenarios.
+Real-world scenarios and workflows for coldpack v0.1.0 - Professional 7z Cold Storage Solution.
 
 ## Table of Contents
 
-- [Basic Usage](#basic-usage)
-- [Archive Creation](#archive-creation)
-- [Archive Extraction](#archive-extraction)
-- [Verification and Repair](#verification-and-repair)
-- [Batch Operations](#batch-operations)
-- [Integration Scenarios](#integration-scenarios)
-- [Advanced Configuration](#advanced-configuration)
+- [Quick Start](#quick-start)
+- [Professional Archive Creation](#professional-archive-creation)
+- [Smart Extraction & Recovery](#smart-extraction--recovery)
+- [Advanced File Management](#advanced-file-management)
+- [Enterprise Workflows](#enterprise-workflows)
+- [Automation & Integration](#automation--integration)
 - [Performance Optimization](#performance-optimization)
-- [Error Handling](#error-handling)
+- [Troubleshooting Scenarios](#troubleshooting-scenarios)
 
-## Basic Usage
+## Quick Start
 
-### Your First Archive
+### Your First Professional 7z Archive
 
 ```bash
-# Create a simple archive from a directory
-mkdir sample_data
-echo "Hello, coldpack!" > sample_data/readme.txt
-echo "Important data" > sample_data/data.txt
+# Create test data
+mkdir sample_documents
+echo "# Project Documentation" > sample_documents/README.md
+echo "Configuration settings" > sample_documents/config.json
+mkdir sample_documents/reports
+echo "Annual report data" > sample_documents/reports/annual.txt
 
-# Archive the directory
-cpack archive sample_data/
-# Output: Archives created in ./archives/sample_data/
+# Create 7z cold storage archive (automatic dynamic optimization)
+cpack create sample_documents/
+# Output: Creates sample_documents/sample_documents.7z with full verification
+
+# Verify the archive integrity
+cpack verify sample_documents/sample_documents.7z
+# Output: ✓ 4-layer verification complete
+
+# List archive contents
+cpack list sample_documents/sample_documents.7z
+# Output: Professional file listing with metadata
 ```
 
-### Quick Start Workflow
+### Essential Workflow
 
 ```bash
-# 1. Create archive
-cpack archive /path/to/important/data
+# 1. Create archive with dynamic compression
+cpack create /path/to/important/documents
 
-# 2. Verify integrity
-cpack verify ./archives/data/data.tar.zst
+# 2. Verify 4-layer integrity
+cpack verify documents/documents.7z
 
-# 3. Extract when needed
-cpack extract ./archives/data/data.tar.zst -o ./restored
+# 3. Extract with automatic parameter recovery
+cpack extract documents/documents.7z --output-dir ./restored
+
+# 4. Professional metadata display
+cpack info documents/documents.7z
 ```
 
-## Archive Creation
+## Professional Archive Creation
 
-### From Different Source Types
+### Multi-Format Input Processing
 
 ```bash
-# Archive a directory
-cpack archive ./project_files/
-cpack archive /home/user/documents/
+# Archive directories with intelligent system file filtering
+cpack create ./project_source/        # Excludes .git, .DS_Store, etc.
+cpack create /home/user/documents/    # Cross-platform compatibility
 
-# Archive existing archive files
-cpack archive backup.7z
-cpack archive data.zip
-cpack archive old_archive.tar.gz
+# Convert legacy archive formats to 7z cold storage
+cpack create legacy_backup.zip --output-dir /cold-storage
+cpack create old_data.tar.gz --name converted_data
+cpack create important.rar --output-dir /archives
 
-# Multiple sources (process separately)
-for source in *.zip; do
-    cpack archive "$source"
+# Batch conversion with progress tracking
+for archive in *.zip *.tar.gz *.rar; do
+    [ -f "$archive" ] && cpack create "$archive" --output-dir /converted
 done
 ```
 
-### Custom Output Locations
+### Dynamic Compression Optimization
+
+coldpack automatically selects optimal compression based on file size:
 
 ```bash
-# Specify output directory
-cpack archive ./data/ -o /backup/archives/
+# Small files (< 256KB) - Level 1, Dict 128k (automatic)
+cpack create small_configs/
 
-# Custom archive name
-cpack archive ./data/ -n "project_backup_$(date +%Y%m%d)"
+# Medium files (1-8MB) - Level 5, Dict 4m (automatic)
+cpack create documents/
 
-# Organized by date
-mkdir -p "/backup/$(date +%Y/%m)"
-cpack archive ./data/ -o "/backup/$(date +%Y/%m)"
+# Large datasets (> 2GB) - Level 9, Dict 512m (automatic)
+cpack create large_dataset/
+
+# Manual override for special cases
+cpack create media_files/ --level 3 --dict 1m     # Fast for pre-compressed
+cpack create source_code/ --level 9 --dict 256m   # Maximum for text files
 ```
 
-### Compression Settings
+### Professional Output Organization
 
 ```bash
-# Maximum compression (takes longer)
-cpack archive ./data/ -l 22 --ultra
+# Structured backup with timestamps
+DATE=$(date +%Y%m%d_%H%M%S)
+cpack create /critical/data --output-dir /backup --name "critical_backup_$DATE"
 
-# Balanced compression (recommended)
-cpack archive ./data/ -l 19
+# Organized archive hierarchy
+mkdir -p "/cold-storage/$(date +%Y/%m)"
+cpack create ./project/ --output-dir "/cold-storage/$(date +%Y/%m)" --name "project_$(date +%Y%m%d)"
 
-# Fast compression (for temporary archives)
-cpack archive ./data/ -l 5
-
-# No compression (for already compressed data)
-cpack archive ./media_files/ -l 1
+# Enterprise naming conventions
+cpack create /database/dump --name "db_prod_$(hostname)_$(date +%Y%m%d)" --output-dir /archives
 ```
 
-### Threading and Performance
+### Advanced Verification Configuration
 
 ```bash
-# Use all CPU cores (default)
-cpack archive ./data/
+# Maximum security with high PAR2 redundancy
+cpack create sensitive_data/ --par2-redundancy 20    # 20% recovery capability
 
-# Limit threads for background processing
-cpack archive ./large_dataset/ -t 2
+# Performance-optimized for CI/CD
+cpack create build_artifacts/ --level 3 --no-verify-par2
 
-# Maximum threads for urgent processing
-cpack archive ./data/ -t $(nproc)
+# Selective verification (customize for workflow)
+cpack create temp_data/ --no-verify-blake3 --no-verify-par2
 
-# Single-threaded for resource-constrained systems
-cpack archive ./data/ -t 1
+# Full enterprise-grade verification (default)
+cpack create critical_documents/    # All 4 layers enabled
 ```
 
-## Archive Extraction
+## Smart Extraction & Recovery
 
-### Basic Extraction
+### Automatic Parameter Recovery
 
 ```bash
-# Extract to default location (./extracted/)
-cpack extract archive.tar.zst
+# coldpack archives automatically restore original compression parameters
+cpack extract backup.7z --output-dir /restored
+# Uses original: level 7, dict 64m, threads all, method LZMA2
 
-# Extract to specific directory
-cpack extract archive.tar.zst -o /tmp/restore
+# Pre-verification for critical data
+cpack extract sensitive_archive.7z --verify --output-dir /safe-restore
+# Performs 4-layer verification before extraction
 
-# Extract with verification first
-cpack extract archive.tar.zst --verify
+# Legacy format extraction (no parameter recovery)
+cpack extract old_backup.zip --output-dir /converted
+cpack extract data.tar.gz --output-dir /extracted
 ```
 
-### Handling Different Archive Types
+### Recovery Scenarios
 
 ```bash
-# coldpack can extract many formats
-cpack extract legacy_backup.7z
-cpack extract download.zip
-cpack extract source.tar.gz
-cpack extract database_backup.tar.xz
+# Basic PAR2 repair for corrupted archives
+cpack repair damaged_archive.7z
 
-# All extract to standardized directory structure
-ls ./extracted/
-```
+# Repair with post-verification (recommended)
+cpack repair important_data.7z --verify-after
 
-### Batch Extraction
-
-```bash
-# Extract all archives in directory
-find ./archives/ -name "*.tar.zst" -exec cpack extract {} \;
-
-# Extract with custom output organization
-for archive in *.tar.zst; do
-    name=$(basename "$archive" .tar.zst)
-    cpack extract "$archive" -o "./restored/$name"
+# Batch repair for multiple damaged files
+for damaged in /backup/*.7z; do
+    echo "Repairing: $damaged"
+    cpack repair "$damaged" --verify-after --quiet
 done
 ```
 
-## Verification and Repair
-
-### Regular Verification
+### Cross-Platform Extraction
 
 ```bash
-# Full 5-layer verification
-cpack verify archive.tar.zst
+# Windows to Linux/macOS (automatic filename sanitization)
+cpack extract windows_backup.7z --output-dir /linux-safe
 
-# Quick verification (faster)
-cpack verify archive.tar.zst --quick
+# Preserve permissions and timestamps
+cpack extract unix_archive.7z --output-dir /restored
 
-# Batch verification
-cpack verify ./archives/*/*.tar.zst
-
-# Verification with detailed output
-cpack verify archive.tar.zst -v
+# Handle Unicode filenames correctly
+cpack extract international_文档.7z --output-dir /unicode-safe
 ```
 
-### Automated Verification Scripts
+## Advanced File Management
+
+### Professional File Listing
 
 ```bash
-#!/bin/bash
-# weekly_verify.sh - Weekly archive verification
-BACKUP_DIR="/backup/archives"
-LOG_FILE="/var/log/coldpack_verify.log"
+# Basic archive contents
+cpack list documents.7z
 
-echo "$(date): Starting verification" >> "$LOG_FILE"
+# Paginated listing for large archives
+cpack list massive_dataset.7z --limit 50 --offset 200
 
-for archive in "$BACKUP_DIR"/*/*.tar.zst; do
-    if cpack verify "$archive" --quiet; then
-        echo "$(date): OK - $archive" >> "$LOG_FILE"
-    else
-        echo "$(date): FAILED - $archive" >> "$LOG_FILE"
-        # Send alert email
-        mail -s "Archive verification failed: $archive" admin@company.com < /dev/null
+# Filter specific file types
+cpack list photos.7z --filter "*.jpg" --filter "*.png"
+cpack list documents.7z --filter "*.pdf" --filter "*.docx"
+
+# Directory structure analysis
+cpack list backup.7z --dirs-only              # Directories only
+cpack list archive.7z --files-only            # Files only
+cpack list dataset.7z --summary-only          # Statistics only
+
+# Script-friendly output
+cpack list archive.7z --files-only --quiet | grep "\.log$"
+```
+
+### Archive Analysis & Metadata
+
+```bash
+# Professional metadata display
+cpack info project_backup.7z
+
+# Comprehensive information with verbose details
+cpack info critical_data.7z --verbose
+
+# Quick status check for scripts
+cpack info backup.7z --quiet && echo "Archive OK"
+
+# Batch archive analysis
+for archive in /backup/*.7z; do
+    echo "=== $(basename "$archive") ==="
+    cpack info "$archive" --quiet
+done
+```
+
+### Verification Workflows
+
+```bash
+# Complete 4-layer verification
+cpack verify documents.7z
+# ✓ 7z integrity ✓ SHA256 ✓ BLAKE3 ✓ PAR2
+
+# Batch verification with detailed progress
+cpack verify /backup/*.7z --verbose
+
+# Script-friendly verification
+cpack verify critical_data.7z --quiet
+if [ $? -eq 0 ]; then
+    echo "Archive integrity confirmed"
+else
+    echo "CRITICAL: Archive verification failed!"
+    exit 5
+fi
+
+# Automated verification with email alerts
+FAILED_ARCHIVES=""
+for archive in /backup/*.7z; do
+    if ! cpack verify "$archive" --quiet; then
+        FAILED_ARCHIVES="$FAILED_ARCHIVES\n$(basename "$archive")"
     fi
 done
-
-echo "$(date): Verification complete" >> "$LOG_FILE"
+[ -n "$FAILED_ARCHIVES" ] && echo -e "Failed archives:$FAILED_ARCHIVES" | mail -s "Backup Verification Failed" admin@company.com
 ```
 
-### Repair Operations
+## Enterprise Workflows
 
-```bash
-# Repair corrupted archive
-cpack repair corrupted_archive.tar.zst
-
-# Repair with verification after
-cpack repair archive.tar.zst --verify-after
-
-# Repair with backup of original
-cpack repair archive.tar.zst --backup
-
-# Force repair (even if verification passes)
-cpack repair archive.tar.zst --force
-```
-
-## Batch Operations
-
-### Processing Multiple Directories
+### Database Backup & Archival
 
 ```bash
 #!/bin/bash
-# backup_projects.sh - Archive multiple project directories
-
-PROJECTS_DIR="/home/user/projects"
-BACKUP_DIR="/backup/projects"
-
-for project in "$PROJECTS_DIR"/*/; do
-    project_name=$(basename "$project")
-    echo "Archiving $project_name..."
-
-    cpack archive "$project" \
-        -o "$BACKUP_DIR" \
-        -n "${project_name}_$(date +%Y%m%d)" \
-        --quiet
-done
-
-echo "All projects archived to $BACKUP_DIR"
-```
-
-### Parallel Processing
-
-```bash
-# Using GNU parallel for maximum efficiency
-find /data -maxdepth 1 -type d -name "dataset_*" | \
-    parallel --jobs 4 cpack archive {} -o /backup/datasets/
-
-# Using xargs for simpler parallel processing
-find . -name "*.7z" | xargs -P 4 -I {} cpack archive {}
-
-# Manual parallel processing with background jobs
-for dir in dataset_*/; do
-    cpack archive "$dir" &
-    # Limit concurrent jobs
-    (($(jobs -r | wc -l) >= 4)) && wait
-done
-wait  # Wait for all jobs to complete
-```
-
-### Archive Migration
-
-```bash
-#!/bin/bash
-# migrate_archives.sh - Convert old archives to coldpack format
-
-OLD_ARCHIVES_DIR="/old_backups"
-NEW_ARCHIVES_DIR="/new_backups"
-
-for old_archive in "$OLD_ARCHIVES_DIR"/*.{7z,zip,tar.gz}; do
-    if [[ -f "$old_archive" ]]; then
-        echo "Converting $(basename "$old_archive")..."
-        cpack archive "$old_archive" -o "$NEW_ARCHIVES_DIR"
-
-        # Verify the new archive
-        new_name=$(basename "$old_archive" | sed 's/\.[^.]*$//')
-        if cpack verify "$NEW_ARCHIVES_DIR/$new_name/$new_name.tar.zst"; then
-            echo "Migration successful: $old_archive"
-            # Optionally remove old archive after successful verification
-            # rm "$old_archive"
-        else
-            echo "Migration failed: $old_archive"
-        fi
-    fi
-done
-```
-
-## Integration Scenarios
-
-### Git Hook Integration
-
-```bash
-#!/bin/bash
-# .git/hooks/pre-push - Archive project before push
-
-# Archive current state
-git archive --format=tar HEAD | gzip > "/tmp/pre-push-backup.tar.gz"
-cpack archive "/tmp/pre-push-backup.tar.gz" -o "$HOME/git-backups" -n "$(basename $(pwd))_$(date +%Y%m%d_%H%M%S)"
-
-# Clean up temporary file
-rm "/tmp/pre-push-backup.tar.gz"
-
-echo "Project archived before push"
-```
-
-### Database Backup Integration
-
-```bash
-#!/bin/bash
-# db_backup.sh - Database backup with coldpack
+# Enterprise database backup with coldpack
+set -euo pipefail
 
 DB_NAME="production_db"
 BACKUP_DIR="/backup/database"
+ARCHIVE_DIR="/cold-storage/database"
 DATE=$(date +%Y%m%d_%H%M%S)
 
 # Create database dump
+echo "Creating database dump..."
 pg_dump "$DB_NAME" > "/tmp/${DB_NAME}_${DATE}.sql"
 
-# Compress and archive
-gzip "/tmp/${DB_NAME}_${DATE}.sql"
-cpack archive "/tmp/${DB_NAME}_${DATE}.sql.gz" \
-    -o "$BACKUP_DIR" \
-    -n "${DB_NAME}_${DATE}" \
-    -l 22 --ultra
+# Create professional 7z archive with maximum compression
+echo "Creating cold storage archive..."
+cpack create "/tmp/${DB_NAME}_${DATE}.sql" \
+    --output-dir "$ARCHIVE_DIR" \
+    --name "${DB_NAME}_backup_${DATE}" \
+    --level 9 \
+    --dict 512m \
+    --par2-redundancy 15
 
-# Clean up temporary file
-rm "/tmp/${DB_NAME}_${DATE}.sql.gz"
+# Verify archive integrity
+echo "Verifying archive integrity..."
+cpack verify "$ARCHIVE_DIR/${DB_NAME}_backup_${DATE}.7z"
 
-# Verify the archive
-cpack verify "$BACKUP_DIR/${DB_NAME}_${DATE}/${DB_NAME}_${DATE}.tar.zst"
+# Clean up temporary dump
+rm "/tmp/${DB_NAME}_${DATE}.sql"
 
-echo "Database backup completed: ${DB_NAME}_${DATE}"
+echo "Database backup complete: ${DB_NAME}_backup_${DATE}.7z"
 ```
 
-### CI/CD Pipeline Integration
+### Document Management System
+
+```bash
+#!/bin/bash
+# Corporate document archival workflow
+set -euo pipefail
+
+DOCS_ROOT="/shared/documents"
+ARCHIVE_ROOT="/cold-storage/documents"
+YEAR=$(date +%Y)
+MONTH=$(date +%m)
+
+# Create monthly archive structure
+mkdir -p "$ARCHIVE_ROOT/$YEAR/$MONTH"
+
+# Archive each department separately
+for dept in hr finance engineering marketing; do
+    if [ -d "$DOCS_ROOT/$dept" ]; then
+        echo "Archiving $dept documents..."
+
+        cpack create "$DOCS_ROOT/$dept" \
+            --output-dir "$ARCHIVE_ROOT/$YEAR/$MONTH" \
+            --name "${dept}_docs_${YEAR}${MONTH}" \
+            --level 7 \
+            --par2-redundancy 12
+
+        # Verify and log
+        if cpack verify "$ARCHIVE_ROOT/$YEAR/$MONTH/${dept}_docs_${YEAR}${MONTH}.7z" --quiet; then
+            echo "✓ $dept archive verified successfully"
+        else
+            echo "✗ $dept archive verification FAILED" >&2
+            exit 1
+        fi
+    fi
+done
+
+echo "Monthly document archival complete for $YEAR-$MONTH"
+```
+
+### Development Project Archival
+
+```bash
+#!/bin/bash
+# Software project release archival
+set -euo pipefail
+
+PROJECT_NAME="myapp"
+VERSION="$1"
+BUILD_DIR="./dist"
+RELEASE_DIR="/releases"
+ARCHIVE_DIR="/cold-storage/releases"
+
+if [ -z "$VERSION" ]; then
+    echo "Usage: $0 <version>"
+    exit 1
+fi
+
+echo "Creating release archive for $PROJECT_NAME v$VERSION"
+
+# Create comprehensive project archive
+cpack create "$BUILD_DIR" \
+    --output-dir "$ARCHIVE_DIR" \
+    --name "${PROJECT_NAME}_v${VERSION}_$(date +%Y%m%d)" \
+    --level 9 \
+    --dict 256m
+
+# Archive source code separately
+git archive --format=tar --prefix="${PROJECT_NAME}-${VERSION}/" HEAD | \
+    gzip > "/tmp/${PROJECT_NAME}_source_${VERSION}.tar.gz"
+
+cpack create "/tmp/${PROJECT_NAME}_source_${VERSION}.tar.gz" \
+    --output-dir "$ARCHIVE_DIR" \
+    --name "${PROJECT_NAME}_source_v${VERSION}"
+
+# Verification
+echo "Verifying release archives..."
+cpack verify "$ARCHIVE_DIR/${PROJECT_NAME}_v${VERSION}_$(date +%Y%m%d).7z"
+cpack verify "$ARCHIVE_DIR/${PROJECT_NAME}_source_v${VERSION}.7z"
+
+# Clean up
+rm "/tmp/${PROJECT_NAME}_source_${VERSION}.tar.gz"
+
+echo "Release archival complete for v$VERSION"
+```
+
+## Automation & Integration
+
+### Cron-Based Archive Maintenance
+
+```bash
+#!/bin/bash
+# /etc/cron.daily/coldpack-maintenance
+# Daily archive maintenance and verification
+
+BACKUP_DIR="/backup"
+ARCHIVE_DIR="/cold-storage"
+LOG_FILE="/var/log/coldpack-maintenance.log"
+MAX_AGE_DAYS=30
+
+exec > >(tee -a "$LOG_FILE") 2>&1
+echo "=== Archive Maintenance: $(date) ==="
+
+# Verify all recent archives
+echo "Verifying recent archives..."
+find "$ARCHIVE_DIR" -name "*.7z" -mtime -7 | while read -r archive; do
+    if cpack verify "$archive" --quiet; then
+        echo "✓ $(basename "$archive")"
+    else
+        echo "✗ FAILED: $(basename "$archive")" >&2
+    fi
+done
+
+# Archive old backups
+echo "Archiving old backup files..."
+find "$BACKUP_DIR" -name "*.sql" -o -name "*.dump" -mtime +1 | while read -r backup; do
+    if [ -f "$backup" ]; then
+        base_name=$(basename "$backup" | sed 's/\.[^.]*$//')
+        cpack create "$backup" \
+            --output-dir "$ARCHIVE_DIR/automated" \
+            --name "auto_${base_name}_$(date +%Y%m%d)" \
+            --level 7 \
+            --quiet
+
+        # Remove original after successful archival
+        if cpack verify "$ARCHIVE_DIR/automated/auto_${base_name}_$(date +%Y%m%d).7z" --quiet; then
+            rm "$backup"
+            echo "Archived and removed: $(basename "$backup")"
+        fi
+    fi
+done
+
+echo "Archive maintenance completed"
+```
+
+### GitHub Actions Integration
 
 ```yaml
-# .github/workflows/backup.yml
-name: Backup Build Artifacts
+# .github/workflows/release-archive.yml
+name: Create Release Archive
 
 on:
   release:
     types: [published]
 
 jobs:
-  backup:
+  archive:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+    - uses: actions/checkout@v3
 
-      - name: Install coldpack
-        run: pip install coldpack
+    - name: Install coldpack
+      run: pip install coldpack
 
-      - name: Build project
-        run: |
-          mkdir build
-          # Your build commands here
-          echo "Build artifacts" > build/artifacts.txt
+    - name: Build application
+      run: |
+        npm install
+        npm run build
 
-      - name: Create archive
-        run: |
-          cpack archive ./build/ -o ./archives -n "release_${{ github.event.release.tag_name }}"
+    - name: Create professional archive
+      run: |
+        cpack create ./dist \
+          --output-dir ./release-archives \
+          --name "app-${{ github.ref_name }}-$(date +%Y%m%d)" \
+          --level 9 \
+          --par2-redundancy 15
 
-      - name: Verify archive
-        run: |
-          cpack verify ./archives/release_${{ github.event.release.tag_name }}/release_${{ github.event.release.tag_name }}.tar.zst
+    - name: Verify archive integrity
+      run: |
+        cpack verify "./release-archives/app-${{ github.ref_name }}-$(date +%Y%m%d).7z"
 
-      - name: Upload archive
-        uses: actions/upload-artifact@v3
-        with:
-          name: release-archive
-          path: ./archives/
+    - name: Upload release archive
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ github.event.release.upload_url }}
+        asset_path: "./release-archives/app-${{ github.ref_name }}-$(date +%Y%m%d).7z"
+        asset_name: "app-${{ github.ref_name }}.7z"
+        asset_content_type: application/x-7z-compressed
 ```
 
-### Cron Job Automation
+### Docker Integration
 
-```bash
-# Add to crontab: crontab -e
+```dockerfile
+# Dockerfile for coldpack-enabled backup container
+FROM python:3.11-slim
 
-# Daily backup at 2 AM
-0 2 * * * /usr/local/bin/cpack archive /important/data -o /backup/daily -n "daily_$(date +\%Y\%m\%d)" --quiet
+# Install coldpack
+RUN pip install coldpack
 
-# Weekly verification on Sundays at 3 AM
-0 3 * * 0 /usr/local/bin/cpack verify /backup/daily/*.tar.zst --quiet || echo "Weekly verification failed" | mail -s "Backup Alert" admin@company.com
+# Create backup script
+COPY backup-script.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/backup-script.sh
 
-# Monthly cleanup - keep only last 3 months
-0 4 1 * * find /backup/daily -name "*.tar.zst" -mtime +90 -delete
+# Set up cron for scheduled backups
+RUN apt-get update && apt-get install -y cron
+COPY crontab /etc/cron.d/backup-cron
+RUN chmod 0644 /etc/cron.d/backup-cron && crontab /etc/cron.d/backup-cron
+
+VOLUME ["/backup", "/cold-storage"]
+CMD ["cron", "-f"]
 ```
 
-## Advanced Configuration
-
-### Environment Configuration
-
 ```bash
-# ~/.bashrc or ~/.zshrc
-export COLDPACK_DEFAULT_OUTPUT="/backup/archives"
-export COLDPACK_COMPRESSION_LEVEL=19
-export COLDPACK_THREADS=8
-export COLDPACK_TEMP_DIR="/fast/ssd/temp"
-
-# Project-specific configuration
-# coldpack.toml in project directory
-[compression]
-level = 22
-ultra_mode = true
-threads = 16
-
-[processing]
-par2_redundancy = 15
-verify_integrity = true
-
-[output]
-organize_by_date = true
-preserve_structure = true
-```
-
-### Custom Wrapper Scripts
-
-```bash
+# backup-script.sh (used in Docker container)
 #!/bin/bash
-# cold_backup.sh - Custom wrapper for standardized backups
+DATE=$(date +%Y%m%d_%H%M%S)
 
-set -e
+# Archive application data
+cpack create /app/data \
+    --output-dir /cold-storage \
+    --name "app_data_$DATE" \
+    --level 7
 
-SCRIPT_NAME=$(basename "$0")
-SOURCE="$1"
-DEST="${2:-/backup/cold_storage}"
+# Verify archive
+cpack verify "/cold-storage/app_data_$DATE.7z" --quiet
 
-usage() {
-    echo "Usage: $SCRIPT_NAME <source> [destination]"
-    echo "Create a standardized cold storage backup"
-    exit 1
-}
-
-[[ -z "$SOURCE" ]] && usage
-
-# Validate source exists
-[[ ! -e "$SOURCE" ]] && { echo "Error: Source does not exist: $SOURCE"; exit 1; }
-
-# Create timestamp
-TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-SOURCE_NAME=$(basename "$SOURCE")
-
-echo "Creating cold storage backup..."
-echo "Source: $SOURCE"
-echo "Destination: $DEST"
-echo "Timestamp: $TIMESTAMP"
-
-# Create archive with standardized naming
-cpack archive "$SOURCE" \
-    -o "$DEST" \
-    -n "${SOURCE_NAME}_${TIMESTAMP}" \
-    -l 22 --ultra \
-    --verbose
-
-# Verify immediately
-ARCHIVE_PATH="$DEST/${SOURCE_NAME}_${TIMESTAMP}/${SOURCE_NAME}_${TIMESTAMP}.tar.zst"
-echo "Verifying archive..."
-cpack verify "$ARCHIVE_PATH" --verbose
-
-echo "Cold storage backup completed successfully!"
-echo "Archive: $ARCHIVE_PATH"
+# Log success
+echo "Backup completed: app_data_$DATE.7z" >> /backup/backup.log
 ```
 
 ## Performance Optimization
 
-### Large File Optimization
+### Resource Management
 
 ```bash
-# For very large files (>10GB)
-cpack archive huge_dataset/ \
-    -l 12 \                    # Lower compression for speed
-    -t $(nproc) \             # Use all cores
-    --verbose
+# Resource-constrained environments (VPS, containers)
+cpack create large_dataset/ --level 3 --dict 16m --threads 2
 
-# For maximum compression (archival storage)
-cpack archive important_data/ \
-    -l 22 --ultra \           # Maximum compression
-    -t 2 \                    # Fewer threads to avoid memory pressure
-    --verbose
+# High-performance workstations (maximize compression)
+cpack create source_code/ --level 9 --dict 512m --threads 0
+
+# Network storage optimization (balance speed vs compression)
+cpack create network_data/ --level 5 --dict 64m --threads 4
+
+# SSD optimization (reduce write cycles)
+COLDPACK_TEMP_DIR=/tmp/ramdisk cpack create important_data/
 ```
 
-### Memory-Constrained Environments
+### File Size-Based Strategies
 
 ```bash
-# Reduce memory usage
-export COLDPACK_TEMP_DIR="/tmp"  # Use fast temporary storage
-cpack archive large_data/ \
-    -l 15 \                      # Moderate compression
-    -t 1 \                       # Single thread
-    --quiet                      # Reduce output overhead
+# Small files (< 100MB) - prioritize speed
+find /configs -name "*.conf" -exec cpack create {} --level 1 --dict 1m \;
+
+# Medium files (100MB - 1GB) - balanced approach
+cpack create documents/ --level 5 --dict 32m
+
+# Large files (1GB+) - maximize compression
+cpack create database_dumps/ --level 9 --dict 512m --threads 8
+
+# Pre-compressed files (media, archives) - minimal compression
+cpack create media_collection/ --level 1 --dict 128k --no-verify-par2
 ```
 
-### SSD vs HDD Optimization
-
-```bash
-# For SSD storage (fast random access)
-cpack archive data/ -l 19 -t $(nproc) --ultra
-
-# For HDD storage (optimize for sequential access)
-cpack archive data/ -l 15 -t 4
-
-# Use SSD for temporary files, HDD for final storage
-export COLDPACK_TEMP_DIR="/ssd/temp"
-cpack archive data/ -o "/hdd/archives" -l 22 --ultra
-```
-
-## Error Handling
-
-### Robust Backup Script
+### Batch Processing Optimization
 
 ```bash
 #!/bin/bash
-# robust_backup.sh - Backup with comprehensive error handling
+# Optimized batch processing with resource management
+set -euo pipefail
 
-set -euo pipefail  # Exit on error, undefined vars, pipe failures
+MAX_PARALLEL=4
+ARCHIVE_QUEUE=()
+CURRENT_JOBS=0
 
-SOURCE="$1"
-BACKUP_DIR="${2:-/backup}"
-LOG_FILE="/var/log/coldpack_backup.log"
+process_archive() {
+    local source="$1"
+    echo "Processing: $source"
 
-log() {
-    echo "$(date '+%Y-%m-%d %H:%M:%S'): $*" | tee -a "$LOG_FILE"
-}
-
-error_exit() {
-    log "ERROR: $*"
-    exit 1
-}
-
-cleanup() {
-    if [[ -n "${TEMP_DIR:-}" && -d "$TEMP_DIR" ]]; then
-        rm -rf "$TEMP_DIR"
-        log "Cleaned up temporary directory: $TEMP_DIR"
+    # Determine optimal settings based on source size
+    size=$(du -sb "$source" | cut -f1)
+    if [ "$size" -lt 104857600 ]; then    # < 100MB
+        level=3; dict="4m"
+    elif [ "$size" -lt 1073741824 ]; then # < 1GB
+        level=5; dict="32m"
+    else                                  # >= 1GB
+        level=7; dict="128m"
     fi
+
+    cpack create "$source" \
+        --level "$level" \
+        --dict "$dict" \
+        --threads 2 \
+        --output-dir /cold-storage \
+        --quiet
+
+    echo "Completed: $source"
 }
 
-trap cleanup EXIT
+# Process directories in parallel
+for dir in /data/*/; do
+    if [ -d "$dir" ]; then
+        if [ "$CURRENT_JOBS" -ge "$MAX_PARALLEL" ]; then
+            wait -n  # Wait for any job to complete
+            ((CURRENT_JOBS--))
+        fi
 
-# Validation
-[[ -z "$SOURCE" ]] && error_exit "Source directory required"
-[[ ! -e "$SOURCE" ]] && error_exit "Source does not exist: $SOURCE"
-[[ ! -d "$BACKUP_DIR" ]] && error_exit "Backup directory does not exist: $BACKUP_DIR"
-
-# Check available space
-SOURCE_SIZE=$(du -sb "$SOURCE" | cut -f1)
-AVAILABLE_SPACE=$(df -B1 "$BACKUP_DIR" | awk 'NR==2 {print $4}')
-REQUIRED_SPACE=$((SOURCE_SIZE * 3))  # Conservative estimate
-
-if [[ $AVAILABLE_SPACE -lt $REQUIRED_SPACE ]]; then
-    error_exit "Insufficient space. Required: $REQUIRED_SPACE, Available: $AVAILABLE_SPACE"
-fi
-
-# Create temporary directory
-TEMP_DIR=$(mktemp -d -t coldpack_backup.XXXXXX)
-export COLDPACK_TEMP_DIR="$TEMP_DIR"
-
-log "Starting backup of $SOURCE"
-
-# Create archive with retry logic
-RETRY_COUNT=0
-MAX_RETRIES=3
-
-while [[ $RETRY_COUNT -lt $MAX_RETRIES ]]; do
-    if cpack archive "$SOURCE" -o "$BACKUP_DIR" --quiet; then
-        log "Archive creation successful"
-        break
-    else
-        RETRY_COUNT=$((RETRY_COUNT + 1))
-        log "Archive creation failed (attempt $RETRY_COUNT/$MAX_RETRIES)"
-        [[ $RETRY_COUNT -eq $MAX_RETRIES ]] && error_exit "Archive creation failed after $MAX_RETRIES attempts"
-        sleep 10
+        process_archive "$dir" &
+        ((CURRENT_JOBS++))
     fi
 done
 
-# Verify archive
-ARCHIVE_NAME=$(basename "$SOURCE")
-ARCHIVE_PATH="$BACKUP_DIR/$ARCHIVE_NAME/$ARCHIVE_NAME.tar.zst"
-
-if [[ ! -f "$ARCHIVE_PATH" ]]; then
-    error_exit "Archive not found at expected location: $ARCHIVE_PATH"
-fi
-
-log "Verifying archive integrity"
-if cpack verify "$ARCHIVE_PATH" --quiet; then
-    log "Archive verification successful"
-    log "Backup completed: $ARCHIVE_PATH"
-else
-    error_exit "Archive verification failed"
-fi
+# Wait for all remaining jobs
+wait
+echo "Batch processing completed"
 ```
 
-### Recovery Procedures
+### Memory Usage Optimization
+
+```bash
+# Large file processing with memory constraints
+ulimit -v 2097152  # Limit virtual memory to 2GB
+cpack create huge_dataset/ --level 5 --dict 64m --threads 2
+
+# Streaming processing for very large files
+export COLDPACK_STREAMING_MODE=1
+cpack create massive_video_collection/ --level 3 --dict 16m
+
+# Monitor memory usage during processing
+(
+    cpack create large_data/ --level 7 --verbose &
+    PID=$!
+
+    while kill -0 $PID 2>/dev/null; do
+        ps -p $PID -o pid,vsz,rss,pcpu --no-headers
+        sleep 5
+    done
+) 2>/dev/null
+```
+
+## Troubleshooting Scenarios
+
+### Corruption Recovery
 
 ```bash
 #!/bin/bash
-# recovery.sh - Comprehensive recovery procedures
+# Comprehensive corruption recovery workflow
+set -euo pipefail
 
-ARCHIVE="$1"
-RECOVERY_DIR="${2:-./recovery}"
+ARCHIVE="damaged_archive.7z"
+BACKUP_DIR="/recovery"
 
-# Check if archive exists
-[[ ! -f "$ARCHIVE" ]] && { echo "Archive not found: $ARCHIVE"; exit 1; }
+echo "=== Corruption Recovery for $ARCHIVE ==="
 
-echo "Starting recovery procedure for: $ARCHIVE"
-
-# Step 1: Verify archive integrity
-echo "Step 1: Verifying archive integrity..."
+# Step 1: Attempt basic verification
+echo "1. Checking archive integrity..."
 if cpack verify "$ARCHIVE" --quiet; then
-    echo "✓ Archive integrity verified"
-else
-    echo "⚠ Archive verification failed, attempting repair..."
-
-    # Step 2: Attempt repair
-    if cpack repair "$ARCHIVE" --verify-after --quiet; then
-        echo "✓ Archive repaired successfully"
-    else
-        echo "✗ Archive repair failed"
-        echo "Manual intervention required:"
-        echo "1. Check PAR2 files are present"
-        echo "2. Verify sufficient PAR2 redundancy"
-        echo "3. Check for additional corruption"
-        exit 1
-    fi
+    echo "✓ Archive is intact, no recovery needed"
+    exit 0
 fi
 
-# Step 3: Extract archive
-echo "Step 2: Extracting archive..."
-if cpack extract "$ARCHIVE" -o "$RECOVERY_DIR" --quiet; then
-    echo "✓ Archive extracted successfully"
-    echo "Recovery completed to: $RECOVERY_DIR"
+# Step 2: Check if PAR2 files exist
+if [ -f "${ARCHIVE}.par2" ]; then
+    echo "2. PAR2 recovery files found, attempting repair..."
+
+    # Create backup before repair
+    cp "$ARCHIVE" "${BACKUP_DIR}/$(basename "$ARCHIVE").backup"
+
+    # Attempt PAR2 repair
+    if cpack repair "$ARCHIVE" --verify-after; then
+        echo "✓ Archive successfully repaired using PAR2"
+        exit 0
+    else
+        echo "✗ PAR2 repair failed"
+    fi
 else
-    echo "✗ Extraction failed"
+    echo "2. No PAR2 recovery files found"
+fi
+
+# Step 3: Attempt partial extraction
+echo "3. Attempting partial data recovery..."
+mkdir -p "${BACKUP_DIR}/partial_recovery"
+
+if cpack extract "$ARCHIVE" --output-dir "${BACKUP_DIR}/partial_recovery" --force; then
+    echo "✓ Partial extraction successful"
+    echo "Recovered files located in: ${BACKUP_DIR}/partial_recovery"
+
+    # Try to re-archive recovered data
+    cpack create "${BACKUP_DIR}/partial_recovery" \
+        --output-dir "${BACKUP_DIR}" \
+        --name "recovered_$(basename "$ARCHIVE" .7z)" \
+        --level 7
+
+    echo "✓ Re-archived recovered data"
+else
+    echo "✗ Partial extraction failed - archive severely corrupted"
+    exit 1
+fi
+```
+
+### Performance Troubleshooting
+
+```bash
+#!/bin/bash
+# Performance diagnostics and optimization
+set -euo pipefail
+
+ARCHIVE_SOURCE="$1"
+TEST_OUTPUT="/tmp/coldpack_perf_test"
+
+if [ -z "$ARCHIVE_SOURCE" ]; then
+    echo "Usage: $0 <source_directory>"
     exit 1
 fi
 
-# Step 4: Validation summary
+echo "=== Performance Analysis for: $ARCHIVE_SOURCE ==="
+
+# System resource check
+echo "1. System Resources:"
+echo "   CPU cores: $(nproc)"
+echo "   Available RAM: $(free -h | awk '/^Mem:/ {print $7}')"
+echo "   Temp space: $(df -h /tmp | awk 'NR==2 {print $4}')"
 echo ""
-echo "Recovery Summary:"
-echo "Archive: $ARCHIVE"
-echo "Recovery Location: $RECOVERY_DIR"
-echo "Files recovered: $(find "$RECOVERY_DIR" -type f | wc -l)"
-echo "Total size: $(du -sh "$RECOVERY_DIR" | cut -f1)"
+
+# Source analysis
+echo "2. Source Analysis:"
+SOURCE_SIZE=$(du -sh "$ARCHIVE_SOURCE" | cut -f1)
+FILE_COUNT=$(find "$ARCHIVE_SOURCE" -type f | wc -l)
+echo "   Total size: $SOURCE_SIZE"
+echo "   File count: $FILE_COUNT"
+echo ""
+
+# Performance test with different settings
+echo "3. Performance Testing:"
+for level in 1 3 5 7 9; do
+    echo "   Testing compression level $level..."
+
+    start_time=$(date +%s)
+
+    cpack create "$ARCHIVE_SOURCE" \
+        --output-dir "$TEST_OUTPUT" \
+        --name "test_level_$level" \
+        --level "$level" \
+        --quiet \
+        --no-verify-par2
+
+    end_time=$(date +%s)
+    duration=$((end_time - start_time))
+
+    if [ -f "$TEST_OUTPUT/test_level_$level.7z" ]; then
+        compressed_size=$(du -sh "$TEST_OUTPUT/test_level_$level.7z" | cut -f1)
+        echo "     Level $level: ${duration}s, Size: $compressed_size"
+        rm -f "$TEST_OUTPUT/test_level_$level.7z"
+    else
+        echo "     Level $level: FAILED"
+    fi
+done
+
+# Cleanup
+rm -rf "$TEST_OUTPUT"
+
+echo ""
+echo "4. Recommendations:"
+if [ "$FILE_COUNT" -gt 10000 ]; then
+    echo "   - Large file count detected: consider --level 3-5 for speed"
+fi
+
+available_ram_kb=$(free | awk '/^Mem:/ {print $7}')
+if [ "$available_ram_kb" -lt 2097152 ]; then  # < 2GB
+    echo "   - Limited RAM: use --dict 32m or smaller"
+fi
+
+echo "   - Optimal settings: --level 5 --dict 64m --threads $(nproc)"
+```
+
+### Disk Space Management
+
+```bash
+#!/bin/bash
+# Intelligent disk space management during archival
+set -euo pipefail
+
+SOURCE="$1"
+OUTPUT_DIR="$2"
+
+if [ -z "$SOURCE" ] || [ -z "$OUTPUT_DIR" ]; then
+    echo "Usage: $0 <source> <output_dir>"
+    exit 1
+fi
+
+echo "=== Disk Space Management ==="
+
+# Calculate source size
+SOURCE_SIZE_KB=$(du -sk "$SOURCE" | cut -f1)
+echo "Source size: $((SOURCE_SIZE_KB / 1024)) MB"
+
+# Check available space
+AVAILABLE_KB=$(df "$OUTPUT_DIR" | awk 'NR==2 {print $4}')
+echo "Available space: $((AVAILABLE_KB / 1024)) MB"
+
+# Estimate required space (source + temp + compressed + verification files)
+REQUIRED_KB=$((SOURCE_SIZE_KB * 3))  # Conservative estimate
+echo "Estimated required: $((REQUIRED_KB / 1024)) MB"
+
+if [ "$AVAILABLE_KB" -lt "$REQUIRED_KB" ]; then
+    echo "⚠️  Insufficient disk space!"
+    echo "Attempting space-saving measures..."
+
+    # Use alternative temp directory if available
+    for temp_dir in /tmp /var/tmp "$HOME/temp"; do
+        if [ -d "$temp_dir" ]; then
+            temp_available=$(df "$temp_dir" | awk 'NR==2 {print $4}')
+            if [ "$temp_available" -gt "$SOURCE_SIZE_KB" ]; then
+                echo "Using alternative temp directory: $temp_dir"
+                export COLDPACK_TEMP_DIR="$temp_dir"
+                break
+            fi
+        fi
+    done
+
+    # Use lower compression to reduce processing time and temp space
+    echo "Using fast compression to minimize temp space usage"
+    cpack create "$SOURCE" \
+        --output-dir "$OUTPUT_DIR" \
+        --level 3 \
+        --dict 16m \
+        --no-verify-par2
+else
+    echo "✓ Sufficient disk space available"
+    cpack create "$SOURCE" --output-dir "$OUTPUT_DIR"
+fi
+```
+
+### Network Storage Optimization
+
+```bash
+#!/bin/bash
+# Optimize coldpack for network storage (NFS, SMB, etc.)
+set -euo pipefail
+
+NETWORK_STORAGE="$1"
+LOCAL_TEMP="/tmp/coldpack_network"
+SOURCE="$2"
+
+echo "=== Network Storage Optimization ==="
+
+# Create local temp directory
+mkdir -p "$LOCAL_TEMP"
+
+# Use local temp for processing, then transfer
+echo "Processing locally to minimize network I/O..."
+cpack create "$SOURCE" \
+    --output-dir "$LOCAL_TEMP" \
+    --level 7 \
+    --verbose
+
+# Verify locally before network transfer
+ARCHIVE_NAME=$(basename "$SOURCE")
+if cpack verify "$LOCAL_TEMP/$ARCHIVE_NAME/$ARCHIVE_NAME.7z" --quiet; then
+    echo "✓ Local verification successful, transferring to network storage..."
+
+    # Transfer complete archive directory
+    rsync -av --progress "$LOCAL_TEMP/$ARCHIVE_NAME/" "$NETWORK_STORAGE/$ARCHIVE_NAME/"
+
+    # Verify after network transfer
+    if cpack verify "$NETWORK_STORAGE/$ARCHIVE_NAME/$ARCHIVE_NAME.7z" --quiet; then
+        echo "✓ Network transfer verification successful"
+        rm -rf "$LOCAL_TEMP/$ARCHIVE_NAME"
+    else
+        echo "✗ Network transfer verification failed"
+        exit 1
+    fi
+else
+    echo "✗ Local verification failed"
+    exit 1
+fi
 ```
 
 ---
 
-These examples cover most common use cases for coldpack. For specific scenarios not covered here, refer to the [CLI Reference](CLI_REFERENCE.md) or create custom wrapper scripts based on these patterns.
+## Summary
+
+coldpack v0.1.0 provides enterprise-grade 7z cold storage with revolutionary architecture optimizations:
+
+- **🚀 Dynamic Compression**: 7-tier intelligent optimization
+- **🛡️ 4-Layer Verification**: Complete integrity assurance
+- **🔧 Cross-Platform**: Windows, macOS, Linux compatibility
+- **⚡ Professional Performance**: Multi-core processing and optimization
+- **🏗️ Enterprise Integration**: Automation-ready with comprehensive tooling
+
+**Next Steps:**
+- 📖 [Installation Guide](INSTALLATION.md) - Complete setup instructions
+- 📋 [CLI Reference](CLI_REFERENCE.md) - Detailed command documentation
+- 🏗️ [Architecture Guide](ARCHITECTURE.md) - Technical implementation details

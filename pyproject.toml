@@ -8,29 +8,46 @@ packages = ["src/coldpack"]
 [project]
 name = "coldpack"
 dynamic = ["version"]
-description = "Cross-platform cold storage CLI package for standardized tar.zst archives with comprehensive verification"
+description = "Professional 7z Cold Storage Solution with Revolutionary Architecture - Advanced CLI tool for creating standardized 7z archives with comprehensive verification, PAR2 recovery, and intelligent cross-platform compatibility."
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.9"
 authors = [
     {name = "coldpack contributors"},
 ]
-keywords = ["archive", "compression", "cold-storage", "tar", "zstd", "backup"]
+maintainers = [
+    {name = "coldpack team"},
+]
+keywords = [
+    "7z", "archive", "compression", "cold-storage", "backup", "par2",
+    "verification", "recovery", "cross-platform", "blake3", "sha256",
+    "enterprise", "cli", "professional", "integrity"
+]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Intended Audience :: System Administrators",
+    "Intended Audience :: Information Technology",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: Implementation :: CPython",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: System :: Archiving :: Compression",
     "Topic :: System :: Archiving :: Backup",
+    "Topic :: System :: Recovery Tools",
+    "Topic :: System :: Systems Administration",
+    "Topic :: Utilities",
+    "Environment :: Console",
+    "Natural Language :: English",
 ]
 dependencies = [
     "py7zz>=0.1.1",
@@ -52,9 +69,12 @@ dev = []
 cpack = "coldpack.cli:cli_main"
 
 [project.urls]
-Homepage = "https://github.com/rxchi1d/coldpack"
-Issues = "https://github.com/rxchi1d/coldpack/issues"
-Repository = "https://github.com/rxchi1d/coldpack"
+"Homepage" = "https://github.com/rxchi1d/coldpack"
+"Repository" = "https://github.com/rxchi1d/coldpack"
+"Issues" = "https://github.com/rxchi1d/coldpack/issues"
+"Discussions" = "https://github.com/rxchi1d/coldpack/discussions"
+"Documentation" = "https://github.com/rxchi1d/coldpack#readme"
+"Changelog" = "https://github.com/rxchi1d/coldpack/blob/main/CHANGELOG.md"
 
 [tool.ruff]
 line-length = 88

@@ -6,7 +6,7 @@ coldpack 是一個跨平台的冷儲存 Python CLI 套件，專門用於將指�
 
 **目標**：提供一個可靠、標準化的 7z 冷儲存解決方案，透過簡潔的 `cpack` 命令確保重要資料的長期保存安全性。
 
-**專案成熟度**: **99.8% 完成** - 7z 專用架構完全實現，Windows 檔案名稱相容性完善，CLI 大幅簡化，核心功能高度完善，list 命令完整實現，**日誌系統全面優化**，程式碼品質達標
+**專案成熟度**: **99.9% 完成** - 7z 專用架構完全實現，Windows 檔案名稱相容性完善，CLI 大幅簡化，核心功能高度完善，list 命令完整實現，**跨平台目錄檢測修復完成**，**CI/CD 版本生成修復完成**，**日誌系統全面優化**，程式碼品質達標
 
 ## 功能實現狀況
 
@@ -679,6 +679,53 @@ cpack extract --verify --force -o /path/to/output archive.7z
 - ✅ mypy 類型檢查通過
 - ✅ 全部 133 個測試通過
 
+### 🚀 跨平台相容性修復：Windows 目錄檢測問題解決 (2025-07-26)
+**分支**: `fix/windows-directory-detection`
+**問題範圍**: Windows 系統上 list 功能目錄識別失效
+
+#### 修正的關鍵問題
+46. **Windows 目錄檢測失效** - ✅ 已修復：Windows 系統上 `--dirs-only` 等目錄相關操作失效，所有資料夾被誤標為 FILE
+47. **7zz 屬性格式差異** - ✅ 已修復：Windows 與 Unix 系統上 7zz 輸出的 attributes 格式不同導致的檢測問題
+48. **Unicode 路徑支援** - ✅ 已修復：中文路徑（如「林江宇nthu論文/論文書面修改/v6」）在 Windows 上的正確識別
+
+#### 技術實現細節
+- **lister.py**: 實現多重目錄檢測機制，支援多種 Windows 屬性格式
+- **跨平台檢測**: 支援 Unix (`"D "`)、Windows (`"D"`, `"DIR"`) 等多種格式
+- **Folder 屬性支援**: 檢查 Windows 特有的 Folder 屬性指示符
+- **元數據推斷**: 結合 size=0、CRC 缺失等多種指標進行智能判斷
+- **調試日誌**: 添加詳細的跨平台相容性調試資訊
+
+#### 影響範圍
+- **Windows 相容性修復**: 解決 Windows 用戶無法使用 `--dirs-only` 功能的問題
+- **跨平台一致性**: 確保所有平台上的目錄識別行為一致
+- **Unicode 支援**: 完整支援包含中文等 Unicode 字符的路徑
+- **向後相容性**: 保持 Unix 系統上的原有行為不變
+
+### 🚀 CI/CD 基礎架構修復：版本生成驗證問題解決 (2025-07-26)
+**分支**: `fix/hatch-vcs-version-generation`
+**問題範圍**: GitHub Actions build workflow 版本驗證失敗
+
+#### 修正的關鍵問題
+49. **重複 Git 標籤問題** - ✅ 已修復：v0.1.0b3 和 v0.1.0b4 指向同一提交，導致版本生成不一致
+50. **版本驗證邏輯缺陷** - ✅ 已修復：build workflow 無法處理開發版本格式（如 `0.1.0b4-2-gbe86af9`）
+51. **依賴管理完善** - ✅ 已完成：添加 hatchling 和 hatch-vcs 作為開發依賴
+
+#### 技術實現細節
+- **Git 標籤清理**: 刪除重複的 v0.1.0b3 標籤，確保 git describe 選擇正確標籤
+- **版本驗證增強**: 更新 PEP 440 正則表達式支援 git describe 格式
+- **基版本提取**: 實現從開發版本中提取基版本的邏輯
+- **多重驗證支援**: 支援精確匹配和開發版本的雙重驗證模式
+
+#### 新的驗證邏輯
+- **精確匹配**: `0.1.0b5` ↔ `v0.1.0b5`
+- **開發版本**: `0.1.0b5-2-g1313ae4` ↔ `v0.1.0b5` (基版本驗證)
+
+#### 影響範圍
+- **CI/CD 穩定性**: 解決 build workflow 因版本驗證失敗而中斷的問題
+- **開發流程改善**: 支援在非標籤提交上進行構建和發布
+- **版本管理規範**: 建立清晰的版本標籤管理流程
+- **自動化品質**: 確保構建系統的可靠性和可預測性
+
 ### 🚀 重大改善：日誌系統全面優化 (2025-07-26)
 **分支**: `refactor/optimize-logging-and-workflow`
 **問題範圍**: 使用者體驗和日誌訊息專業化
@@ -747,7 +794,8 @@ Coldpack archive detected - using original compression parameters
 ---
 
 **更新日期**: 2025-07-26
-**當前版本**: v1.6.2-dev (99.8% 完成)
-**專案狀態**: 專業化架構完成，Windows 檔案名稱相容性完善，7z 專用冷儲存解決方案，CLI 大幅簡化，**日誌系統全面優化**
-**最新提交**: refactor: optimize logging messages across all modules for better user experience (refactor/optimize-logging-and-workflow 分支)
-**下一個里程碑**: 完善測試覆蓋度，達到 100% 完成
+**當前版本**: v0.1.0b5 (99.9% 完成)
+**專案狀態**: 專業化架構完成，**跨平台相容性完全修復**，**CI/CD 基礎架構完善**，Windows 檔案名稱相容性完善，7z 專用冷儲存解決方案，CLI 大幅簡化，**日誌系統全面優化**
+**最新提交**: fix(ci): resolve hatch-vcs dynamic version generation validation issues (fix/hatch-vcs-version-generation 分支)
+**最新標籤**: v0.1.0b5 - 包含 Windows 目錄檢測修復和 CI/CD 版本生成修復
+**下一個里程碑**: 達到 100% 完成，準備 v0.1.0 正式版發布

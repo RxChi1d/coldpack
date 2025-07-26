@@ -1,10 +1,10 @@
 # CLI Reference
 
-Complete command-line interface reference for coldpack.
+Complete command-line interface reference for coldpack v0.1.0 - Professional 7z Cold Storage Solution.
 
 ## Overview
 
-The `cpack` command provides a comprehensive CLI for cold storage archive operations. All commands support common options and provide rich, interactive output.
+The `cpack` command provides a streamlined CLI optimized exclusively for 7z cold storage operations. Featuring revolutionary 7z-exclusive architecture with intelligent dynamic compression and comprehensive verification systems.
 
 ## Global Options
 
@@ -15,68 +15,94 @@ cpack --version                # Show version information
 
 ## Commands
 
-### `cpack archive`
+### `cpack create`
 
-Create a cold storage archive from a source directory or file.
+Create a professional 7z cold storage archive with comprehensive verification and recovery systems.
 
 #### Syntax
 ```bash
-cpack archive [OPTIONS] SOURCE
+cpack create [OPTIONS] SOURCE
 ```
 
 #### Arguments
-- `SOURCE` - Source directory or archive file to process
+- `SOURCE` - Source directory or any supported archive format (7z, zip, rar, tar.gz, etc.)
 
-#### Options
+#### Compression Options
 ```bash
---output-dir, -o DIRECTORY      # Output directory (default: ./archives)
---archive-name, -n NAME         # Custom archive name (default: source name)
---compression-level, -l LEVEL   # Compression level 1-22 (default: 19)
---threads, -t COUNT             # Number of threads (default: auto)
---ultra                         # Enable ultra compression mode (levels 20-22)
---no-verify                     # Skip integrity verification
---no-par2                       # Skip PAR2 recovery file generation
---par2-redundancy PERCENT       # PAR2 redundancy percentage (default: 10)
+--level, -l LEVEL               # Compression level 0-9 (default: dynamic)
+--dict, -d SIZE                 # Dictionary size: 128k-512m (default: dynamic)
+--threads, -t COUNT             # Thread count (default: 0 = all cores)
+--output-dir, -o DIRECTORY      # Output directory (default: current)
+--name, -n NAME                 # Archive name (default: source name)
+```
+
+#### Verification Options
+```bash
+--no-verify-7z                  # Skip 7z integrity verification
+--no-verify-sha256              # Skip SHA256 hash verification
+--no-verify-blake3              # Skip BLAKE3 hash verification
+--no-verify-par2                # Skip PAR2 recovery verification
+--par2-redundancy PERCENT       # PAR2 redundancy (default: 10%)
+```
+
+#### General Options
+```bash
 --force                         # Overwrite existing archives
---verbose, -v                   # Verbose output
+--verbose, -v                   # Detailed progress output
 --quiet, -q                     # Minimal output
 ```
 
+#### Dynamic Compression Tiers
+
+| File Size | Level | Dict Size | Use Case |
+|-----------|-------|-----------|----------|
+| < 256 KiB | 1 | 128k | Minimal resources |
+| 256K-1M | 3 | 1m | Light compression |
+| 1-8M | 5 | 4m | Balanced performance |
+| 8-64M | 6 | 16m | Good compression |
+| 64-512M | 7 | 64m | High compression |
+| 512M-2G | 9 | 256m | Maximum compression |
+| > 2 GiB | 9 | 512m | Ultimate compression |
+
 #### Examples
 ```bash
-# Basic archive creation
-cpack archive /path/to/source
+# Basic 7z cold storage creation (dynamic optimization)
+cpack create /path/to/documents
 
-# Custom output directory and name
-cpack archive /path/to/source -o /backup -n important_data
+# Custom output location and name
+cpack create /path/to/source --output-dir /backup --name critical-data
 
-# Maximum compression
-cpack archive /path/to/source -l 22 --ultra
+# Maximum compression for archival storage
+cpack create large-dataset/ --level 9 --dict 512m
 
-# Fast compression with more threads
-cpack archive /path/to/source -l 12 -t 8
+# Fast compression for temporary archives
+cpack create temp-files/ --level 3 --dict 1m
 
-# Skip verification for speed
-cpack archive /path/to/source --no-verify --no-par2
+# Multi-format input processing
+cpack create existing-archive.zip --output-dir /cold-storage
+cpack create backup.tar.gz --name converted-backup
 
-# Archive an existing 7z file
-cpack archive archive.7z -o /backup
+# Verification customization
+cpack create sensitive-data/ --par2-redundancy 20  # 20% PAR2 redundancy
+cpack create fast-data/ --no-verify-par2           # Skip PAR2 for speed
 ```
 
-#### Output Files
+#### Professional 7z Output Structure
 ```
 output_directory/
 └── archive_name/
-    ├── archive_name.tar.zst              # Main archive
-    ├── archive_name.tar.zst.sha256       # SHA-256 hash
-    ├── archive_name.tar.zst.blake3       # BLAKE3 hash
-    ├── archive_name.tar.zst.par2         # PAR2 index
-    └── archive_name.tar.zst.vol*.par2    # PAR2 recovery files
+    ├── archive_name.7z              # Main 7z archive
+    ├── archive_name.7z.sha256       # SHA-256 hash file
+    ├── archive_name.7z.blake3       # BLAKE3 hash file
+    ├── archive_name.7z.par2         # PAR2 index file
+    ├── archive_name.7z.vol*.par2    # PAR2 recovery files
+    └── metadata/
+        └── metadata.toml            # Complete archive metadata
 ```
 
 ### `cpack extract`
 
-Extract a cold storage archive or any supported archive format.
+Extract archives with automatic parameter recovery and optional pre-verification.
 
 #### Syntax
 ```bash
@@ -84,39 +110,52 @@ cpack extract [OPTIONS] ARCHIVE
 ```
 
 #### Arguments
-- `ARCHIVE` - Archive file to extract
+- `ARCHIVE` - Archive file to extract (7z, zip, rar, tar.gz, etc.)
 
 #### Options
 ```bash
---output-dir, -o DIRECTORY      # Output directory (default: ./extracted)
---verify                        # Verify before extraction (for .tar.zst)
+--output-dir, -o DIRECTORY      # Output directory (default: current/extracted)
+--verify                        # Pre-extraction integrity verification
 --force                         # Overwrite existing files
---preserve-structure            # Preserve original directory structure
---verbose, -v                   # Verbose output
+--verbose, -v                   # Detailed extraction progress
 --quiet, -q                     # Minimal output
 ```
 
+#### Automatic Parameter Recovery
+For coldpack 7z archives, extraction automatically uses original compression parameters from `metadata/metadata.toml`:
+- Original compression level and dictionary size
+- Thread count and method settings
+- Intelligent fallback for missing metadata
+
 #### Examples
 ```bash
-# Basic extraction
-cpack extract archive.tar.zst
+# Basic extraction with automatic parameter recovery
+cpack extract backup.7z
 
 # Extract to specific directory
-cpack extract archive.tar.zst -o /tmp/restore
+cpack extract documents.7z --output-dir /tmp/restore
 
-# Extract with verification
-cpack extract archive.tar.zst --verify
+# Pre-verification before extraction (recommended for critical data)
+cpack extract critical-archive.7z --verify --output-dir /safe-location
 
-# Extract any supported format
-cpack extract archive.7z -o /tmp/extract
+# Extract legacy formats
+cpack extract old-backup.zip --output-dir /converted
+cpack extract data.tar.gz --output-dir /extracted
 
-# Force overwrite existing files
-cpack extract archive.tar.zst --force
+# Force overwrite with verbose progress
+cpack extract archive.7z --force --verbose --output-dir /overwrite-location
 ```
+
+#### Extraction Process
+1. **Format Detection**: Automatic identification of archive format
+2. **Metadata Loading**: Recovery of original parameters (for coldpack archives)
+3. **Pre-Verification**: Optional 4-layer integrity check
+4. **Smart Extraction**: Optimized extraction with parameter recovery
+5. **Progress Tracking**: Real-time extraction progress display
 
 ### `cpack verify`
 
-Verify archive integrity using multiple verification layers.
+Comprehensive 4-layer integrity verification with auto-discovery of related files.
 
 #### Syntax
 ```bash
@@ -124,50 +163,63 @@ cpack verify [OPTIONS] ARCHIVE [ARCHIVE...]
 ```
 
 #### Arguments
-- `ARCHIVE` - One or more archive files to verify
+- `ARCHIVE` - One or more 7z archive files to verify
 
 #### Options
 ```bash
---quick                         # Quick verification (TAR + Zstd only)
---full                          # Full 5-layer verification (default)
---repair                        # Attempt repair if verification fails
---verbose, -v                   # Detailed verification output
---quiet, -q                     # Only show results
+--verbose, -v                   # Detailed verification progress
+--quiet, -q                     # Results only (suitable for scripts)
 ```
 
-#### Verification Layers
-1. **TAR Header** - Archive structure validation
-2. **Zstd Integrity** - Compression integrity check
-3. **SHA-256 Hash** - Legacy hash verification
-4. **BLAKE3 Hash** - Modern hash verification
-5. **PAR2 Recovery** - Error correction validation
+#### 4-Layer Verification System
+1. **🏗️ 7z Integrity**: Native 7z archive structure validation
+2. **🔐 SHA-256**: Cryptographic hash verification (legacy compatibility)
+3. **⚡ BLAKE3**: Modern high-performance cryptographic hash
+4. **🛡️ PAR2 Recovery**: Error correction validation with automatic file discovery
+
+#### Auto-Discovery Features
+- Automatic detection of `.sha256`, `.blake3`, and `.par2` files
+- Intelligent metadata location detection (`metadata/metadata.toml`)
+- Cross-directory PAR2 file handling
+- Smart working directory management
 
 #### Examples
 ```bash
-# Full verification
-cpack verify archive.tar.zst
+# Complete 4-layer verification (with auto-discovery)
+cpack verify documents.7z
 
-# Quick verification
-cpack verify archive.tar.zst --quick
+# Batch verification with progress
+cpack verify /backup/*.7z --verbose
+
+# Script-friendly quiet verification
+cpack verify critical-data.7z --quiet
+echo $?  # Check exit code: 0 = success, 5 = failed
 
 # Verify multiple archives
-cpack verify *.tar.zst
+cpack verify archive1.7z archive2.7z archive3.7z
 
-# Verify with auto-repair
-cpack verify archive.tar.zst --repair
+# Directory-based verification
+find /backup -name "*.7z" -exec cpack verify {} \;
+```
 
-# Batch verification (quiet)
-cpack verify /backup/*.tar.zst --quiet
+#### Verification Output
+```
+Starting 4-layer verification for: documents.7z
+✓ 7z integrity check passed
+✓ SHA256 hash verification passed
+✓ BLAKE3 hash verification passed
+✓ PAR2 integrity check passed
+SUCCESS: Verification complete: all 4 layers passed
 ```
 
 #### Exit Codes
-- `0` - All verifications passed
-- `5` - Verification failed
-- `1` - General error
+- `0` - All verification layers passed
+- `5` - One or more verification layers failed
+- `1` - General error (file not found, permission denied, etc.)
 
 ### `cpack repair`
 
-Repair a corrupted archive using PAR2 recovery files.
+PAR2-based file recovery with metadata parameter restoration.
 
 #### Syntax
 ```bash
@@ -175,40 +227,44 @@ cpack repair [OPTIONS] ARCHIVE
 ```
 
 #### Arguments
-- `ARCHIVE` - Archive file to repair (must have .par2 files)
+- `ARCHIVE` - 7z archive file to repair (requires PAR2 recovery files)
 
 #### Options
 ```bash
---verify-after                  # Verify archive after repair
---backup                        # Create backup before repair
---force                         # Force repair even if verification passes
---verbose, -v                   # Detailed repair output
+--verify-after                  # Verify archive integrity after repair
+--verbose, -v                   # Detailed repair progress
 --quiet, -q                     # Minimal output
 ```
 
+#### Automatic Parameter Recovery
+The repair process automatically restores original compression parameters from `metadata/metadata.toml` for optimal recovery performance.
+
 #### Examples
 ```bash
-# Repair corrupted archive
-cpack repair archive.tar.zst
+# Basic PAR2 repair
+cpack repair corrupted-archive.7z
 
-# Repair with post-verification
-cpack repair archive.tar.zst --verify-after
+# Repair with post-verification (recommended)
+cpack repair important-data.7z --verify-after
 
-# Repair with backup
-cpack repair archive.tar.zst --backup
-
-# Force repair
-cpack repair archive.tar.zst --force
+# Quiet repair for batch processing
+cpack repair damaged.7z --quiet
 ```
 
+#### Repair Process
+1. **Parameter Recovery**: Load original settings from metadata.toml
+2. **PAR2 Analysis**: Assess damage and recovery requirements
+3. **Multi-Core Repair**: Utilize all available CPU cores for recovery
+4. **Integrity Verification**: Optional post-repair 4-layer verification
+
 #### Requirements
-- Archive must have corresponding `.par2` files
-- PAR2 files must be in the same directory
-- Sufficient PAR2 redundancy to repair damage
+- Corresponding `.par2` and `.vol*.par2` files must be present
+- Sufficient PAR2 redundancy to repair the level of damage
+- PAR2 files can be in same directory or `metadata/` subdirectory
 
 ### `cpack info`
 
-Display detailed information about an archive.
+Professional tree-structured archive metadata display optimized for large archives.
 
 #### Syntax
 ```bash
@@ -216,43 +272,152 @@ cpack info [OPTIONS] ARCHIVE
 ```
 
 #### Arguments
-- `ARCHIVE` - Archive file to analyze
+- `ARCHIVE` - 7z archive file to analyze
 
 #### Options
 ```bash
---format json                   # Output in JSON format
---format table                  # Output in table format (default)
---show-hashes                   # Display hash values
---show-par2                     # Display PAR2 information
---verbose, -v                   # Extended information
+--verbose, -v                   # Extended metadata information
+--quiet, -q                     # Minimal output format
+```
+
+#### Professional Tree Display
+The info command presents archive metadata in five organized sections:
+- **Basic Information**: Path, format, size, compression ratio
+- **Content Summary**: File count, directory count, total size (tree structure)
+- **Creation Settings**: Compression level, dictionary size, threads, method
+- **Integrity Status**: SHA-256, BLAKE3, PAR2 status with check marks
+- **Metadata Information**: Creation time, coldpack version, related files
+
+#### Examples
+```bash
+# Professional metadata display
+cpack info documents.7z
+
+# Extended information with verbose details
+cpack info backup.7z --verbose
+
+# Minimal output for scripting
+cpack info archive.7z --quiet
+```
+
+#### Sample Output
+```
+Archive: documents.7z
+Path: /backup/documents.7z
+Format: 7z archive
+Size: 2.56 MB (15.2 MB → 2.56 MB, 83.2% compression)
+
+Content Summary:
+├── Files: 127
+├── Directories: 18
+├── Total Size: 15.2 MB
+└── Compression: 83.2%
+
+Creation Settings:
+├── Compression Level: 7
+├── Dictionary Size: 64m
+├── Threads: all
+└── Method: LZMA2
+
+Integrity:
+├── SHA-256: a1b2c3d4e5f6... ✓
+├── BLAKE3:  x1y2z3w4v5u6... ✓
+└── PAR2:    10% redundancy, 3 recovery files ✓
+
+Metadata:
+├── Created: 2025-07-26 10:30:15 UTC
+├── coldpack: v0.1.0
+└── Related Files: documents.7z.sha256, documents.7z.blake3, documents.7z.par2
+```
+
+#### Performance Optimization
+- Optimized for large archives (no file enumeration)
+- Fast metadata-only analysis
+- Tree-structured Rich output formatting
+
+### `cpack list`
+
+Advanced file listing with filtering, pagination, and search capabilities.
+
+#### Syntax
+```bash
+cpack list [OPTIONS] ARCHIVE
+```
+
+#### Arguments
+- `ARCHIVE` - Archive file to list (supports all input formats)
+
+#### Display Options
+```bash
+--limit, -l COUNT               # Limit number of entries displayed
+--offset, -o COUNT              # Skip first N entries (pagination)
+--filter, -f PATTERN            # Filter files with glob pattern
+--dirs-only                     # Show only directories
+--files-only                    # Show only files
+--summary-only                  # Show summary statistics only
+```
+
+#### Output Options
+```bash
+--verbose, -v                   # Include detailed file information
+--quiet, -q                     # Minimal output format
 ```
 
 #### Examples
 ```bash
-# Basic information
-cpack info archive.tar.zst
+# Basic file listing
+cpack list documents.7z
 
-# JSON output
-cpack info archive.tar.zst --format json
+# Pagination for large archives
+cpack list large-archive.7z --limit 50 --offset 100
 
-# Extended information
-cpack info archive.tar.zst --verbose --show-hashes
+# Filter specific file types
+cpack list photos.7z --filter "*.jpg" --filter "*.png"
+cpack list documents.7z --filter "*.pdf"
 
-# PAR2 status
-cpack info archive.tar.zst --show-par2
+# Directory structure only
+cpack list backup.7z --dirs-only
+
+# Files only (no directories)
+cpack list archive.7z --files-only
+
+# Quick summary for large archives
+cpack list massive-dataset.7z --summary-only
+
+# Detailed listing with file metadata
+cpack list documents.7z --verbose
+
+# Script-friendly minimal output
+find /backup -name "*.7z" -exec cpack list {} --files-only --quiet \;
 ```
 
-#### Information Displayed
-- Archive size and compression ratio
-- Creation date and metadata
-- Verification status
-- Hash values (if requested)
-- PAR2 recovery information
-- File count and structure
+#### Sample Output
+```
+Archive: documents.7z (127 files, 18 directories)
+
+Path                          Size      Date         Type
+────────────────────────────────────────────────────────
+documents/                    -         2025-07-26   DIR
+documents/README.md           2.1 KB    2025-07-26   FILE
+documents/reports/            -         2025-07-25   DIR
+documents/reports/annual.pdf  847 KB    2025-07-25   FILE
+documents/images/             -         2025-07-24   DIR
+documents/images/chart.png    156 KB    2025-07-24   FILE
+...
+
+Showing 1-20 of 127 entries. Use --limit and --offset for more.
+Total: 127 files, 18 directories (15.2 MB)
+```
+
+#### Performance Features
+- **Cross-Platform Directory Detection**: Robust identification on Windows, macOS, Linux
+- **Large Archive Optimization**: Intelligent handling of archives with thousands of files
+- **Unicode Path Support**: Full support for international filenames
+- **Real-Time Filtering**: Fast glob pattern matching during listing
 
 ### `cpack formats`
 
-List all supported archive formats.
+Display supported input archive formats.
 
 #### Syntax
 ```bash
@@ -261,191 +426,174 @@ cpack formats [OPTIONS]
 
 #### Options
 ```bash
---input                         # Show only input formats
---output                        # Show only output formats
---verbose, -v                   # Show format descriptions
+--verbose, -v                   # Show format descriptions and capabilities
 ```
 
 #### Examples
 ```bash
-# List all formats
+# List supported formats
 cpack formats
-
-# Input formats only
-cpack formats --input
 
 # Detailed format information
 cpack formats --verbose
 ```
 
-## Configuration Files
+#### Supported Input Formats
+- **Directories**: Any filesystem directory structure
+- **7z Archives**: .7z files (7-Zip format)
+- **ZIP Archives**: .zip files
+- **RAR Archives**: .rar files
+- **TAR Archives**: .tar, .tar.gz, .tar.bz2, .tar.xz, .tar.zst
 
-### Global Configuration
+#### Output Format
+- **7z Cold Storage**: Professional 7z archives with comprehensive verification
+
+## Advanced Configuration
+
+coldpack supports professional configuration through environment variables and configuration files.
+
+### Key Environment Variables
 ```bash
-~/.config/coldpack/config.toml
+COLDPACK_DEFAULT_OUTPUT=/backup        # Default output directory
+COLDPACK_COMPRESSION_LEVEL=7           # Default compression level (0-9)
+COLDPACK_THREADS=0                     # Thread count (0 = all cores)
 ```
 
-### Project Configuration
-```bash
-./coldpack.toml
-```
+### Configuration Files
+- **Global**: `~/.config/coldpack/config.toml`
+- **Project**: `./coldpack.toml`
 
-### Configuration Example
-```toml
-[compression]
-level = 19
-ultra_mode = false
-threads = 0
-long_mode = true
-
-[processing]
-verify_integrity = true
-generate_par2 = true
-par2_redundancy = 10
-cleanup_on_error = true
-
-[output]
-default_directory = "./archives"
-organize_by_date = false
-preserve_structure = true
-```
-
-## Environment Variables
-
-```bash
-COLDPACK_CONFIG_DIR=/path/to/config    # Config directory
-COLDPACK_TEMP_DIR=/path/to/temp        # Temporary files directory
-COLDPACK_DEFAULT_OUTPUT=/path/to/out   # Default output directory
-COLDPACK_COMPRESSION_LEVEL=19          # Default compression level
-COLDPACK_THREADS=8                     # Default thread count
-COLDPACK_VERBOSE=1                     # Enable verbose output
-```
+For comprehensive configuration options, see [Architecture Guide](ARCHITECTURE.md).
 
 ## Exit Codes
 
-| Code | Meaning |
-|------|---------|
-| 0 | Success |
-| 1 | General error |
-| 2 | File not found |
-| 3 | Permission error |
-| 4 | Insufficient disk space |
-| 5 | Verification failed |
-| 6 | Required tool not found |
-| 7 | Invalid format |
-| 8 | Compression failed |
-| 9 | Extraction failed |
+| Code | Meaning | Usage |
+|------|---------|-------|
+| 0 | Success | All operations completed successfully |
+| 1 | General error | Command-line syntax or runtime errors |
+| 2 | File not found | Archive or source file doesn't exist |
+| 3 | Permission error | Insufficient permissions for file operations |
+| 4 | Insufficient space | Not enough disk space for operation |
+| 5 | Verification failed | Integrity check failed in verify command |
+| 6 | Tool not found | Required external tool unavailable |
 
-## Performance Tips
+## Professional Usage Patterns
 
-### Large Files
+### Production Archival
 ```bash
-# Use more threads for large files
-cpack archive large_dataset/ -t 16
+# Maximum compression for long-term storage
+cpack create critical-data/ --level 9 --dict 512m --output-dir /archive
 
-# Reduce memory usage for very large files
-cpack archive large_dataset/ -l 12
+# Enterprise backup with high PAR2 redundancy
+cpack create database-backup/ --par2-redundancy 15 --output-dir /backup
 ```
 
-### Batch Operations
+### Development Workflows
 ```bash
-# Process multiple archives efficiently
-for archive in *.7z; do
-    cpack archive "$archive" --quiet
-done
+# Fast compression for CI/CD
+cpack create build-artifacts/ --level 3 --dict 4m --no-verify-par2
 
-# Parallel processing
-find . -name "*.7z" | xargs -P 4 -I {} cpack archive {}
+# Verification in automated testing
+cpack verify /backup/*.7z --quiet && echo "All backups verified"
 ```
 
-### Storage Optimization
+### Batch Processing
 ```bash
-# Maximum compression for archival
-cpack archive important_data/ -l 22 --ultra
+# Process multiple directories efficiently
+find /data -maxdepth 1 -type d -exec cpack create {} --output-dir /cold-storage \;
 
-# Balanced compression for regular use
-cpack archive data/ -l 15 -t 8
-
-# Fast compression for temporary archives
-cpack archive temp_data/ -l 3 --no-par2
+# Parallel archive creation
+ls /source/ | xargs -P 4 -I {} cpack create /source/{} --output-dir /archives
 ```
 
-## Integration Examples
+## Automation & Integration
 
-### Backup Scripts
+### Enterprise Backup Scripts
 ```bash
 #!/bin/bash
-# Daily backup script
+# Professional daily backup with verification
 DATE=$(date +%Y%m%d)
-cpack archive /important/data -o /backup -n "backup_$DATE"
+BACKUP_NAME="enterprise_backup_$DATE"
+
+# Create archive with maximum compression
+cpack create /critical/data --output-dir /backup --name "$BACKUP_NAME" --level 9
+
+# Verify integrity
+cpack verify "/backup/$BACKUP_NAME.7z" --quiet
+if [ $? -eq 0 ]; then
+    echo "Backup $BACKUP_NAME verified successfully"
+else
+    echo "CRITICAL: Backup verification failed!" >&2
+    exit 5
+fi
 ```
 
-### Verification Cron Job
+### Cron Job Integration
 ```bash
-# Add to crontab for weekly verification
-0 2 * * 0 /usr/local/bin/cpack verify /backup/*.tar.zst --quiet
+# Weekly verification (add to crontab)
+0 2 * * 0 /usr/local/bin/cpack verify /backup/*.7z --quiet
+
+# Monthly archive cleanup with verification
+0 3 1 * * find /archive -name "*.7z" -mtime +90 -exec cpack verify {} --quiet \;
 ```
 
-### CI/CD Integration
+### CI/CD Pipeline
 ```yaml
-# GitHub Actions example
-- name: Create Archive
+# GitHub Actions - Professional archival workflow
+- name: Create Release Archive
   run: |
-    cpack archive ./build/artifacts --output ./archives
-    cpack verify ./archives/*.tar.zst
+    cpack create ./dist --output-dir ./release --name "app-${{ github.ref_name }}"
+    cpack verify "./release/app-${{ github.ref_name }}.7z"
+
+- name: Upload Archive
+  uses: actions/upload-artifact@v3
+  with:
+    name: coldpack-archive
+    path: ./release/
 ```
 
 ## Troubleshooting
 
-### Common Issues
-
-**Command not found**
+### Quick Diagnostics
 ```bash
-# Ensure coldpack is installed
-pip show coldpack
-# or
-uv list | grep coldpack
+# Check installation
+cpack --version
+
+# Verify all commands available
+cpack --help
+
+# Test basic functionality
+mkdir test-dir && echo "test" > test-dir/file.txt
+cpack create test-dir --quiet
 ```
 
-**Permission denied**
+### Common Solutions
 ```bash
-# Check file permissions
-ls -la archive.tar.zst
-# Fix permissions
-chmod 644 archive.tar.zst
-```
+# Permissions: Run with proper permissions
+sudo cpack create /restricted/data --output-dir /backup
 
-**Insufficient space**
-```bash
-# Check available space
-df -h
-# Use different temporary directory
-COLDPACK_TEMP_DIR=/large/partition cpack archive data/
-```
+# Space: Check and free disk space
+df -h && cpack create data/ --output-dir /large-partition
 
-**PAR2 tool not found**
-```bash
-# Check PAR2 installation
-which par2
-# Should be automatically available via par2cmdline-turbo package
-```
-
-### Debug Mode
-```bash
-# Enable debug logging
-COLDPACK_VERBOSE=1 cpack archive data/ -v
+# Performance: Adjust threads for your system
+cpack create large-data/ --threads 8  # Limit threads
+cpack create small-data/ --threads 0  # Use all cores
 ```
 
 ### Getting Help
 ```bash
 # Command-specific help
-cpack archive --help
-cpack verify --help
+cpack create --help
+cpack list --help
 
-# General help
+# General help and version
 cpack --help
+cpack --version
 ```
 
 ---
 
-For more examples and advanced usage, see [EXAMPLES.md](EXAMPLES.md).
+**Next Steps:**
+- 📚 [Usage Examples](EXAMPLES.md) - Real-world scenarios and workflows
+- 🏗️ [Architecture Guide](ARCHITECTURE.md) - Technical details and advanced configuration
+- 📋 [Installation Guide](INSTALLATION.md) - Setup and deployment instructions
