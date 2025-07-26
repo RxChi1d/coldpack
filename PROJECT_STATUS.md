@@ -13,7 +13,7 @@ coldpack 是一個跨平台的冷儲存 Python CLI 套件，專門用於將指�
 ### ✅ 已完成功能
 
 #### CLI 介面 (100% 完成)
-- [x] `cpack archive` - 建立 7z 冷儲存封存 **（純 7z 格式，大幅簡化的用戶介面）**
+- [x] `cpack create` - 建立 7z 冷儲存封存 **（純 7z 格式，大幅簡化的用戶介面）**
 - [x] `cpack extract` - 解壓縮封存檔案 **（保留多格式智能識別用於輸入，支援預驗證）**
 - [x] `cpack verify` - 驗證檔案完整性 **（7z 格式專用驗證層）**
 - [x] `cpack repair` - 使用 PAR2 修復損壞檔案

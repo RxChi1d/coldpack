@@ -149,7 +149,7 @@ def main(
 
 
 @app.command()
-def archive(
+def create(
     ctx: typer.Context,
     source: Path,
     output_dir: Optional[Path] = typer.Option(
