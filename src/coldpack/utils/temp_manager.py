@@ -559,8 +559,16 @@ class GlobalTempManager:
         self._cleanup_all_temp_resources()
 
 
-# Global instance
-_global_temp_manager = GlobalTempManager()
+# Global instance (lazy initialization)
+_global_temp_manager: Optional[GlobalTempManager] = None
+
+
+def _get_global_temp_manager() -> GlobalTempManager:
+    """Get the global temporary file manager instance with lazy initialization."""
+    global _global_temp_manager
+    if _global_temp_manager is None:
+        _global_temp_manager = GlobalTempManager()
+    return _global_temp_manager
 
 
 # Public API functions for convenience
@@ -574,7 +582,9 @@ def create_temp_directory(suffix: str = "", prefix: str = TEMP_DIR_PREFIX) -> Pa
     Returns:
         Path to the created temporary directory
     """
-    return _global_temp_manager.create_temp_directory(suffix=suffix, prefix=prefix)
+    return _get_global_temp_manager().create_temp_directory(
+        suffix=suffix, prefix=prefix
+    )
 
 
 def create_temp_file(suffix: str = "", prefix: str = TEMP_DIR_PREFIX) -> Path:
@@ -587,7 +597,7 @@ def create_temp_file(suffix: str = "", prefix: str = TEMP_DIR_PREFIX) -> Path:
     Returns:
         Path to the created temporary file
     """
-    return _global_temp_manager.create_temp_file(suffix=suffix, prefix=prefix)
+    return _get_global_temp_manager().create_temp_file(suffix=suffix, prefix=prefix)
 
 
 def track_temp_directory(temp_dir: Union[str, Path]) -> None:
@@ -596,7 +606,7 @@ def track_temp_directory(temp_dir: Union[str, Path]) -> None:
     Args:
         temp_dir: Path to the temporary directory to track
     """
-    _global_temp_manager.track_temp_directory(temp_dir)
+    _get_global_temp_manager().track_temp_directory(temp_dir)
 
 
 def track_temp_file(temp_file: Union[str, Path]) -> None:
@@ -605,7 +615,7 @@ def track_temp_file(temp_file: Union[str, Path]) -> None:
     Args:
         temp_file: Path to the temporary file to track
     """
-    _global_temp_manager.track_temp_file(temp_file)
+    _get_global_temp_manager().track_temp_file(temp_file)
 
 
 def cleanup_temp_directory(temp_dir: Union[str, Path]) -> bool:
@@ -617,7 +627,7 @@ def cleanup_temp_directory(temp_dir: Union[str, Path]) -> bool:
     Returns:
         True if cleanup was successful
     """
-    return _global_temp_manager.cleanup_temp_directory(temp_dir)
+    return _get_global_temp_manager().cleanup_temp_directory(temp_dir)
 
 
 def cleanup_temp_file(temp_file: Union[str, Path]) -> bool:
@@ -629,12 +639,12 @@ def cleanup_temp_file(temp_file: Union[str, Path]) -> bool:
     Returns:
         True if cleanup was successful
     """
-    return _global_temp_manager.cleanup_temp_file(temp_file)
+    return _get_global_temp_manager().cleanup_temp_file(temp_file)
 
 
 def force_cleanup_all() -> None:
     """Force immediate cleanup of all temporary resources."""
-    _global_temp_manager.force_cleanup_all()
+    _get_global_temp_manager().force_cleanup_all()
 
 
 def get_tracked_resources() -> tuple[set[Path], set[Path]]:
@@ -643,4 +653,4 @@ def get_tracked_resources() -> tuple[set[Path], set[Path]]:
     Returns:
         Tuple of (temp_directories, temp_files)
     """
-    return _global_temp_manager.get_tracked_resources()
+    return _get_global_temp_manager().get_tracked_resources()
