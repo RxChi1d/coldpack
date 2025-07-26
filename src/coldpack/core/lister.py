@@ -326,14 +326,79 @@ class ArchiveLister:
             except ValueError:
                 logger.debug(f"Failed to parse modification time: {modified_str}")
 
-        # Determine if it's a directory from attributes
+        # Determine if it's a directory from multiple indicators
         attributes = properties.get("Attributes", "")
-        is_directory = attributes.startswith("D ")
+
+        # Primary method: Check if attributes indicate directory
+        # Unix/Linux: "D " prefix, Windows: may vary
+        is_directory_from_attr = False
+        if attributes:
+            attr_upper = attributes.upper()
+            is_directory_from_attr = (
+                attributes.startswith("D ")  # Unix/Linux format
+                or attributes.startswith("D")  # Windows format (no space)
+                or "D" in attributes.split()[0]  # First attribute contains D
+                or "DIR" in attr_upper  # Windows may use DIR
+                or "DIRECTORY" in attr_upper  # Full word
+                or attr_upper.startswith("D")  # Any D prefix
+            )
+
+        # Secondary method: Check if path ends with "/" (directory indicator)
+        is_directory_from_path = path.endswith("/")
+
+        # Additional method: Check for Windows-specific folder indicators
+        folder_prop = properties.get("Folder", "")
+        is_directory_from_folder_prop = folder_prop.strip().lower() in [
+            "+",
+            "true",
+            "1",
+        ]
 
         # Extract CRC if available
         crc = properties.get("CRC", "") or None
         if crc == "":
             crc = None
+
+        # Tertiary method: Check if size is 0 and no CRC (typical for directories)
+        is_directory_from_metadata = (
+            size == 0
+            and crc is None
+            and not path.endswith((".txt", ".exe", ".dll", ".zip", ".7z"))
+        )
+
+        # Final determination: Use multiple indicators for robust cross-platform detection
+        is_directory = (
+            is_directory_from_attr
+            or is_directory_from_path
+            or is_directory_from_folder_prop
+            or (
+                is_directory_from_metadata
+                and not any(
+                    path.endswith(ext)
+                    for ext in [
+                        ".txt",
+                        ".log",
+                        ".md",
+                        ".py",
+                        ".js",
+                        ".css",
+                        ".html",
+                        ".xml",
+                        ".json",
+                    ]
+                )
+            )
+        )
+
+        # Debug logging for cross-platform compatibility
+        logger.debug(
+            f"Directory detection for '{path}': "
+            f"attrs='{attributes}' -> {is_directory_from_attr}, "
+            f"path_ends_slash={is_directory_from_path}, "
+            f"folder_prop='{folder_prop}' -> {is_directory_from_folder_prop}, "
+            f"metadata={is_directory_from_metadata} -> "
+            f"final={is_directory}"
+        )
 
         return ArchiveFile(
             path=path,
