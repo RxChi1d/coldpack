@@ -15,13 +15,13 @@ cpack --version                # Show version information
 
 ## Commands
 
-### `cpack archive`
+### `cpack create`
 
 Create a professional 7z cold storage archive with comprehensive verification and recovery systems.
 
 #### Syntax
 ```bash
-cpack archive [OPTIONS] SOURCE
+cpack create [OPTIONS] SOURCE
 ```
 
 #### Arguments
@@ -67,24 +67,24 @@ cpack archive [OPTIONS] SOURCE
 #### Examples
 ```bash
 # Basic 7z cold storage creation (dynamic optimization)
-cpack archive /path/to/documents
+cpack create /path/to/documents
 
 # Custom output location and name
-cpack archive /path/to/source --output-dir /backup --name critical-data
+cpack create /path/to/source --output-dir /backup --name critical-data
 
 # Maximum compression for archival storage
-cpack archive large-dataset/ --level 9 --dict 512m
+cpack create large-dataset/ --level 9 --dict 512m
 
 # Fast compression for temporary archives
-cpack archive temp-files/ --level 3 --dict 1m
+cpack create temp-files/ --level 3 --dict 1m
 
 # Multi-format input processing
-cpack archive existing-archive.zip --output-dir /cold-storage
-cpack archive backup.tar.gz --name converted-backup
+cpack create existing-archive.zip --output-dir /cold-storage
+cpack create backup.tar.gz --name converted-backup
 
 # Verification customization
-cpack archive sensitive-data/ --par2-redundancy 20  # 20% PAR2 redundancy
-cpack archive fast-data/ --no-verify-par2           # Skip PAR2 for speed
+cpack create sensitive-data/ --par2-redundancy 20  # 20% PAR2 redundancy
+cpack create fast-data/ --no-verify-par2           # Skip PAR2 for speed
 ```
 
 #### Professional 7z Output Structure
@@ -482,16 +482,16 @@ For comprehensive configuration options, see [Architecture Guide](ARCHITECTURE.m
 ### Production Archival
 ```bash
 # Maximum compression for long-term storage
-cpack archive critical-data/ --level 9 --dict 512m --output-dir /archive
+cpack create critical-data/ --level 9 --dict 512m --output-dir /archive
 
 # Enterprise backup with high PAR2 redundancy
-cpack archive database-backup/ --par2-redundancy 15 --output-dir /backup
+cpack create database-backup/ --par2-redundancy 15 --output-dir /backup
 ```
 
 ### Development Workflows
 ```bash
 # Fast compression for CI/CD
-cpack archive build-artifacts/ --level 3 --dict 4m --no-verify-par2
+cpack create build-artifacts/ --level 3 --dict 4m --no-verify-par2
 
 # Verification in automated testing
 cpack verify /backup/*.7z --quiet && echo "All backups verified"
@@ -500,10 +500,10 @@ cpack verify /backup/*.7z --quiet && echo "All backups verified"
 ### Batch Processing
 ```bash
 # Process multiple directories efficiently
-find /data -maxdepth 1 -type d -exec cpack archive {} --output-dir /cold-storage \;
+find /data -maxdepth 1 -type d -exec cpack create {} --output-dir /cold-storage \;
 
 # Parallel archive creation
-ls /source/ | xargs -P 4 -I {} cpack archive /source/{} --output-dir /archives
+ls /source/ | xargs -P 4 -I {} cpack create /source/{} --output-dir /archives
 ```
 
 ## Automation & Integration
@@ -516,7 +516,7 @@ DATE=$(date +%Y%m%d)
 BACKUP_NAME="enterprise_backup_$DATE"
 
 # Create archive with maximum compression
-cpack archive /critical/data --output-dir /backup --name "$BACKUP_NAME" --level 9
+cpack create /critical/data --output-dir /backup --name "$BACKUP_NAME" --level 9
 
 # Verify integrity
 cpack verify "/backup/$BACKUP_NAME.7z" --quiet
@@ -542,7 +542,7 @@ fi
 # GitHub Actions - Professional archival workflow
 - name: Create Release Archive
   run: |
-    cpack archive ./dist --output-dir ./release --name "app-${{ github.ref_name }}"
+    cpack create ./dist --output-dir ./release --name "app-${{ github.ref_name }}"
     cpack verify "./release/app-${{ github.ref_name }}.7z"
 
 - name: Upload Archive
@@ -564,26 +564,26 @@ cpack --help
 
 # Test basic functionality
 mkdir test-dir && echo "test" > test-dir/file.txt
-cpack archive test-dir --quiet
+cpack create test-dir --quiet
 ```
 
 ### Common Solutions
 ```bash
 # Permissions: Run with proper permissions
-sudo cpack archive /restricted/data --output-dir /backup
+sudo cpack create /restricted/data --output-dir /backup
 
 # Space: Check and free disk space
-df -h && cpack archive data/ --output-dir /large-partition
+df -h && cpack create data/ --output-dir /large-partition
 
 # Performance: Adjust threads for your system
-cpack archive large-data/ --threads 8  # Limit threads
-cpack archive small-data/ --threads 0  # Use all cores
+cpack create large-data/ --threads 8  # Limit threads
+cpack create small-data/ --threads 0  # Use all cores
 ```
 
 ### Getting Help
 ```bash
 # Command-specific help
-cpack archive --help
+cpack create --help
 cpack list --help
 
 # General help and version

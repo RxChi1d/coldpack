@@ -24,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **4-Layer Verification System**: Streamlined integrity verification (7z → SHA-256 → BLAKE3 → PAR2)
 
 #### Complete CLI Command Suite
-- `cpack archive` - Create 7z cold storage archives with dynamic optimization
+- `cpack create` - Create 7z cold storage archives with dynamic optimization
 - `cpack extract` - Extract archives with automatic parameter recovery and optional pre-verification
 - `cpack verify` - Multi-layer integrity verification with auto-discovery
 - `cpack repair` - PAR2-based file recovery with metadata parameter restoration

@@ -56,7 +56,7 @@ output-dir/
 ```
 
 **CLI 功能:**
-- `cpack archive`: 建立冷儲存封存
+- `cpack create`: 建立冷儲存封存
 - `cpack extract`: 解壓縮封存檔案
 - `cpack verify`: 驗證檔案完整性
 - `cpack repair`: 使用 PAR2 修復損壞檔案

@@ -25,7 +25,7 @@ coldpack is a professional-grade CLI tool that revolutionizes cold storage with 
 - **Simplified CLI Interface**: No format confusion - pure 7z cold storage workflow
 
 ### 🔧 Complete CLI Command Suite
-- **`cpack archive`** - Create 7z cold storage with dynamic optimization
+- **`cpack create`** - Create 7z cold storage with dynamic optimization
 - **`cpack extract`** - Extract with automatic parameter recovery and pre-verification
 - **`cpack verify`** - 4-layer integrity verification with auto-discovery
 - **`cpack repair`** - PAR2-based recovery with metadata parameter restoration
@@ -66,7 +66,7 @@ uv add coldpack
 
 ```bash
 # Create 7z cold storage archive
-cpack archive /path/to/documents --output-dir ~/cold-storage
+cpack create /path/to/documents --output-dir ~/cold-storage
 
 # Extract with automatic parameter recovery
 cpack extract ~/cold-storage/documents.7z --output-dir ~/restored
@@ -82,7 +82,7 @@ cpack list ~/cold-storage/documents.7z --filter "*.pdf" --limit 10
 
 ```bash
 # Custom compression levels (0-9)
-cpack archive large-dataset/ --level 9 --dict 512m --output-dir ~/archives
+cpack create large-dataset/ --level 9 --dict 512m --output-dir ~/archives
 
 # Pre-verification before extraction
 cpack extract suspicious-archive.7z --verify --output-dir ~/safe-extraction

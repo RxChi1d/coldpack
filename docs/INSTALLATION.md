@@ -132,7 +132,7 @@ cpack --help
 # Test archive creation
 mkdir test-data
 echo "Hello coldpack!" > test-data/sample.txt
-cpack archive test-data --output-dir ~/test-output
+cpack create test-data --output-dir ~/test-output
 ```
 
 ### Dependency Verification
@@ -252,7 +252,7 @@ CMD ["cpack", "--help"]
 docker build -t coldpack-env .
 
 # Run coldpack in container
-docker run -v $(pwd):/workspace coldpack-env cpack archive /workspace/data
+docker run -v $(pwd):/workspace coldpack-env cpack create /workspace/data
 ```
 
 ## Troubleshooting

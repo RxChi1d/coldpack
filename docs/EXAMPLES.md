@@ -26,7 +26,7 @@ mkdir sample_documents/reports
 echo "Annual report data" > sample_documents/reports/annual.txt
 
 # Create 7z cold storage archive (automatic dynamic optimization)
-cpack archive sample_documents/
+cpack create sample_documents/
 # Output: Creates sample_documents/sample_documents.7z with full verification
 
 # Verify the archive integrity
@@ -42,7 +42,7 @@ cpack list sample_documents/sample_documents.7z
 
 ```bash
 # 1. Create archive with dynamic compression
-cpack archive /path/to/important/documents
+cpack create /path/to/important/documents
 
 # 2. Verify 4-layer integrity
 cpack verify documents/documents.7z
@@ -60,17 +60,17 @@ cpack info documents/documents.7z
 
 ```bash
 # Archive directories with intelligent system file filtering
-cpack archive ./project_source/        # Excludes .git, .DS_Store, etc.
-cpack archive /home/user/documents/    # Cross-platform compatibility
+cpack create ./project_source/        # Excludes .git, .DS_Store, etc.
+cpack create /home/user/documents/    # Cross-platform compatibility
 
 # Convert legacy archive formats to 7z cold storage
-cpack archive legacy_backup.zip --output-dir /cold-storage
-cpack archive old_data.tar.gz --name converted_data
-cpack archive important.rar --output-dir /archives
+cpack create legacy_backup.zip --output-dir /cold-storage
+cpack create old_data.tar.gz --name converted_data
+cpack create important.rar --output-dir /archives
 
 # Batch conversion with progress tracking
 for archive in *.zip *.tar.gz *.rar; do
-    [ -f "$archive" ] && cpack archive "$archive" --output-dir /converted
+    [ -f "$archive" ] && cpack create "$archive" --output-dir /converted
 done
 ```
 
@@ -80,17 +80,17 @@ coldpack automatically selects optimal compression based on file size:
 
 ```bash
 # Small files (< 256KB) - Level 1, Dict 128k (automatic)
-cpack archive small_configs/
+cpack create small_configs/
 
 # Medium files (1-8MB) - Level 5, Dict 4m (automatic)
-cpack archive documents/
+cpack create documents/
 
 # Large datasets (> 2GB) - Level 9, Dict 512m (automatic)
-cpack archive large_dataset/
+cpack create large_dataset/
 
 # Manual override for special cases
-cpack archive media_files/ --level 3 --dict 1m     # Fast for pre-compressed
-cpack archive source_code/ --level 9 --dict 256m   # Maximum for text files
+cpack create media_files/ --level 3 --dict 1m     # Fast for pre-compressed
+cpack create source_code/ --level 9 --dict 256m   # Maximum for text files
 ```
 
 ### Professional Output Organization
@@ -98,30 +98,30 @@ cpack archive source_code/ --level 9 --dict 256m   # Maximum for text files
 ```bash
 # Structured backup with timestamps
 DATE=$(date +%Y%m%d_%H%M%S)
-cpack archive /critical/data --output-dir /backup --name "critical_backup_$DATE"
+cpack create /critical/data --output-dir /backup --name "critical_backup_$DATE"
 
 # Organized archive hierarchy
 mkdir -p "/cold-storage/$(date +%Y/%m)"
-cpack archive ./project/ --output-dir "/cold-storage/$(date +%Y/%m)" --name "project_$(date +%Y%m%d)"
+cpack create ./project/ --output-dir "/cold-storage/$(date +%Y/%m)" --name "project_$(date +%Y%m%d)"
 
 # Enterprise naming conventions
-cpack archive /database/dump --name "db_prod_$(hostname)_$(date +%Y%m%d)" --output-dir /archives
+cpack create /database/dump --name "db_prod_$(hostname)_$(date +%Y%m%d)" --output-dir /archives
 ```
 
 ### Advanced Verification Configuration
 
 ```bash
 # Maximum security with high PAR2 redundancy
-cpack archive sensitive_data/ --par2-redundancy 20    # 20% recovery capability
+cpack create sensitive_data/ --par2-redundancy 20    # 20% recovery capability
 
 # Performance-optimized for CI/CD
-cpack archive build_artifacts/ --level 3 --no-verify-par2
+cpack create build_artifacts/ --level 3 --no-verify-par2
 
 # Selective verification (customize for workflow)
-cpack archive temp_data/ --no-verify-blake3 --no-verify-par2
+cpack create temp_data/ --no-verify-blake3 --no-verify-par2
 
 # Full enterprise-grade verification (default)
-cpack archive critical_documents/    # All 4 layers enabled
+cpack create critical_documents/    # All 4 layers enabled
 ```
 
 ## Smart Extraction & Recovery
@@ -263,7 +263,7 @@ pg_dump "$DB_NAME" > "/tmp/${DB_NAME}_${DATE}.sql"
 
 # Create professional 7z archive with maximum compression
 echo "Creating cold storage archive..."
-cpack archive "/tmp/${DB_NAME}_${DATE}.sql" \
+cpack create "/tmp/${DB_NAME}_${DATE}.sql" \
     --output-dir "$ARCHIVE_DIR" \
     --name "${DB_NAME}_backup_${DATE}" \
     --level 9 \
@@ -300,7 +300,7 @@ for dept in hr finance engineering marketing; do
     if [ -d "$DOCS_ROOT/$dept" ]; then
         echo "Archiving $dept documents..."
 
-        cpack archive "$DOCS_ROOT/$dept" \
+        cpack create "$DOCS_ROOT/$dept" \
             --output-dir "$ARCHIVE_ROOT/$YEAR/$MONTH" \
             --name "${dept}_docs_${YEAR}${MONTH}" \
             --level 7 \
@@ -340,7 +340,7 @@ fi
 echo "Creating release archive for $PROJECT_NAME v$VERSION"
 
 # Create comprehensive project archive
-cpack archive "$BUILD_DIR" \
+cpack create "$BUILD_DIR" \
     --output-dir "$ARCHIVE_DIR" \
     --name "${PROJECT_NAME}_v${VERSION}_$(date +%Y%m%d)" \
     --level 9 \
@@ -350,7 +350,7 @@ cpack archive "$BUILD_DIR" \
 git archive --format=tar --prefix="${PROJECT_NAME}-${VERSION}/" HEAD | \
     gzip > "/tmp/${PROJECT_NAME}_source_${VERSION}.tar.gz"
 
-cpack archive "/tmp/${PROJECT_NAME}_source_${VERSION}.tar.gz" \
+cpack create "/tmp/${PROJECT_NAME}_source_${VERSION}.tar.gz" \
     --output-dir "$ARCHIVE_DIR" \
     --name "${PROJECT_NAME}_source_v${VERSION}"
 
@@ -397,7 +397,7 @@ echo "Archiving old backup files..."
 find "$BACKUP_DIR" -name "*.sql" -o -name "*.dump" -mtime +1 | while read -r backup; do
     if [ -f "$backup" ]; then
         base_name=$(basename "$backup" | sed 's/\.[^.]*$//')
-        cpack archive "$backup" \
+        cpack create "$backup" \
             --output-dir "$ARCHIVE_DIR/automated" \
             --name "auto_${base_name}_$(date +%Y%m%d)" \
             --level 7 \
@@ -440,7 +440,7 @@ jobs:
 
     - name: Create professional archive
       run: |
-        cpack archive ./dist \
+        cpack create ./dist \
           --output-dir ./release-archives \
           --name "app-${{ github.ref_name }}-$(date +%Y%m%d)" \
           --level 9 \
@@ -489,7 +489,7 @@ CMD ["cron", "-f"]
 DATE=$(date +%Y%m%d_%H%M%S)
 
 # Archive application data
-cpack archive /app/data \
+cpack create /app/data \
     --output-dir /cold-storage \
     --name "app_data_$DATE" \
     --level 7
@@ -507,32 +507,32 @@ echo "Backup completed: app_data_$DATE.7z" >> /backup/backup.log
 
 ```bash
 # Resource-constrained environments (VPS, containers)
-cpack archive large_dataset/ --level 3 --dict 16m --threads 2
+cpack create large_dataset/ --level 3 --dict 16m --threads 2
 
 # High-performance workstations (maximize compression)
-cpack archive source_code/ --level 9 --dict 512m --threads 0
+cpack create source_code/ --level 9 --dict 512m --threads 0
 
 # Network storage optimization (balance speed vs compression)
-cpack archive network_data/ --level 5 --dict 64m --threads 4
+cpack create network_data/ --level 5 --dict 64m --threads 4
 
 # SSD optimization (reduce write cycles)
-COLDPACK_TEMP_DIR=/tmp/ramdisk cpack archive important_data/
+COLDPACK_TEMP_DIR=/tmp/ramdisk cpack create important_data/
 ```
 
 ### File Size-Based Strategies
 
 ```bash
 # Small files (< 100MB) - prioritize speed
-find /configs -name "*.conf" -exec cpack archive {} --level 1 --dict 1m \;
+find /configs -name "*.conf" -exec cpack create {} --level 1 --dict 1m \;
 
 # Medium files (100MB - 1GB) - balanced approach
-cpack archive documents/ --level 5 --dict 32m
+cpack create documents/ --level 5 --dict 32m
 
 # Large files (1GB+) - maximize compression
-cpack archive database_dumps/ --level 9 --dict 512m --threads 8
+cpack create database_dumps/ --level 9 --dict 512m --threads 8
 
 # Pre-compressed files (media, archives) - minimal compression
-cpack archive media_collection/ --level 1 --dict 128k --no-verify-par2
+cpack create media_collection/ --level 1 --dict 128k --no-verify-par2
 ```
 
 ### Batch Processing Optimization
@@ -560,7 +560,7 @@ process_archive() {
         level=7; dict="128m"
     fi
 
-    cpack archive "$source" \
+    cpack create "$source" \
         --level "$level" \
         --dict "$dict" \
         --threads 2 \
@@ -593,15 +593,15 @@ echo "Batch processing completed"
 ```bash
 # Large file processing with memory constraints
 ulimit -v 2097152  # Limit virtual memory to 2GB
-cpack archive huge_dataset/ --level 5 --dict 64m --threads 2
+cpack create huge_dataset/ --level 5 --dict 64m --threads 2
 
 # Streaming processing for very large files
 export COLDPACK_STREAMING_MODE=1
-cpack archive massive_video_collection/ --level 3 --dict 16m
+cpack create massive_video_collection/ --level 3 --dict 16m
 
 # Monitor memory usage during processing
 (
-    cpack archive large_data/ --level 7 --verbose &
+    cpack create large_data/ --level 7 --verbose &
     PID=$!
 
     while kill -0 $PID 2>/dev/null; do
@@ -659,7 +659,7 @@ if cpack extract "$ARCHIVE" --output-dir "${BACKUP_DIR}/partial_recovery" --forc
     echo "Recovered files located in: ${BACKUP_DIR}/partial_recovery"
 
     # Try to re-archive recovered data
-    cpack archive "${BACKUP_DIR}/partial_recovery" \
+    cpack create "${BACKUP_DIR}/partial_recovery" \
         --output-dir "${BACKUP_DIR}" \
         --name "recovered_$(basename "$ARCHIVE" .7z)" \
         --level 7
@@ -710,7 +710,7 @@ for level in 1 3 5 7 9; do
 
     start_time=$(date +%s)
 
-    cpack archive "$ARCHIVE_SOURCE" \
+    cpack create "$ARCHIVE_SOURCE" \
         --output-dir "$TEST_OUTPUT" \
         --name "test_level_$level" \
         --level "$level" \
@@ -793,14 +793,14 @@ if [ "$AVAILABLE_KB" -lt "$REQUIRED_KB" ]; then
 
     # Use lower compression to reduce processing time and temp space
     echo "Using fast compression to minimize temp space usage"
-    cpack archive "$SOURCE" \
+    cpack create "$SOURCE" \
         --output-dir "$OUTPUT_DIR" \
         --level 3 \
         --dict 16m \
         --no-verify-par2
 else
     echo "✓ Sufficient disk space available"
-    cpack archive "$SOURCE" --output-dir "$OUTPUT_DIR"
+    cpack create "$SOURCE" --output-dir "$OUTPUT_DIR"
 fi
 ```
 
@@ -822,7 +822,7 @@ mkdir -p "$LOCAL_TEMP"
 
 # Use local temp for processing, then transfer
 echo "Processing locally to minimize network I/O..."
-cpack archive "$SOURCE" \
+cpack create "$SOURCE" \
     --output-dir "$LOCAL_TEMP" \
     --level 7 \
     --verbose
