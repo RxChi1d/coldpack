@@ -339,9 +339,9 @@ class GlobalTempManager:
 
         for attempt in range(max_attempts):
             try:
-                # Try to remove read-only attribute
+                # Try to remove read-only attribute (owner permissions only for security)
                 with suppress(OSError):
-                    file_path.chmod(0o777)
+                    file_path.chmod(0o700)
 
                 # Try to close any open handles (force garbage collection)
                 gc.collect()
@@ -356,8 +356,12 @@ class GlobalTempManager:
                     try:
                         with suppress(OSError), open(file_path, "w") as f:
                             f.truncate(0)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        # Log truncation failure but continue with cleanup attempt
+                        with suppress(Exception):
+                            logger.debug(
+                                f"Failed to truncate file {file_path} during emergency cleanup: {e}"
+                            )
 
                 # Try removal
                 file_path.unlink()
@@ -408,13 +412,13 @@ class GlobalTempManager:
 
         for attempt in range(max_attempts):
             try:
-                # Try to remove read-only attributes recursively
+                # Try to remove read-only attributes recursively (owner permissions only for security)
                 with suppress(OSError):
                     for root, dirs, files in os.walk(dir_path):
                         for d in dirs:
-                            os.chmod(os.path.join(root, d), 0o777)
+                            os.chmod(os.path.join(root, d), 0o700)
                         for f in files:
-                            os.chmod(os.path.join(root, f), 0o777)
+                            os.chmod(os.path.join(root, f), 0o700)
 
                 # Force garbage collection to close any handles
                 gc.collect()
@@ -423,7 +427,7 @@ class GlobalTempManager:
                 def handle_remove_readonly(func: Any, path: str, exc: Any) -> None:
                     """Error handler for shutil.rmtree on Windows."""
                     with suppress(OSError):
-                        os.chmod(path, 0o777)
+                        os.chmod(path, 0o700)  # Owner permissions only for security
                         func(path)
 
                 shutil.rmtree(dir_path, onerror=handle_remove_readonly)
@@ -477,9 +481,12 @@ class GlobalTempManager:
                     cleaned_files += 1
                 else:
                     failed_files += 1
-            except Exception:
+            except Exception as e:
                 # Continue cleanup even if individual file cleanup fails
                 failed_files += 1
+                # Log cleanup failure with minimal I/O to avoid issues when disk is full
+                with suppress(Exception):
+                    logger.debug(f"Failed to cleanup temp file {temp_file}: {e}")
                 continue
 
         # Clean up directories (should have more space available now)
@@ -496,9 +503,12 @@ class GlobalTempManager:
                     cleaned_dirs += 1
                 else:
                     failed_dirs += 1
-            except Exception:
+            except Exception as e:
                 # Continue cleanup even if individual directory cleanup fails
                 failed_dirs += 1
+                # Log cleanup failure with minimal I/O to avoid issues when disk is full
+                with suppress(Exception):
+                    logger.debug(f"Failed to cleanup temp directory {temp_dir}: {e}")
                 continue
 
         # Clear tracking sets (handle potential memory/disk issues)
@@ -506,18 +516,22 @@ class GlobalTempManager:
             with self._lock:
                 self._temp_files.clear()
                 self._temp_dirs.clear()
-        except Exception:
+        except Exception as e:
             # If clearing fails, try individual clearing
+            with suppress(Exception):
+                logger.debug(f"Failed to clear tracking sets in bulk: {e}")
             try:
                 if hasattr(self, "_temp_files"):
                     self._temp_files.clear()
-            except Exception:
-                pass
+            except Exception as e:
+                with suppress(Exception):
+                    logger.debug(f"Failed to clear temp files tracking set: {e}")
             try:
                 if hasattr(self, "_temp_dirs"):
                     self._temp_dirs.clear()
-            except Exception:
-                pass
+            except Exception as e:
+                with suppress(Exception):
+                    logger.debug(f"Failed to clear temp dirs tracking set: {e}")
 
         # Log results only if logging is available
         with suppress(Exception):
