@@ -3,7 +3,6 @@
 import os
 import platform
 import shutil
-import tempfile
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
@@ -101,7 +100,7 @@ def validate_paths(*paths: Union[str, Path]) -> bool:
 
 
 def create_temp_directory(suffix: str = "", prefix: str = TEMP_DIR_PREFIX) -> Path:
-    """Create a secure temporary directory.
+    """Create a secure temporary directory with enhanced cleanup.
 
     Args:
         suffix: Suffix for the directory name
@@ -114,14 +113,10 @@ def create_temp_directory(suffix: str = "", prefix: str = TEMP_DIR_PREFIX) -> Pa
         FilesystemError: If directory creation fails
     """
     try:
-        temp_dir = tempfile.mkdtemp(suffix=suffix, prefix=prefix)
-        temp_path = Path(temp_dir)
+        # Use the enhanced temp manager for better cleanup
+        from .temp_manager import create_temp_directory as create_enhanced_temp_dir
 
-        # Ensure proper permissions (owner read/write/execute only)
-        os.chmod(temp_path, 0o700)
-
-        logger.debug(f"Created temporary directory: {temp_path}")
-        return temp_path
+        return create_enhanced_temp_dir(suffix=suffix, prefix=prefix)
 
     except OSError as e:
         logger.error(f"Failed to create temporary directory: {e}")
@@ -129,11 +124,11 @@ def create_temp_directory(suffix: str = "", prefix: str = TEMP_DIR_PREFIX) -> Pa
 
 
 def cleanup_temp_directory(temp_dir: Union[str, Path], force: bool = False) -> bool:
-    """Clean up a temporary directory and all its contents.
+    """Clean up a temporary directory and all its contents with enhanced Windows support.
 
     Args:
         temp_dir: Path to the temporary directory
-        force: If True, ignore errors and force removal
+        force: If True, use aggressive cleanup methods for Windows
 
     Returns:
         True if cleanup was successful
@@ -141,19 +136,14 @@ def cleanup_temp_directory(temp_dir: Union[str, Path], force: bool = False) -> b
     Raises:
         FilesystemError: If cleanup fails and force is False
     """
-    temp_path = Path(temp_dir)
-
-    if not temp_path.exists():
-        logger.debug(f"Temporary directory already removed: {temp_path}")
-        return True
-
     try:
-        shutil.rmtree(temp_path)
-        logger.debug(f"Successfully cleaned up temporary directory: {temp_path}")
-        return True
+        # Use the enhanced temp manager for better cleanup
+        from .temp_manager import cleanup_temp_directory as cleanup_enhanced_temp_dir
 
-    except OSError as e:
-        error_msg = f"Failed to clean up temporary directory {temp_path}: {e}"
+        return cleanup_enhanced_temp_dir(temp_dir)
+
+    except Exception as e:
+        error_msg = f"Failed to clean up temporary directory {temp_dir}: {e}"
 
         if force:
             logger.warning(error_msg)
@@ -167,7 +157,7 @@ def cleanup_temp_directory(temp_dir: Union[str, Path], force: bool = False) -> b
 def safe_temp_directory(
     suffix: str = "", prefix: str = TEMP_DIR_PREFIX
 ) -> Generator[Path, None, None]:
-    """Context manager for safe temporary directory operations.
+    """Context manager for safe temporary directory operations with enhanced cleanup.
 
     Args:
         suffix: Suffix for the directory name
@@ -188,6 +178,7 @@ def safe_temp_directory(
         yield temp_dir
     finally:
         if temp_dir:
+            # Enhanced cleanup automatically handles Windows issues
             cleanup_temp_directory(temp_dir, force=True)
 
 

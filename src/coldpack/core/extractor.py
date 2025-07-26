@@ -569,13 +569,15 @@ class MultiFormatExtractor:
                 logger.debug(f"  7z Method: {metadata.sevenzip_settings.method}")
 
         # Use a temporary directory for the intermediate tar file
-        import tempfile
-
         temp_dir = None
 
         try:
-            # Create temporary directory for intermediate tar file
-            temp_dir = Path(tempfile.mkdtemp(prefix="coldpack_extract_"))
+            # Create temporary directory for intermediate tar file with enhanced cleanup
+            from ..utils.temp_manager import (
+                create_temp_directory as create_enhanced_temp_dir,
+            )
+
+            temp_dir = create_enhanced_temp_dir(prefix="coldpack_extract_")
             logger.debug(f"Using temporary directory: {temp_dir}")
 
             # Step 1: Extract .zst compression to get .tar file
@@ -644,17 +646,9 @@ class MultiFormatExtractor:
         except Exception as e:
             raise ExtractionError(f"Failed to extract tar.zst archive: {e}") from e
         finally:
-            # Clean up temporary directory
-            if temp_dir and temp_dir.exists():
-                import shutil
-
-                try:
-                    shutil.rmtree(temp_dir)
-                    logger.debug(f"Cleaned up temporary directory: {temp_dir}")
-                except Exception as cleanup_error:
-                    logger.warning(
-                        f"Cleanup failed for temp directory: {cleanup_error}"
-                    )
+            # Enhanced temp manager handles cleanup automatically
+            # No manual cleanup needed - temp_dir is tracked globally
+            pass
 
     def _check_archive_structure_from_filelist(
         self, file_list: list, archive_name: str
@@ -1108,13 +1102,15 @@ class MultiFormatExtractor:
         logger.info(f"Extracting compound tar archive: {archive_path.name}")
 
         # Use a temporary directory for the intermediate tar file
-        import tempfile
-
         temp_dir = None
 
         try:
-            # Create temporary directory for intermediate tar file
-            temp_dir = Path(tempfile.mkdtemp(prefix="coldpack_extract_"))
+            # Create temporary directory for intermediate tar file with enhanced cleanup
+            from ..utils.temp_manager import (
+                create_temp_directory as create_enhanced_temp_dir,
+            )
+
+            temp_dir = create_enhanced_temp_dir(prefix="coldpack_extract_")
             logger.debug(f"Using temporary directory: {temp_dir}")
 
             # Step 1: Extract outer compression to get .tar file
@@ -1180,17 +1176,9 @@ class MultiFormatExtractor:
         except Exception as e:
             raise ExtractionError(f"Failed to extract compound tar archive: {e}") from e
         finally:
-            # Clean up temporary directory
-            if temp_dir and temp_dir.exists():
-                import shutil
-
-                try:
-                    shutil.rmtree(temp_dir)
-                    logger.debug(f"Cleaned up temporary directory: {temp_dir}")
-                except Exception as cleanup_error:
-                    logger.warning(
-                        f"Cleanup failed for temporary directory: {cleanup_error}"
-                    )
+            # Enhanced temp manager handles cleanup automatically
+            # No manual cleanup needed - temp_dir is tracked globally
+            pass
 
 
 def extract_archive(source: Union[str, Path], output_dir: Union[str, Path]) -> Path:
