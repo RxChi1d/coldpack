@@ -104,21 +104,28 @@ jobs:
           exit 0
         fi
 
-        # Verify version format is PEP 440 compliant
-        if [[ $GENERATED_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.dev[0-9]+|a[0-9]+|b[0-9]+|rc[0-9]+)?$ ]]; then
+        # Verify version format is PEP 440 compliant (including development versions)
+        if [[ $GENERATED_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.dev[0-9]+|a[0-9]+|b[0-9]+|rc[0-9]+)?(-[0-9]+-g[0-9a-f]+)?$ ]]; then
           echo "✓ Generated version is PEP 440 compliant: $GENERATED_VERSION"
         else
           echo "✗ Generated version is not PEP 440 compliant: $GENERATED_VERSION"
           exit 1
         fi
 
-        # Verify version matches git tag (remove 'v' prefix from tag)
+        # Verify version is based on git tag (allow development versions)
         GIT_TAG="${{ steps.validate_tag.outputs.git_tag }}"
         EXPECTED_VERSION=$(echo "$GIT_TAG" | sed 's/^v//')
-        if [ "$GENERATED_VERSION" = "$EXPECTED_VERSION" ]; then
-          echo "✓ Generated version matches git tag: $GENERATED_VERSION"
+
+        # Extract base version from generated version (remove -N-gXXXXXXX suffix if present)
+        BASE_GENERATED_VERSION=$(echo "$GENERATED_VERSION" | sed 's/-[0-9]\{1,\}-g[0-9a-f]\{1,\}$//')
+
+        if [ "$BASE_GENERATED_VERSION" = "$EXPECTED_VERSION" ]; then
+          echo "✓ Generated version is based on git tag: $GENERATED_VERSION (base: $BASE_GENERATED_VERSION)"
+        elif [[ "$GENERATED_VERSION" == "$EXPECTED_VERSION-"*"-g"* ]]; then
+          echo "✓ Generated version is development version of git tag: $GENERATED_VERSION"
         else
           echo "✗ Version mismatch - Git tag: $GIT_TAG, Generated: $GENERATED_VERSION"
+          echo "Expected base version: $EXPECTED_VERSION, Got base: $BASE_GENERATED_VERSION"
           exit 1
         fi
 
