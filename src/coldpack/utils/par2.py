@@ -59,8 +59,10 @@ class PAR2Manager:
             Path to par2 command or None if not found
         """
         # Try different possible par2 command names
-        candidates = ["par2", "par2cmdline", "par2create"]
+        # Note: par2cmdline-turbo package installs 'par2' executable
+        candidates = ["par2", "par2cmdline", "par2create", "par2turbo"]
 
+        # First try to find commands in system PATH
         for cmd in candidates:
             if shutil.which(cmd):
                 try:
@@ -69,11 +71,153 @@ class PAR2Manager:
                         [cmd, "--help"], capture_output=True, text=True, timeout=5
                     )
                     if result.returncode == 0:
-                        logger.debug(f"Found PAR2 command: {cmd}")
+                        logger.debug(f"Found PAR2 command in PATH: {cmd}")
                         return cmd
                 except (subprocess.TimeoutExpired, subprocess.SubprocessError):
                     continue
 
+        # If not found in PATH, try common installation locations
+        import sys
+        from pathlib import Path
+
+        # Additional search paths for different installation methods
+        additional_paths = []
+
+        # Check if we're in a virtual environment or uv tool installation
+        if hasattr(sys, "real_prefix") or (
+            hasattr(sys, "base_prefix") and sys.base_prefix != sys.prefix
+        ):
+            # We're in a virtual environment (including uv tool environments)
+            venv_bin = Path(sys.prefix) / "bin"
+            if venv_bin.exists():
+                additional_paths.append(venv_bin)
+
+            # For Windows virtual environments
+            venv_scripts = Path(sys.prefix) / "Scripts"
+            if venv_scripts.exists():
+                additional_paths.append(venv_scripts)
+
+        # For uv tool installations, also check the executable's directory
+        try:
+            import coldpack
+
+            # Get coldpack package location
+            coldpack_module_path = Path(coldpack.__file__).parent
+
+            # Check multiple possible locations relative to coldpack installation
+            possible_locations = [
+                # For development installations (pip install -e .)
+                coldpack_module_path.parent.parent / "bin",
+                coldpack_module_path.parent.parent / "Scripts",  # Windows
+                # For wheel/site-packages installations
+                coldpack_module_path.parent / "bin",
+                coldpack_module_path.parent / "Scripts",  # Windows
+                # For uv tool installs - check if we're in a uv-managed environment
+                Path(sys.executable).parent,  # Same directory as Python executable
+                # Check if we're in site-packages and look for bundled tools
+                coldpack_module_path / "bin",
+                coldpack_module_path / "tools",
+            ]
+
+            additional_paths.extend(p for p in possible_locations if p.exists())
+        except Exception:
+            # If anything fails, just continue with other paths
+            pass
+
+        # Check executable's parent directory (for bundled installations)
+        exe_path = Path(sys.executable).parent
+        additional_paths.append(exe_path)
+
+        # macOS Homebrew paths
+        if sys.platform.startswith("darwin"):
+            homebrew_paths = [
+                Path("/opt/homebrew/bin"),  # Apple Silicon
+                Path("/usr/local/bin"),  # Intel
+            ]
+            additional_paths.extend(p for p in homebrew_paths if p.exists())
+
+        # Linux package manager paths
+        elif sys.platform.startswith("linux"):
+            linux_paths = [
+                Path("/usr/bin"),
+                Path("/usr/local/bin"),
+            ]
+            additional_paths.extend(p for p in linux_paths if p.exists())
+
+        # Windows paths
+        elif sys.platform.startswith("win"):
+            # Common Windows installation paths
+            windows_paths = [
+                Path("C:/Program Files/par2cmdline"),
+                Path("C:/Program Files (x86)/par2cmdline"),
+            ]
+            additional_paths.extend(p for p in windows_paths if p.exists())
+
+            # For Windows, also check common user installation locations
+            import os
+
+            if "USERPROFILE" in os.environ:
+                user_profile = Path(os.environ["USERPROFILE"])
+                user_paths = [
+                    user_profile
+                    / "AppData"
+                    / "Local"
+                    / "uv"
+                    / "tools"
+                    / "coldpack"
+                    / "Scripts",
+                    user_profile / "scoop" / "apps" / "par2cmdline" / "current",
+                    user_profile / "scoop" / "shims",
+                ]
+                additional_paths.extend(p for p in user_paths if p.exists())
+
+        # Try candidates in additional search paths
+        for search_path in additional_paths:
+            for cmd in candidates:
+                full_path = search_path / cmd
+                if sys.platform.startswith("win"):
+                    # Also try with .exe extension on Windows
+                    full_path_exe = search_path / f"{cmd}.exe"
+                    for candidate_path in [full_path, full_path_exe]:
+                        if candidate_path.exists() and candidate_path.is_file():
+                            try:
+                                result = subprocess.run(
+                                    [str(candidate_path), "--help"],
+                                    capture_output=True,
+                                    text=True,
+                                    timeout=5,
+                                )
+                                if result.returncode == 0:
+                                    logger.debug(
+                                        f"Found PAR2 command at: {candidate_path}"
+                                    )
+                                    return str(candidate_path)
+                            except (
+                                subprocess.TimeoutExpired,
+                                subprocess.SubprocessError,
+                            ):
+                                continue
+                else:
+                    if full_path.exists() and full_path.is_file():
+                        try:
+                            result = subprocess.run(
+                                [str(full_path), "--help"],
+                                capture_output=True,
+                                text=True,
+                                timeout=5,
+                            )
+                            if result.returncode == 0:
+                                logger.debug(f"Found PAR2 command at: {full_path}")
+                                return str(full_path)
+                        except (subprocess.TimeoutExpired, subprocess.SubprocessError):
+                            continue
+
+        # Debug information about search paths
+        logger.debug(f"Searched for PAR2 commands: {candidates}")
+        logger.debug(
+            f"Additional search paths checked: {[str(p) for p in additional_paths]}"
+        )
+        logger.debug("No PAR2 command found in PATH or common locations")
         return None
 
     def create_recovery_files(
@@ -456,31 +600,43 @@ def install_par2_instructions() -> str:
     Returns:
         Installation instructions string
     """
+    base_msg = (
+        "Note: coldpack includes par2cmdline-turbo as a dependency, but the executable may not be in PATH.\n"
+        "If you installed coldpack with 'uv tool install', PAR2 tools should be available but may need manual setup.\n\n"
+    )
+
     if sys.platform.startswith("darwin"):  # macOS
-        return (
+        return base_msg + (
             "Install PAR2 on macOS:\n"
             "  brew install par2cmdline\n"
             "  or\n"
-            "  brew install par2cmdline-turbo"
+            "  brew install par2cmdline-turbo\n"
+            "\nAlternatively, ensure the bundled PAR2 tool is accessible:\n"
+            "  Check if 'which par2' returns a valid path"
         )
     elif sys.platform.startswith("linux"):  # Linux
-        return (
+        return base_msg + (
             "Install PAR2 on Linux:\n"
             "  Ubuntu/Debian: sudo apt install par2cmdline\n"
             "  CentOS/RHEL: sudo yum install par2cmdline\n"
             "  Arch: sudo pacman -S par2cmdline\n"
-            "  or install par2cmdline-turbo for better performance"
+            "  or install par2cmdline-turbo for better performance\n"
+            "\nAlternatively, ensure the bundled PAR2 tool is accessible:\n"
+            "  Check if 'which par2' returns a valid path"
         )
     elif sys.platform.startswith("win"):  # Windows
-        return (
+        return base_msg + (
             "Install PAR2 on Windows:\n"
             "  Download from: https://github.com/Parchive/par2cmdline/releases\n"
             "  or use chocolatey: choco install par2cmdline\n"
-            "  or use winget: winget install par2cmdline"
+            "  or use winget: winget install par2cmdline\n"
+            "\nAlternatively, ensure the bundled PAR2 tool is accessible:\n"
+            "  Check if 'par2.exe' is available in your PATH"
         )
     else:
-        return (
+        return base_msg + (
             "Install PAR2 for your platform:\n"
             "  Visit: https://github.com/Parchive/par2cmdline\n"
-            "  or: https://github.com/animetosho/par2cmdline-turbo"
+            "  or: https://github.com/animetosho/par2cmdline-turbo\n"
+            "\nAlternatively, ensure the bundled PAR2 tool is accessible in your PATH"
         )
