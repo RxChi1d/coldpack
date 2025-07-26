@@ -467,7 +467,9 @@ class GlobalTempManager:
                 temp_files = self._temp_files.copy()
         except Exception:
             # If we can't even copy the set, try to work with original
-            temp_files = set(self._temp_files) if hasattr(self, "_temp_files") else set()
+            temp_files = (
+                set(self._temp_files) if hasattr(self, "_temp_files") else set()
+            )
 
         for temp_file in temp_files:
             try:
