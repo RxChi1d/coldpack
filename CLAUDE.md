@@ -17,7 +17,7 @@
 
 ## 專案概述
 
-coldpack 是一個 Python CLI 套件，專門用於建立標準化的冷儲存封存檔案。它將各種來源（資料夾、7z、zip、tar.gz 等）轉換為統一的 tar.zst 格式，並提供雙重雜湊驗證、PAR2 修復冗餘等完整的長期保存功能。
+coldpack 是一個 Python CLI 套件，專門用於建立標準化的冷儲存封存檔案。它將各種來源（資料夾、7z、zip、tar.gz 等）轉換為統一的 7z 格式，並提供雙重雜湊驗證、PAR2 修復冗餘等完整的長期保存功能。
 
 **Python 支援版本**：Python 3.9+ (包含 Python 3.13)
 
@@ -146,9 +146,7 @@ coldpack/
 ```
 Input Source → py7zz Extraction → Temporary Directory
     ↓
-TAR Creation (POSIX, sorted) → TAR Verification
-    ↓
-Zstd Compression (dynamic params) → Zstd Verification
+7z Compression (dynamic params) → 7z Verification
     ↓
 Dual Hash Generation (SHA-256 + BLAKE3) → Hash Verification
     ↓
@@ -266,12 +264,12 @@ providing significant performance improvements for archives > 1GB."
 ## 冷儲存功能特殊要求
 
 ### 可重現性
-- **使用 deterministic tar 建立** (`--sort=name`)
+- **使用 deterministic 7z 建立** (固定壓縮參數)
 - **記錄所有壓縮參數** (存於 .toml)
 - **確保跨平台一致性**
 
 ### 完整性保證
-- **5層驗證機制**：tar header → zstd → SHA-256 → BLAKE3 → PAR2
+- **3層驗證機制**：7z → SHA-256 → BLAKE3 → PAR2
 - **失敗重試機制**（有次數限制）
 - **詳細的診斷資訊**
 
@@ -283,8 +281,7 @@ providing significant performance improvements for archives > 1GB."
 ## 相依套件說明
 
 ### 核心相依套件
-- **py7zz**: 多格式壓縮解壓縮（7z、zip、rar 等）
-- **zstandard**: Zstd 壓縮，高效能現代壓縮演算法
+- **py7zz**: 多格式壓縮解壓縮（7z、zip、rar 等），主要壓縮引擎
 - **blake3**: BLAKE3 雜湊演算法，現代密碼學雜湊
 - **typer**: 現代 Python CLI 框架
 - **rich**: 美化終端輸出和進度顯示
@@ -292,7 +289,6 @@ providing significant performance improvements for archives > 1GB."
 - **loguru**: 現代日誌管理
 
 ### 外部工具相依
-- **tar**: 系統 tar 工具（POSIX/GNU 格式支援）
 - **par2cmdline-turbo**: PAR2 修復檔案工具
 
 ## 安全性考量
