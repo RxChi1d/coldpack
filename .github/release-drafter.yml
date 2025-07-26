@@ -1,4 +1,4 @@
-name-template: 'coldpack $RESOLVED_VERSION'
+name-template: 'v$RESOLVED_VERSION'
 tag-template: 'v$RESOLVED_VERSION'
 categories:
   - title: '🚀 Features'
@@ -85,7 +85,7 @@ autolabeler:
     title:
       - '/^style(\(.+\))?: .+/'
 template: |
-  ## Changes
+  ## What's Changed
 
   $CHANGES
 
