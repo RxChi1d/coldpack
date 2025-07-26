@@ -52,9 +52,9 @@ class GlobalTempManager:
 
     def __init__(self) -> None:
         """Initialize the global temp manager."""
-        if hasattr(self, '_initialized') and getattr(self, '_initialized', False):
+        if hasattr(self, "_initialized") and getattr(self, "_initialized", False):
             return
-            
+
         self._initialized: bool = False
 
         self._temp_dirs: set[Path] = set()
@@ -264,35 +264,31 @@ class GlobalTempManager:
         try:
             # Try normal removal first
             file_path.unlink()
-            try:
+            with suppress(Exception):
                 logger.debug(f"Successfully removed temporary file: {file_path}")
-            except Exception:
-                pass  # Ignore logging errors when disk is full
             return True
 
         except OSError as e:
             # Check if error might be related to disk space
             is_disk_full_error = (
-                "No space left on device" in str(e) or
-                "There is not enough space on the disk" in str(e) or
-                e.errno == 28  # ENOSPC: No space left on device
+                "No space left on device" in str(e)
+                or "There is not enough space on the disk" in str(e)
+                or e.errno == 28  # ENOSPC: No space left on device
             )
-            
+
             if not force:
-                try:
+                with suppress(Exception):
                     logger.warning(f"Failed to remove temporary file {file_path}: {e}")
-                except Exception:
-                    pass
                 return False
 
             # For disk full errors, be even more aggressive
             if is_disk_full_error or self._is_windows:
-                return self._windows_aggressive_file_removal(file_path, is_emergency=is_disk_full_error)
+                return self._windows_aggressive_file_removal(
+                    file_path, is_emergency=is_disk_full_error
+                )
             else:
-                try:
+                with suppress(Exception):
                     logger.warning(f"Failed to remove temporary file {file_path}: {e}")
-                except Exception:
-                    pass
                 return False
 
     def _remove_directory_safely(self, dir_path: Path, force: bool = True) -> bool:
@@ -326,7 +322,9 @@ class GlobalTempManager:
                 logger.warning(f"Failed to remove temporary directory {dir_path}: {e}")
                 return False
 
-    def _windows_aggressive_file_removal(self, file_path: Path, is_emergency: bool = False) -> bool:
+    def _windows_aggressive_file_removal(
+        self, file_path: Path, is_emergency: bool = False
+    ) -> bool:
         """Aggressive file removal for Windows with retry and file unlocking.
 
         Args:
@@ -347,48 +345,51 @@ class GlobalTempManager:
 
                 # Try to close any open handles (force garbage collection)
                 gc.collect()
-                
+
                 # In emergency mode, try even more aggressive cleanup
                 if is_emergency and attempt > 2:
                     # Force multiple garbage collections
                     for _ in range(3):
                         gc.collect()
-                    
+
                     # Try to truncate file first to free space immediately
                     try:
-                        with suppress(OSError):
-                            with open(file_path, 'w') as f:
-                                f.truncate(0)
+                        with suppress(OSError), open(file_path, "w") as f:
+                            f.truncate(0)
                     except Exception:
                         pass
 
                 # Try removal
                 file_path.unlink()
-                try:
+                with suppress(Exception):
                     if is_emergency:
-                        logger.debug(f"Emergency removal successful for file: {file_path}")
+                        logger.debug(
+                            f"Emergency removal successful for file: {file_path}"
+                        )
                     else:
-                        logger.debug(f"Aggressive removal successful for file: {file_path}")
-                except Exception:
-                    pass  # Ignore logging errors when disk is full
+                        logger.debug(
+                            f"Aggressive removal successful for file: {file_path}"
+                        )
                 return True
 
             except OSError as e:
                 if attempt < max_attempts - 1:
-                    try:
+                    with suppress(Exception):
                         if is_emergency:
-                            logger.debug(f"Emergency attempt {attempt + 1} failed for {file_path}: {e}, retrying...")
+                            logger.debug(
+                                f"Emergency attempt {attempt + 1} failed for {file_path}: {e}, retrying..."
+                            )
                         else:
-                            logger.debug(f"Attempt {attempt + 1} failed for {file_path}: {e}, retrying...")
-                    except Exception:
-                        pass  # Ignore logging errors when disk is full
+                            logger.debug(
+                                f"Attempt {attempt + 1} failed for {file_path}: {e}, retrying..."
+                            )
                     time.sleep(delay)
                     delay *= 1.5  # Slower exponential backoff in emergency mode
                 else:
-                    try:
-                        logger.warning(f"All attempts failed to remove file {file_path}: {e}")
-                    except Exception:
-                        pass  # Ignore logging errors when disk is full
+                    with suppress(Exception):
+                        logger.warning(
+                            f"All attempts failed to remove file {file_path}: {e}"
+                        )
                     return False
 
         return False
@@ -450,12 +451,10 @@ class GlobalTempManager:
             return
 
         self._shutdown_in_progress = True
-        
+
         # Use minimal logging to avoid I/O issues when disk is full
-        try:
+        with suppress(Exception):
             logger.debug("Starting cleanup of all temporary resources")
-        except Exception:
-            pass  # Ignore logging errors when disk is full
 
         cleaned_files = 0
         cleaned_dirs = 0
@@ -468,7 +467,7 @@ class GlobalTempManager:
                 temp_files = self._temp_files.copy()
         except Exception:
             # If we can't even copy the set, try to work with original
-            temp_files = list(self._temp_files) if hasattr(self, '_temp_files') else []
+            temp_files = set(self._temp_files) if hasattr(self, "_temp_files") else set()
 
         for temp_file in temp_files:
             try:
@@ -487,7 +486,7 @@ class GlobalTempManager:
                 temp_dirs = self._temp_dirs.copy()
         except Exception:
             # If we can't copy the set, try to work with original
-            temp_dirs = list(self._temp_dirs) if hasattr(self, '_temp_dirs') else []
+            temp_dirs = set(self._temp_dirs) if hasattr(self, "_temp_dirs") else set()
 
         for temp_dir in temp_dirs:
             try:
@@ -508,18 +507,18 @@ class GlobalTempManager:
         except Exception:
             # If clearing fails, try individual clearing
             try:
-                if hasattr(self, '_temp_files'):
+                if hasattr(self, "_temp_files"):
                     self._temp_files.clear()
             except Exception:
                 pass
             try:
-                if hasattr(self, '_temp_dirs'):
+                if hasattr(self, "_temp_dirs"):
                     self._temp_dirs.clear()
             except Exception:
                 pass
 
         # Log results only if logging is available
-        try:
+        with suppress(Exception):
             if cleaned_files > 0 or cleaned_dirs > 0:
                 logger.info(
                     f"Cleanup complete: {cleaned_files} files, {cleaned_dirs} directories removed"
@@ -529,9 +528,6 @@ class GlobalTempManager:
                 logger.warning(
                     f"Cleanup incomplete: {failed_files} files, {failed_dirs} directories failed to remove"
                 )
-        except Exception:
-            # Ignore logging errors - cleanup is more important than logging
-            pass
 
     def get_tracked_resources(self) -> tuple[set[Path], set[Path]]:
         """Get currently tracked temporary resources.
