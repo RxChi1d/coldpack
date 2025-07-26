@@ -5,7 +5,8 @@
 [![Platform Support](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)](https://github.com/rxchi1d/coldpack)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![CI Status](https://github.com/rxchi1d/coldpack/workflows/CI/badge.svg)](https://github.com/rxchi1d/coldpack/actions)
-[![Test Coverage](https://img.shields.io/badge/coverage-90%2B%25-brightgreen)](https://github.com/rxchi1d/coldpack/actions)
+
+[English](README.md) | [繁體中文](README.zh-tw.md)
 
 > **Professional 7z Cold Storage Solution with Revolutionary Architecture**
 >
