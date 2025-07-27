@@ -1,10 +1,10 @@
 # CLI Reference
 
-Complete command-line interface reference for coldpack v0.1.0 - Professional 7z Cold Storage Solution.
+Complete command-line interface reference for coldpack v0.1.1.
 
 ## Overview
 
-The `cpack` command provides a streamlined CLI optimized exclusively for 7z cold storage operations. Featuring revolutionary 7z-exclusive architecture with intelligent dynamic compression and comprehensive verification systems.
+The `cpack` command provides a CLI for 7z cold storage operations with dynamic compression and verification systems.
 
 ## Global Options
 
@@ -17,7 +17,7 @@ cpack --version                # Show version information
 
 ### `cpack create`
 
-Create a professional 7z cold storage archive with comprehensive verification and recovery systems.
+Create a 7z cold storage archive with verification and recovery systems.
 
 #### Syntax
 ```bash
@@ -87,7 +87,7 @@ cpack create sensitive-data/ --par2-redundancy 20  # 20% PAR2 redundancy
 cpack create fast-data/ --no-verify-par2           # Skip PAR2 for speed
 ```
 
-#### Professional 7z Output Structure
+#### 7z Output Structure
 ```
 output_directory/
 └── archive_name/
@@ -264,7 +264,7 @@ cpack repair damaged.7z --quiet
 
 ### `cpack info`
 
-Professional tree-structured archive metadata display optimized for large archives.
+Tree-structured archive metadata display.
 
 #### Syntax
 ```bash
@@ -280,7 +280,7 @@ cpack info [OPTIONS] ARCHIVE
 --quiet, -q                     # Minimal output format
 ```
 
-#### Professional Tree Display
+#### Tree Display
 The info command presents archive metadata in five organized sections:
 - **Basic Information**: Path, format, size, compression ratio
 - **Content Summary**: File count, directory count, total size (tree structure)
@@ -290,7 +290,7 @@ The info command presents archive metadata in five organized sections:
 
 #### Examples
 ```bash
-# Professional metadata display
+# Archive metadata display
 cpack info documents.7z
 
 # Extended information with verbose details
@@ -337,7 +337,7 @@ Metadata:
 
 ### `cpack list`
 
-Advanced file listing with filtering, pagination, and search capabilities.
+File listing with filtering, pagination, and search capabilities.
 
 #### Syntax
 ```bash
@@ -446,11 +446,11 @@ cpack formats --verbose
 - **TAR Archives**: .tar, .tar.gz, .tar.bz2, .tar.xz, .tar.zst
 
 #### Output Format
-- **7z Cold Storage**: Professional 7z archives with comprehensive verification
+- **7z Cold Storage**: 7z archives with verification
 
-## Advanced Configuration
+## Configuration
 
-coldpack supports professional configuration through environment variables and configuration files.
+coldpack supports configuration through environment variables and configuration files.
 
 ### Key Environment Variables
 ```bash
@@ -477,14 +477,14 @@ For comprehensive configuration options, see [Architecture Guide](ARCHITECTURE.m
 | 5 | Verification failed | Integrity check failed in verify command |
 | 6 | Tool not found | Required external tool unavailable |
 
-## Professional Usage Patterns
+## Usage Patterns
 
 ### Production Archival
 ```bash
 # Maximum compression for long-term storage
 cpack create critical-data/ --level 9 --dict 512m --output-dir /archive
 
-# Enterprise backup with high PAR2 redundancy
+# Backup with high PAR2 redundancy
 cpack create database-backup/ --par2-redundancy 15 --output-dir /backup
 ```
 
@@ -508,12 +508,12 @@ ls /source/ | xargs -P 4 -I {} cpack create /source/{} --output-dir /archives
 
 ## Automation & Integration
 
-### Enterprise Backup Scripts
+### Backup Scripts
 ```bash
 #!/bin/bash
-# Professional daily backup with verification
+# Daily backup with verification
 DATE=$(date +%Y%m%d)
-BACKUP_NAME="enterprise_backup_$DATE"
+BACKUP_NAME="backup_$DATE"
 
 # Create archive with maximum compression
 cpack create /critical/data --output-dir /backup --name "$BACKUP_NAME" --level 9
@@ -539,7 +539,7 @@ fi
 
 ### CI/CD Pipeline
 ```yaml
-# GitHub Actions - Professional archival workflow
+# GitHub Actions - Archival workflow
 - name: Create Release Archive
   run: |
     cpack create ./dist --output-dir ./release --name "app-${{ github.ref_name }}"

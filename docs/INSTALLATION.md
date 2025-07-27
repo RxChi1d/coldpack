@@ -1,6 +1,6 @@
 # Installation Guide
 
-Complete installation instructions for coldpack - Professional 7z Cold Storage Solution.
+Installation instructions for coldpack.
 
 ## System Requirements
 
@@ -345,4 +345,4 @@ After successful installation:
 
 ---
 
-**Installation Complete!** Ready to create professional 7z cold storage archives with `cpack`.
+**Installation Complete!** Ready to create 7z cold storage archives with `cpack`.
