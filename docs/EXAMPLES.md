@@ -1,21 +1,21 @@
 # Usage Examples
 
-Real-world scenarios and workflows for coldpack v0.1.0 - Professional 7z Cold Storage Solution.
+Usage scenarios and workflows for coldpack v0.1.1.
 
 ## Table of Contents
 
 - [Quick Start](#quick-start)
-- [Professional Archive Creation](#professional-archive-creation)
-- [Smart Extraction & Recovery](#smart-extraction--recovery)
-- [Advanced File Management](#advanced-file-management)
-- [Enterprise Workflows](#enterprise-workflows)
+- [Archive Creation](#archive-creation)
+- [Extraction & Recovery](#extraction--recovery)
+- [File Management](#file-management)
+- [Workflows](#workflows)
 - [Automation & Integration](#automation--integration)
 - [Performance Optimization](#performance-optimization)
 - [Troubleshooting Scenarios](#troubleshooting-scenarios)
 
 ## Quick Start
 
-### Your First Professional 7z Archive
+### Your First 7z Archive
 
 ```bash
 # Create test data
@@ -35,7 +35,7 @@ cpack verify sample_documents/sample_documents.7z
 
 # List archive contents
 cpack list sample_documents/sample_documents.7z
-# Output: Professional file listing with metadata
+# Output: File listing with metadata
 ```
 
 ### Essential Workflow
@@ -50,11 +50,11 @@ cpack verify documents/documents.7z
 # 3. Extract with automatic parameter recovery
 cpack extract documents/documents.7z --output-dir ./restored
 
-# 4. Professional metadata display
+# 4. Archive metadata display
 cpack info documents/documents.7z
 ```
 
-## Professional Archive Creation
+## Archive Creation
 
 ### Multi-Format Input Processing
 
@@ -93,7 +93,7 @@ cpack create media_files/ --level 3 --dict 1m     # Fast for pre-compressed
 cpack create source_code/ --level 9 --dict 256m   # Maximum for text files
 ```
 
-### Professional Output Organization
+### Output Organization
 
 ```bash
 # Structured backup with timestamps
@@ -104,11 +104,11 @@ cpack create /critical/data --output-dir /backup --name "critical_backup_$DATE"
 mkdir -p "/cold-storage/$(date +%Y/%m)"
 cpack create ./project/ --output-dir "/cold-storage/$(date +%Y/%m)" --name "project_$(date +%Y%m%d)"
 
-# Enterprise naming conventions
+# Naming conventions
 cpack create /database/dump --name "db_prod_$(hostname)_$(date +%Y%m%d)" --output-dir /archives
 ```
 
-### Advanced Verification Configuration
+### Verification Configuration
 
 ```bash
 # Maximum security with high PAR2 redundancy
@@ -120,7 +120,7 @@ cpack create build_artifacts/ --level 3 --no-verify-par2
 # Selective verification (customize for workflow)
 cpack create temp_data/ --no-verify-blake3 --no-verify-par2
 
-# Full enterprise-grade verification (default)
+# Full verification (default)
 cpack create critical_documents/    # All 4 layers enabled
 ```
 
@@ -171,9 +171,9 @@ cpack extract unix_archive.7z --output-dir /restored
 cpack extract international_文档.7z --output-dir /unicode-safe
 ```
 
-## Advanced File Management
+## File Management
 
-### Professional File Listing
+### File Listing
 
 ```bash
 # Basic archive contents
@@ -198,7 +198,7 @@ cpack list archive.7z --files-only --quiet | grep "\.log$"
 ### Archive Analysis & Metadata
 
 ```bash
-# Professional metadata display
+# Archive metadata display
 cpack info project_backup.7z
 
 # Comprehensive information with verbose details
@@ -243,13 +243,13 @@ done
 [ -n "$FAILED_ARCHIVES" ] && echo -e "Failed archives:$FAILED_ARCHIVES" | mail -s "Backup Verification Failed" admin@company.com
 ```
 
-## Enterprise Workflows
+## Workflows
 
 ### Database Backup & Archival
 
 ```bash
 #!/bin/bash
-# Enterprise database backup with coldpack
+# Database backup with coldpack
 set -euo pipefail
 
 DB_NAME="production_db"
@@ -261,7 +261,7 @@ DATE=$(date +%Y%m%d_%H%M%S)
 echo "Creating database dump..."
 pg_dump "$DB_NAME" > "/tmp/${DB_NAME}_${DATE}.sql"
 
-# Create professional 7z archive with maximum compression
+# Create 7z archive with maximum compression
 echo "Creating cold storage archive..."
 cpack create "/tmp/${DB_NAME}_${DATE}.sql" \
     --output-dir "$ARCHIVE_DIR" \
@@ -438,7 +438,7 @@ jobs:
         npm install
         npm run build
 
-    - name: Create professional archive
+    - name: Create archive
       run: |
         cpack create ./dist \
           --output-dir ./release-archives \
@@ -853,13 +853,13 @@ fi
 
 ## Summary
 
-coldpack v0.1.0 provides enterprise-grade 7z cold storage with revolutionary architecture optimizations:
+coldpack v0.1.1 provides 7z cold storage with optimizations:
 
 - **🚀 Dynamic Compression**: 7-tier intelligent optimization
 - **🛡️ 4-Layer Verification**: Complete integrity assurance
 - **🔧 Cross-Platform**: Windows, macOS, Linux compatibility
-- **⚡ Professional Performance**: Multi-core processing and optimization
-- **🏗️ Enterprise Integration**: Automation-ready with comprehensive tooling
+- **⚡ Performance**: Multi-core processing and optimization
+- **🏗️ Integration**: Automation-ready with tooling
 
 **Next Steps:**
 - 📖 [Installation Guide](INSTALLATION.md) - Complete setup instructions

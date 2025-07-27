@@ -13,11 +13,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Incremental archive updates
 - Advanced filtering options
 
+## [0.1.1] - 2025-07-26
+
+### Fixed
+- **temp_manager**: Resolve unwanted DEBUG logging on module import to prevent console noise
+- **temp**: Implement Windows-safe temporary file cleanup system for better cross-platform compatibility
+- **par2**: Enhance PAR2 tool detection for uv tool installations to improve reliability
+
+### Improved
+- **ci**: Optimize release notes format to follow industry standards
+- Better error handling and logging throughout the application
+
 ## [0.1.0] - 2025-07-26
 
 ### Added
 
-#### Revolutionary 7z-Exclusive Cold Storage Architecture
+#### 7z-Exclusive Cold Storage Architecture
 - **Professional 7z-Only Output**: Complete architectural redesign focusing exclusively on 7z format for optimal cold storage
 - **7-Tier Dynamic Compression**: Intelligent compression parameter selection based on file size (< 256KB to > 2GB)
 - **Simplified CLI Interface**: Removed format selection complexity, optimized for 7z cold storage workflow
@@ -143,18 +154,19 @@ coldpack/
 - **Added**: Cross-platform system file filtering mechanism
 - **Added**: Basic verification and PAR2 recovery infrastructure
 
-[Unreleased]: https://github.com/your-username/coldpack/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/your-username/coldpack/releases/tag/v0.1.0
-[0.1.0b5]: https://github.com/your-username/coldpack/releases/tag/v0.1.0b5
-[0.1.0b4]: https://github.com/your-username/coldpack/releases/tag/v0.1.0b4
-[0.1.0b3]: https://github.com/your-username/coldpack/releases/tag/v0.1.0b3
-[0.1.0b2]: https://github.com/your-username/coldpack/releases/tag/v0.1.0b2
-[0.1.0b1]: https://github.com/your-username/coldpack/releases/tag/v0.1.0b1
+[Unreleased]: https://github.com/RxChi1d/coldpack/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/RxChi1d/coldpack/releases/tag/v0.1.1
+[0.1.0]: https://github.com/RxChi1d/coldpack/releases/tag/v0.1.0
+[0.1.0b5]: https://github.com/RxChi1d/coldpack/releases/tag/v0.1.0b5
+[0.1.0b4]: https://github.com/RxChi1d/coldpack/releases/tag/v0.1.0b4
+[0.1.0b3]: https://github.com/RxChi1d/coldpack/releases/tag/v0.1.0b3
+[0.1.0b2]: https://github.com/RxChi1d/coldpack/releases/tag/v0.1.0b2
+[0.1.0b1]: https://github.com/RxChi1d/coldpack/releases/tag/v0.1.0b1
 
 ---
 
 ## About This Release
 
-coldpack v0.1.0 represents a complete professional-grade cold storage solution with revolutionary 7z-exclusive architecture. This stable release provides enterprise-ready reliability with comprehensive cross-platform support and advanced verification systems.
+coldpack v0.1.1 is a stable release that provides reliable cold storage functionality with 7z-exclusive architecture. This version includes important bug fixes and improvements for better cross-platform compatibility and user experience.
 
-**Key Achievements**: 99.9% project completion, 134 comprehensive tests, full cross-platform compatibility, and professional user experience optimization.
+**Current Status**: Comprehensive test suite, full cross-platform support (Windows/macOS/Linux), and stable CLI interface for production use.
