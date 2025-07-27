@@ -208,9 +208,10 @@ git commit -m "docs(readme): add installation troubleshooting"
    ```
 
    **Why this matters:**
-   - PR titles appear directly in release notes
-   - Automatic labeling based on PR title
+   - PR titles appear directly in **categorized release notes** using Conventional Changelog format
+   - Automatic labeling based on PR title for proper categorization
    - Semantic version determination (feat = minor, fix = patch)
+   - Ensures consistent organization across stable and development releases
 
 2. **Pre-submission Checklist**
    - [ ] Pre-commit hooks are installed: `uv run pre-commit install`
@@ -277,7 +278,30 @@ Releases are automated through GitHub Actions:
 1. **Tag Creation**: Push a version tag (e.g., `v0.1.0`)
 2. **Automated Build**: Python wheels are built and tested
 3. **PyPI Publication**: Wheels are published to PyPI via OIDC
-4. **GitHub Release**: Release notes are auto-generated from PR titles
+4. **GitHub Release**: Release notes are auto-generated using **Conventional Changelog** format
+
+### Release Notes Format
+
+Release notes are automatically categorized based on commit messages and PR titles:
+
+**Stable Releases (e.g., v1.0.0):**
+- Generated from PR titles using Release Drafter
+- Organized by categories: Features, Bug Fixes, Documentation, etc.
+
+**Development Releases (e.g., v1.0.0.dev1):**
+- Generated from individual commit messages
+- Same categorical organization as stable releases
+
+**Categories:**
+- 🚀 **Features**: `feat:` commits and PRs
+- 🐛 **Bug Fixes**: `fix:` commits and PRs
+- 📚 **Documentation**: `docs:` commits and PRs
+- ⚡ **Performance**: `perf:` commits and PRs
+- 🔧 **Maintenance**: `chore:`, `refactor:`, `style:` commits and PRs
+- 🧪 **Testing**: `test:` commits and PRs
+- 🔄 **CI/CD**: `ci:` commits and PRs
+
+This is why following the [Commit Message Convention](#commit-message-convention) is important for generating well-organized release notes.
 
 ## Getting Help
 

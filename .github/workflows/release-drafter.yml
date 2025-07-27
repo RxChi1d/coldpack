@@ -51,22 +51,119 @@ jobs:
             echo "**Branch**: \`$BRANCH_NAME\`" >> dev_notes.md
             echo "" >> dev_notes.md
 
-            # Parse conventional commits and categorize
-            echo "### 🚀 Features" >> dev_notes.md
-            git log --format="%s" --no-merges ${LAST_TAG}..HEAD | grep "^feat" | sed 's/^/- /' >> dev_notes.md || true
-            echo "" >> dev_notes.md
+            # Parse conventional commits and categorize (same logic as build.yml)
+            # Get all commits since last tag
+            COMMITS=$(git log --format="%s" --no-merges ${LAST_TAG}..HEAD)
 
-            echo "### 🐛 Bug Fixes" >> dev_notes.md
-            git log --format="%s" --no-merges ${LAST_TAG}..HEAD | grep "^fix" | sed 's/^/- /' >> dev_notes.md || true
-            echo "" >> dev_notes.md
+            # Initialize category flags
+            HAS_FEATURES=false
+            HAS_FIXES=false
+            HAS_DOCS=false
+            HAS_PERF=false
+            HAS_CHORES=false
+            HAS_TESTS=false
+            HAS_CI=false
+            HAS_OTHER=false
 
-            echo "### 📚 Documentation" >> dev_notes.md
-            git log --format="%s" --no-merges ${LAST_TAG}..HEAD | grep "^docs" | sed 's/^/- /' >> dev_notes.md || true
-            echo "" >> dev_notes.md
+            # Create temporary files for each category
+            mkdir -p /tmp/changelog_dev
+            > /tmp/changelog_dev/features.md
+            > /tmp/changelog_dev/fixes.md
+            > /tmp/changelog_dev/docs.md
+            > /tmp/changelog_dev/perf.md
+            > /tmp/changelog_dev/chores.md
+            > /tmp/changelog_dev/tests.md
+            > /tmp/changelog_dev/ci.md
+            > /tmp/changelog_dev/other.md
 
-            echo "### 🔧 Other Changes" >> dev_notes.md
-            git log --format="%s" --no-merges ${LAST_TAG}..HEAD | grep -v "^feat\|^fix\|^docs" | sed 's/^/- /' >> dev_notes.md || true
-            echo "" >> dev_notes.md
+            # Categorize commits
+            while IFS= read -r subject; do
+              if [[ "$subject" =~ ^feat(\(.+\))?: ]]; then
+                echo "- $subject" >> /tmp/changelog_dev/features.md
+                HAS_FEATURES=true
+              elif [[ "$subject" =~ ^fix(\(.+\))?: ]]; then
+                echo "- $subject" >> /tmp/changelog_dev/fixes.md
+                HAS_FIXES=true
+              elif [[ "$subject" =~ ^docs(\(.+\))?: ]]; then
+                echo "- $subject" >> /tmp/changelog_dev/docs.md
+                HAS_DOCS=true
+              elif [[ "$subject" =~ ^perf(\(.+\))?: ]]; then
+                echo "- $subject" >> /tmp/changelog_dev/perf.md
+                HAS_PERF=true
+              elif [[ "$subject" =~ ^(chore|refactor|style)(\(.+\))?: ]]; then
+                echo "- $subject" >> /tmp/changelog_dev/chores.md
+                HAS_CHORES=true
+              elif [[ "$subject" =~ ^test(\(.+\))?: ]]; then
+                echo "- $subject" >> /tmp/changelog_dev/tests.md
+                HAS_TESTS=true
+              elif [[ "$subject" =~ ^ci(\(.+\))?: ]]; then
+                echo "- $subject" >> /tmp/changelog_dev/ci.md
+                HAS_CI=true
+              else
+                echo "- $subject" >> /tmp/changelog_dev/other.md
+                HAS_OTHER=true
+              fi
+            done <<< "$COMMITS"
+
+            # Build categorized changelog
+            if [ "$HAS_FEATURES" = true ]; then
+              echo "### 🚀 Features" >> dev_notes.md
+              echo "" >> dev_notes.md
+              cat /tmp/changelog_dev/features.md >> dev_notes.md
+              echo "" >> dev_notes.md
+            fi
+
+            if [ "$HAS_FIXES" = true ]; then
+              echo "### 🐛 Bug Fixes" >> dev_notes.md
+              echo "" >> dev_notes.md
+              cat /tmp/changelog_dev/fixes.md >> dev_notes.md
+              echo "" >> dev_notes.md
+            fi
+
+            if [ "$HAS_DOCS" = true ]; then
+              echo "### 📚 Documentation" >> dev_notes.md
+              echo "" >> dev_notes.md
+              cat /tmp/changelog_dev/docs.md >> dev_notes.md
+              echo "" >> dev_notes.md
+            fi
+
+            if [ "$HAS_PERF" = true ]; then
+              echo "### ⚡ Performance" >> dev_notes.md
+              echo "" >> dev_notes.md
+              cat /tmp/changelog_dev/perf.md >> dev_notes.md
+              echo "" >> dev_notes.md
+            fi
+
+            if [ "$HAS_CHORES" = true ]; then
+              echo "### 🔧 Maintenance" >> dev_notes.md
+              echo "" >> dev_notes.md
+              cat /tmp/changelog_dev/chores.md >> dev_notes.md
+              echo "" >> dev_notes.md
+            fi
+
+            if [ "$HAS_TESTS" = true ]; then
+              echo "### 🧪 Testing" >> dev_notes.md
+              echo "" >> dev_notes.md
+              cat /tmp/changelog_dev/tests.md >> dev_notes.md
+              echo "" >> dev_notes.md
+            fi
+
+            if [ "$HAS_CI" = true ]; then
+              echo "### 🔄 CI/CD" >> dev_notes.md
+              echo "" >> dev_notes.md
+              cat /tmp/changelog_dev/ci.md >> dev_notes.md
+              echo "" >> dev_notes.md
+            fi
+
+            if [ "$HAS_OTHER" = true ]; then
+              echo "### Other Changes" >> dev_notes.md
+              echo "" >> dev_notes.md
+              cat /tmp/changelog_dev/other.md >> dev_notes.md
+              echo "" >> dev_notes.md
+            fi
+
+            # Clean up temporary files
+            rm -rf /tmp/changelog_dev
 
             echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${LAST_TAG}...${BRANCH_NAME}" >> dev_notes.md
           else
