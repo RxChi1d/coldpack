@@ -1217,9 +1217,6 @@ def display_metadata_info(archive_path: Path, metadata: Any) -> None:
     # Check for related files and show their status
     related_files = []
     archive_dir = archive_path.parent
-    archive_name = archive_path.stem
-    if archive_name.endswith(".tar"):
-        archive_name = archive_name[:-4]  # Remove .tar from .tar.zst
 
     # Check for hash files
     sha256_file = archive_dir / f"{archive_path.name}.sha256"

@@ -30,6 +30,7 @@ else:
 
         HAS_TOMLLIB = True
     except ImportError:
+        # tomli not available, will fall back to using TOML parsing via other means
         pass
 
 

@@ -197,6 +197,7 @@ def generate_hash_files(
                 if hash_file.exists():
                     hash_file.unlink()
             except OSError:
+                # Ignore cleanup failures, main error will be raised above
                 pass
 
         raise HashingError(f"Failed to generate hash files: {e}") from e
