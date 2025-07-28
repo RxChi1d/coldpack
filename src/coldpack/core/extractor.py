@@ -213,7 +213,21 @@ class MultiFormatExtractor:
                 )
 
             # Check archive structure to determine extraction strategy
-            has_single_root = self._check_archive_structure(archive_path)
+            # Use the improved analysis method with proper filtering
+            try:
+                py7zz_info = py7zz.get_archive_info(archive_path)
+                actual_files = [
+                    f
+                    for f in py7zz_info["files"]
+                    if not (f.startswith("files,") or f.startswith("folders,"))
+                ]
+                has_single_root, _ = self._analyze_archive_structure(
+                    actual_files, archive_path
+                )
+            except Exception:
+                # Fallback to original method if py7zz.get_archive_info fails
+                logger.debug("Falling back to legacy structure check")
+                has_single_root = self._check_archive_structure(archive_path)
 
             if has_single_root and preserve_structure:
                 # Archive has single root directory, extract directly
@@ -886,11 +900,13 @@ class MultiFormatExtractor:
     def get_archive_info(self, archive_path: Union[str, Path]) -> dict:
         """Get information about an archive without extracting it.
 
+        Uses py7zz.get_archive_info for improved performance and simplicity.
+
         Args:
             archive_path: Path to the archive
 
         Returns:
-            Dictionary with archive information (no file list for performance)
+            Dictionary with archive information including structure analysis
 
         Raises:
             FileNotFoundError: If archive doesn't exist
@@ -906,34 +922,87 @@ class MultiFormatExtractor:
             raise UnsupportedFormatError(f"Unsupported format: {archive_obj.suffix}")
 
         try:
-            with py7zz.SevenZipFile(archive_obj, "r") as archive:
-                file_list = archive.namelist()
+            # Use py7zz.get_archive_info for efficient information retrieval
+            py7zz_info = py7zz.get_archive_info(archive_obj)
 
-                # Calculate basic statistics (but don't return file list for performance)
-                file_count = len(file_list)
-                has_single_root = self._check_archive_structure(archive_obj)
+            # Filter out statistical information from py7zz (e.g., "files, 5 folders")
+            # These are not actual file paths and interfere with structure analysis
+            actual_files = [
+                f
+                for f in py7zz_info["files"]
+                if not (f.startswith("files,") or f.startswith("folders,"))
+            ]
 
-                # Get archive size
-                archive_size = archive_obj.stat().st_size
+            # Analyze archive structure for extraction strategy
+            has_single_root, root_name = self._analyze_archive_structure(
+                actual_files, archive_obj
+            )
 
-                # Determine root name if single root
-                root_name = None
-                if has_single_root and file_list:
-                    # Extract first component from first file path
-                    first_path = file_list[0].replace("\\", "/")
-                    root_name = first_path.split("/")[0]
-
-                return {
-                    "path": str(archive_obj),
-                    "format": archive_obj.suffix,
-                    "size": archive_size,
-                    "file_count": file_count,
-                    "has_single_root": has_single_root,
-                    "root_name": root_name,
-                }
+            return {
+                "path": str(archive_obj),
+                "format": archive_obj.suffix,
+                "size": py7zz_info["compressed_size"],
+                "file_count": py7zz_info["file_count"],
+                "has_single_root": has_single_root,
+                "root_name": root_name,
+            }
 
         except Exception as e:
             raise ExtractionError(f"Failed to get archive info: {e}") from e
+
+    def _analyze_archive_structure(
+        self, file_list: list[str], archive_path: Path
+    ) -> tuple[bool, Optional[str]]:
+        """Analyze archive structure to determine extraction strategy.
+
+        This method replaces the previous _check_archive_structure with improved
+        logic that properly handles py7zz file lists and fixes the statistical
+        information filtering bug.
+
+        Args:
+            file_list: List of files in the archive (pre-filtered)
+            archive_path: Path to the archive for name matching
+
+        Returns:
+            Tuple of (has_single_root, root_name)
+            - has_single_root: True if archive has single root directory
+            - root_name: Name of root directory if has_single_root is True
+        """
+        if not file_list:
+            logger.warning(f"Archive contains no files: {archive_path.name}")
+            return False, None
+
+        # Extract first-level items (no path separators)
+        first_level_items = set()
+        for item in file_list:
+            if item:
+                # Normalize path separators and get first component
+                normalized_path = item.replace("\\", "/")
+                parts = normalized_path.split("/")
+                if parts[0]:  # Skip empty parts
+                    first_level_items.add(parts[0])
+
+        # Check if there's exactly one first-level item
+        if len(first_level_items) == 1:
+            root_name = next(iter(first_level_items))
+            archive_name = self._get_clean_archive_name(archive_path)
+
+            # Check if root directory name matches archive name (coldpack convention)
+            if root_name == archive_name:
+                # Verify it's actually a directory structure (has subdirectories/files)
+                has_subdirectories = any(
+                    item.replace("\\", "/").startswith(f"{root_name}/")
+                    for item in file_list
+                )
+
+                if has_subdirectories:
+                    logger.debug(
+                        f"Archive has matching single root directory: {root_name}"
+                    )
+                    return True, root_name
+
+        logger.debug(f"Archive structure: {len(first_level_items)} root items")
+        return False, None
 
     def validate_archive(self, archive_path: Union[str, Path]) -> bool:
         """Validate archive integrity without extracting.

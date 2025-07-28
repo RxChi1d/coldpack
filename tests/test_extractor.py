@@ -152,20 +152,29 @@ class TestMultiFormatExtractor:
         # Should return the source directory directly
         assert result == test_dir
 
-    @patch("py7zz.SevenZipFile")
-    def test_get_archive_info(self, mock_7z, extractor, mock_7z_file):
-        """Test getting archive information."""
-        # Mock py7zz behavior
-        mock_archive = mock_7z.return_value.__enter__.return_value
-        mock_archive.namelist.return_value = ["file1.txt", "dir/file2.txt"]
+    def test_get_archive_info(self, extractor):
+        """Test getting archive information using real test archive."""
+        # Use the real test archive created by coldpack
+        test_archive = Path("outputs/create/test_sample/test_sample.7z")
 
-        info = extractor.get_archive_info(mock_7z_file)
+        # Skip test if test archive doesn't exist
+        if not test_archive.exists():
+            pytest.skip(
+                "Test archive not found. Run 'cpack create' first to generate test files."
+            )
 
-        assert info["path"] == str(mock_7z_file)
+        info = extractor.get_archive_info(test_archive)
+
+        assert info["path"] == str(test_archive)
         assert info["format"] == ".7z"
-        assert info["file_count"] == 2
+        assert info["file_count"] > 0  # Should have files
         assert "size" in info
         assert "has_single_root" in info
+        assert "root_name" in info
+
+        # Test archive should have single root with matching name
+        assert info["has_single_root"] is True
+        assert info["root_name"] == "test_sample"
 
     def test_get_archive_info_nonexistent(self, extractor):
         """Test getting info for non-existent archive."""
