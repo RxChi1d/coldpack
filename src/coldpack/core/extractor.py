@@ -517,7 +517,7 @@ class MultiFormatExtractor:
                         logger.debug(f"Progress callback error: {e}")
 
             except Exception as e:
-                logger.error(f"Extraction failed for {original_path.name}: {e}")
+                logger.error(f"Extraction failed for {original_path}: {e}")
                 # Continue with other files rather than failing completely
                 continue
 
