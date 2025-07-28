@@ -376,18 +376,21 @@ class MultiFormatExtractor:
             # Ensure output directory exists
             output_dir.mkdir(parents=True, exist_ok=True)
 
-            # Extract 7z archive using py7zz with Windows filename handling
+            # Extract 7z archive using py7zz
             with py7zz.SevenZipFile(archive_path, "r") as archive:
-                # Check if we need Windows filename handling
-                if is_windows_system():
-                    file_list = archive.namelist()
-
-                    # Check for Windows filename conflicts
-                    if needs_windows_filename_handling(file_list):
-                        logger.info(
-                            "Applying Windows filename sanitization for conflicts"
-                        )
-
+                try:
+                    # First, try normal extraction - let py7zz/7-Zip handle filename issues
+                    self._extract_normally(archive, output_dir, py7zz_callback)
+                    logger.debug("Normal extraction succeeded")
+                except Exception as normal_error:
+                    logger.debug(f"Normal extraction failed: {normal_error}")
+                    
+                    # Only try Windows filename handling as fallback on Windows
+                    if is_windows_system():
+                        logger.info("Trying Windows filename sanitization as fallback")
+                        
+                        file_list = archive.namelist()
+                        
                         # Get conflicts details for logging
                         conflicts = check_windows_filename_conflicts(file_list)
                         if conflicts["reserved_names"]:
@@ -407,19 +410,14 @@ class MultiFormatExtractor:
                                 f"Length conflicts: {len(conflicts['length_conflicts'])} files"
                             )
 
-                        # Create filename mapping
+                        # Create filename mapping and try special extraction
                         filename_mapping = create_filename_mapping(file_list)
-
-                        # Extract with filename mapping
                         self._extract_with_filename_mapping(
                             archive, output_dir, filename_mapping, py7zz_callback
                         )
                     else:
-                        # No conflicts, extract normally
-                        self._extract_normally(archive, output_dir, py7zz_callback)
-                else:
-                    # Not Windows, extract normally
-                    self._extract_normally(archive, output_dir, py7zz_callback)
+                        # On non-Windows, re-raise the original error
+                        raise normal_error
 
             # Determine extracted structure
             extracted_items = list(output_dir.iterdir())
@@ -485,41 +483,63 @@ class MultiFormatExtractor:
             filename_mapping: Mapping from original to sanitized filenames
             progress_callback: Optional progress callback function
         """
-        # Extract files one by one with name mapping
-        file_list = archive.namelist()
-        total_files = len(file_list)
+        # Create temporary directory for initial extraction
+        from ..utils.temp_manager import create_temp_directory
+        
+        temp_dir = create_temp_directory(prefix="coldpack_extract_temp_")
+        logger.debug(f"Using temporary directory for extraction: {temp_dir}")
+        
+        try:
+            # First, extract everything to temporary directory
+            archive.extractall(path=str(temp_dir))
+            
+            # Then, move and rename files according to mapping
+            file_list = archive.namelist()
+            total_files = len(file_list)
+            
+            for i, original_path in enumerate(file_list):
+                try:
+                    # Get the sanitized path
+                    sanitized_path = filename_mapping.get(original_path, original_path)
+                    
+                    # Source file in temp directory
+                    temp_source = temp_dir / original_path
+                    
+                    # Target file in output directory
+                    target_path = output_dir / sanitized_path
+                    
+                    # Ensure parent directory exists
+                    target_path.parent.mkdir(parents=True, exist_ok=True)
+                    
+                    # Move file from temp to final location
+                    if temp_source.exists():
+                        if temp_source.is_file():
+                            # Move file
+                            temp_source.rename(target_path)
+                            logger.debug(f"Moved: {original_path} -> {sanitized_path}")
+                        elif temp_source.is_dir():
+                            # For directories, ensure target exists
+                            target_path.mkdir(exist_ok=True)
+                            logger.debug(f"Created directory: {sanitized_path}")
+                    else:
+                        logger.warning(f"Source file not found in temp: {original_path}")
 
-        for i, original_path in enumerate(file_list):
-            try:
-                # Get the sanitized path
-                sanitized_path = filename_mapping.get(original_path, original_path)
-                target_path = output_dir / sanitized_path
+                    # Update progress if callback provided
+                    if progress_callback:
+                        try:
+                            percentage = int((i + 1) * 100 / total_files)
+                            progress_callback(percentage, f"Processing: {sanitized_path}")
+                        except Exception as e:
+                            logger.debug(f"Progress callback error: {e}")
 
-                # Ensure parent directory exists
-                target_path.parent.mkdir(parents=True, exist_ok=True)
-
-                # Extract individual file to the output directory
-                archive.extractall(path=str(output_dir), members=[original_path])
-
-                # If the filename was changed, rename the extracted file
-                if sanitized_path != original_path:
-                    extracted_path = output_dir / original_path
-                    if extracted_path.exists():
-                        logger.debug(f"Renaming: {original_path} -> {sanitized_path}")
-                        extracted_path.rename(target_path)
-
-                # Update progress if callback provided
-                if progress_callback:
-                    try:
-                        percentage = int((i + 1) * 100 / total_files)
-                        progress_callback(percentage, f"Extracting: {sanitized_path}")
-                    except Exception as e:
-                        logger.debug(f"Progress callback error: {e}")
-
-            except Exception as e:
-                logger.error(f"Extraction failed for {original_path}: {e}")
-                # Continue with other files rather than failing completely
-                continue
+                except Exception as e:
+                    logger.error(f"Failed to process {original_path}: {e}")
+                    # Continue with other files rather than failing completely
+                    continue
+                    
+        finally:
+            # Cleanup is handled automatically by temp_manager
+            pass
 
     def _extract_tar_zst_archive(
         self,
