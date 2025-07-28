@@ -414,7 +414,7 @@ class ColdStorageArchiver:
         source_size = sum(
             f.stat().st_size for f in source_dir.rglob("*") if f.is_file()
         )
-        logger.debug(f"Compressing {format_file_size(source_size)} of content")
+        logger.info(f"Source content size: {format_file_size(source_size)}")
 
         # Check if settings are manually configured
         if self.sevenzip_settings.manual_settings:
@@ -424,7 +424,7 @@ class ColdStorageArchiver:
                 if self.sevenzip_settings.threads == 0
                 else str(self.sevenzip_settings.threads)
             )
-            logger.debug(
+            logger.info(
                 f"Using manual 7z settings: level={self.sevenzip_settings.level}, "
                 f"dict={self.sevenzip_settings.dictionary_size}, threads={threads_display}"
             )
