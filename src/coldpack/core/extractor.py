@@ -499,7 +499,7 @@ class MultiFormatExtractor:
                 target_path.parent.mkdir(parents=True, exist_ok=True)
 
                 # Extract individual file to the output directory
-                archive.extract(original_path, path=str(output_dir))
+                archive.extractall(path=str(output_dir), members=[original_path])
 
                 # If the filename was changed, rename the extracted file
                 if sanitized_path != original_path:
