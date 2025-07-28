@@ -157,6 +157,22 @@ uv run mypy src/ && uv run pytest
 
 See [CLAUDE.md](CLAUDE.md) for complete development instructions.
 
+## Known Limitations
+
+### Windows Filename Compatibility
+
+Currently, coldpack relies on py7zz/7-Zip's built-in cross-platform filename handling. While this works for most cases, extraction may fail on Windows systems when archives contain:
+
+- Reserved Windows names (CON, PRN, AUX, NUL, COM1-9, LPT1-9)
+- Invalid Windows characters (< > : " | ? * and control characters)
+- Very long filenames (>255 characters)
+- Case-sensitive duplicates on case-insensitive filesystems
+
+If you encounter filename-related extraction errors on Windows, you may need to:
+- Extract the archive using a different tool that handles these cases
+- Manually rename problematic files before creating the archive
+- Use the archive on a non-Windows system
+
 ## License & Support
 
 **License**: MIT - See [LICENSE](LICENSE) for details

@@ -649,10 +649,11 @@ def check_windows_filename_conflicts(file_list: list[str]) -> dict[str, list[str
 
 
 def create_filename_mapping(file_list: list[str]) -> dict[str, str]:
-    """Create a mapping from original filenames to Windows-safe filenames.
+    """Create a mapping from original file paths to Windows-safe file paths.
 
-    This function generates unique, Windows-compatible filenames for all files
-    in the list, handling conflicts by adding numerical suffixes.
+    This function generates unique, Windows-compatible paths for all files
+    in the list, sanitizing both directory names and filenames, and handling
+    conflicts by adding numerical suffixes.
 
     Args:
         file_list: List of original file paths
@@ -661,45 +662,66 @@ def create_filename_mapping(file_list: list[str]) -> dict[str, str]:
         Dictionary mapping original paths to sanitized paths
     """
     mapping = {}
-    used_names = set()
+    used_paths = set()
 
     for original_path in file_list:
-        path_obj = Path(original_path)
-        parent = path_obj.parent
-        original_filename = path_obj.name
+        # Normalize path separators
+        normalized_path = original_path.replace("\\", "/")
+        path_parts = normalized_path.split("/")
 
-        # Sanitize the filename
-        sanitized_filename = sanitize_windows_filename(original_filename)
+        # Sanitize each path component (directories and filename)
+        sanitized_parts = []
+        for part in path_parts:
+            if part:  # Skip empty parts
+                sanitized_part = sanitize_windows_filename(part)
+                sanitized_parts.append(sanitized_part)
 
-        # Handle duplicates by adding numerical suffix
-        if sanitized_filename.lower() in used_names:
+        # Reconstruct the path
+        if sanitized_parts:
+            sanitized_path = "/".join(sanitized_parts)
+        else:
+            sanitized_path = "unnamed_file"
+
+        # Handle duplicates by adding numerical suffix to the filename
+        if sanitized_path.lower() in used_paths:
+            if "/" in sanitized_path:
+                parent_path, filename = sanitized_path.rsplit("/", 1)
+            else:
+                parent_path = ""
+                filename = sanitized_path
+
+            # Split filename into name and extension
             name_part, ext_part = (
-                sanitized_filename.rsplit(".", 1)
-                if "." in sanitized_filename
-                else (sanitized_filename, "")
+                filename.rsplit(".", 1) if "." in filename else (filename, "")
             )
 
             counter = 1
             while True:
                 if ext_part:
-                    candidate = f"{name_part}_{counter}.{ext_part}"
+                    candidate_filename = f"{name_part}_{counter}.{ext_part}"
                 else:
-                    candidate = f"{name_part}_{counter}"
+                    candidate_filename = f"{name_part}_{counter}"
 
-                if candidate.lower() not in used_names:
-                    sanitized_filename = candidate
+                if parent_path:
+                    candidate_path = f"{parent_path}/{candidate_filename}"
+                else:
+                    candidate_path = candidate_filename
+
+                if candidate_path.lower() not in used_paths:
+                    sanitized_path = candidate_path
                     break
                 counter += 1
 
-        used_names.add(sanitized_filename.lower())
+        used_paths.add(sanitized_path.lower())
 
-        # Create the new path
-        if parent == Path("."):
-            new_path = sanitized_filename
-        else:
-            new_path = str(parent / sanitized_filename)
+        # Convert back to original path separator style for Windows
+        final_path = (
+            sanitized_path.replace("/", "\\")
+            if "\\" in original_path
+            else sanitized_path
+        )
 
-        mapping[original_path] = new_path
+        mapping[original_path] = final_path
 
     return mapping
 
