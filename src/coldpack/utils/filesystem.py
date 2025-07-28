@@ -652,7 +652,7 @@ def create_filename_mapping(file_list: list[str]) -> dict[str, str]:
     """Create a mapping from original file paths to Windows-safe file paths.
 
     This function generates unique, Windows-compatible paths for all files
-    in the list, sanitizing both directory names and filenames, and handling 
+    in the list, sanitizing both directory names and filenames, and handling
     conflicts by adding numerical suffixes.
 
     Args:
@@ -668,14 +668,14 @@ def create_filename_mapping(file_list: list[str]) -> dict[str, str]:
         # Normalize path separators
         normalized_path = original_path.replace("\\", "/")
         path_parts = normalized_path.split("/")
-        
+
         # Sanitize each path component (directories and filename)
         sanitized_parts = []
         for part in path_parts:
             if part:  # Skip empty parts
                 sanitized_part = sanitize_windows_filename(part)
                 sanitized_parts.append(sanitized_part)
-        
+
         # Reconstruct the path
         if sanitized_parts:
             sanitized_path = "/".join(sanitized_parts)
@@ -689,12 +689,10 @@ def create_filename_mapping(file_list: list[str]) -> dict[str, str]:
             else:
                 parent_path = ""
                 filename = sanitized_path
-            
+
             # Split filename into name and extension
             name_part, ext_part = (
-                filename.rsplit(".", 1)
-                if "." in filename
-                else (filename, "")
+                filename.rsplit(".", 1) if "." in filename else (filename, "")
             )
 
             counter = 1
@@ -703,7 +701,7 @@ def create_filename_mapping(file_list: list[str]) -> dict[str, str]:
                     candidate_filename = f"{name_part}_{counter}.{ext_part}"
                 else:
                     candidate_filename = f"{name_part}_{counter}"
-                
+
                 if parent_path:
                     candidate_path = f"{parent_path}/{candidate_filename}"
                 else:
@@ -715,9 +713,13 @@ def create_filename_mapping(file_list: list[str]) -> dict[str, str]:
                 counter += 1
 
         used_paths.add(sanitized_path.lower())
-        
+
         # Convert back to original path separator style for Windows
-        final_path = sanitized_path.replace("/", "\\") if "\\" in original_path else sanitized_path
+        final_path = (
+            sanitized_path.replace("/", "\\")
+            if "\\" in original_path
+            else sanitized_path
+        )
 
         mapping[original_path] = final_path
 

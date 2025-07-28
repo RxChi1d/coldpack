@@ -377,16 +377,16 @@ class MultiFormatExtractor:
                 # TODO: Windows filename compatibility handling
                 # Currently, we rely on py7zz/7-Zip's built-in handling for cross-platform
                 # filename compatibility. This works for most cases but may fail with:
-                # - Reserved Windows names (CON, PRN, AUX, NUL, COM1-9, LPT1-9)  
+                # - Reserved Windows names (CON, PRN, AUX, NUL, COM1-9, LPT1-9)
                 # - Invalid Windows characters (< > : " | ? * and control chars)
                 # - Very long filenames (>255 characters)
                 # - Case-sensitive duplicates on case-insensitive filesystems
-                # 
+                #
                 # For now, we let py7zz handle these cases naturally. If extraction
                 # fails due to filename issues, users will need to handle manually.
                 # Consider implementing automatic filename sanitization in the future
                 # if this becomes a common issue.
-                
+
                 self._extract_normally(archive, output_dir, py7zz_callback)
 
             # Determine extracted structure
@@ -437,7 +437,6 @@ class MultiFormatExtractor:
                 archive.extractall(path=str(output_dir))
         else:
             archive.extractall(path=str(output_dir))
-
 
     def _extract_tar_zst_archive(
         self,
