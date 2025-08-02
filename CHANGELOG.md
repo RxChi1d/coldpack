@@ -13,6 +13,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Incremental archive updates
 - Advanced filtering options
 
+## [0.2.0] - 2025-08-02
+
+### Added
+- **Enhanced Cross-Platform Support**: Complete migration to py7zz v1.0.0 with native Windows filename handling
+- **Improved Performance**: Optimized archive information API for faster directory listing operations
+- **Better Error Handling**: Enhanced debugging with descriptive error logging throughout the system
+
+### Changed
+- **Simplified Architecture**: Removed 3,000+ lines of legacy workaround code now handled natively by py7zz
+- **Enhanced Directory Detection**: Multiple detection methods using py7zz API (is_dir(), isdir(), type checking)
+- **Consistent File Ordering**: Improved file sorting and pagination for better user experience
+
+### Fixed
+- **Archive Listing**: Resolved directory detection issues across different archive formats
+- **Cross-Platform Compatibility**: Native filename sanitization eliminates Windows-specific path problems
+- **Security**: Added proper error logging to replace silent exception handling
+
+### Removed
+- **Legacy Code**: Eliminated complex Windows-specific filename workarounds
+- **Obsolete Tests**: Removed Windows-specific filename handling tests no longer needed
+
 ## [0.2.0a2] - 2025-08-02
 
 ### Changed
@@ -66,7 +87,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Core Functionality**: Initial implementation of multi-format archive processing
 - **Verification System**: Basic integrity checking and PAR2 recovery infrastructure
 
-[Unreleased]: https://github.com/RxChi1d/coldpack/compare/v0.2.0a2...HEAD
+[Unreleased]: https://github.com/RxChi1d/coldpack/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/RxChi1d/coldpack/releases/tag/v0.2.0
 [0.2.0a2]: https://github.com/RxChi1d/coldpack/releases/tag/v0.2.0a2
 [0.1.1]: https://github.com/RxChi1d/coldpack/releases/tag/v0.1.1
 [0.1.0]: https://github.com/RxChi1d/coldpack/releases/tag/v0.1.0

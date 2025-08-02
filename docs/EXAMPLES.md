@@ -1,6 +1,6 @@
 # Usage Examples
 
-Usage scenarios and workflows for coldpack v0.2.0a2.
+Usage scenarios and workflows for coldpack.
 
 ## Table of Contents
 
@@ -853,7 +853,7 @@ fi
 
 ## Summary
 
-coldpack v0.2.0a2 provides 7z cold storage with optimizations:
+coldpack provides 7z cold storage with optimizations:
 
 - **🚀 Dynamic Compression**: 7-tier intelligent optimization
 - **🛡️ 4-Layer Verification**: Complete integrity assurance
