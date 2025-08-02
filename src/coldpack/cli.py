@@ -1416,11 +1416,9 @@ def display_archive_listing(result: dict, verbose: bool = False) -> None:
     file_table.add_column("Size", justify="right", width=12)
     file_table.add_column("Modified", width=19)
 
-    # Sort files by path to maintain proper directory structure
-    sorted_files = sorted(files, key=lambda f: f.path.lower())
-
+    # Files are already sorted by the lister for consistent pagination
     # Display files in a simple, clean format
-    for file in sorted_files:
+    for file in files:
         # Type indicator - use text instead of icons
         type_indicator = "DIR" if file.is_directory else "FILE"
 

@@ -127,6 +127,9 @@ class ArchiveLister:
             if filter_pattern:
                 files = self._apply_filter(files, filter_pattern)
 
+            # Sort files by path to maintain consistent ordering before pagination
+            files = sorted(files, key=lambda f: f.path.lower())
+
             # Calculate statistics
             total_count = len(files)
             total_size = sum(f.size for f in files if not f.is_directory)
@@ -178,7 +181,7 @@ class ArchiveLister:
                 "files": paginated_files,
                 "showing_range": (
                     f"{offset + 1}-{offset + len(paginated_files)} of {total_count}"
-                    if limit is not None
+                    if limit is not None or offset > 0
                     else f"All {total_count} entries"
                 ),
                 "has_more": has_more,
@@ -243,15 +246,32 @@ class ArchiveLister:
             # Get filename from ArchiveInfo
             path = info.filename.replace("\\", "/")
 
-            # Determine if it's a directory
-            # In 7z, directories usually end with / or have size 0 and specific attributes
-            is_directory = path.endswith("/") or (
-                hasattr(info, "is_dir") and info.is_dir
-            )
+            # Determine if it's a directory using py7zz API methods
+            is_directory = False
 
-            # Extract metadata from ArchiveInfo
+            # Try multiple approaches to detect directories
+            if hasattr(info, "is_dir") and callable(info.is_dir):
+                # Use is_dir() method (recommended py7zz API)
+                is_directory = info.is_dir()
+            elif hasattr(info, "isdir") and callable(info.isdir):
+                # Use isdir() method (zipfile compatible)
+                is_directory = info.isdir()
+            elif hasattr(info, "type"):
+                # Check type attribute
+                is_directory = info.type == "dir"
+            elif path.endswith("/"):
+                # Fallback: directories often end with /
+                is_directory = True
+
+            # Extract size information using correct py7zz attribute names
             size = getattr(info, "file_size", 0)
             compressed_size = getattr(info, "compress_size", 0)
+
+            # Additional fallback for size attributes with alternative names
+            if size == 0 and hasattr(info, "uncompressed_size"):
+                size = getattr(info, "uncompressed_size", 0)
+            if compressed_size == 0 and hasattr(info, "compressed_size"):
+                compressed_size = getattr(info, "compressed_size", 0)
 
             # Try to get modification time if available
             modified = None
@@ -268,6 +288,10 @@ class ArchiveLister:
             if hasattr(info, "CRC"):
                 crc = f"{info.CRC:08x}"
 
+            logger.debug(
+                f"Created ArchiveFile: path='{path}', is_dir={is_directory}, size={size}, compressed={compressed_size}"
+            )
+
             return ArchiveFile(
                 path=path,
                 size=size,
@@ -279,6 +303,11 @@ class ArchiveLister:
 
         except Exception as e:
             logger.debug(f"Error creating ArchiveFile from info: {e}")
+            # Log available attributes for debugging
+            if hasattr(info, "__dict__"):
+                logger.debug(f"Available attributes: {list(info.__dict__.keys())}")
+            elif hasattr(info, "__slots__"):
+                logger.debug(f"Available slots: {info.__slots__}")
             return None
 
     def _apply_filter(
