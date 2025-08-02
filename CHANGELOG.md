@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Incremental archive updates
 - Advanced filtering options
 
-## [0.2.0a1] - 2025-08-02
+## [0.2.0a2] - 2025-08-02
 
 ### Changed
 - **Cross-Platform Compatibility**: Enhanced Windows filename handling through improved py7zz integration
@@ -66,8 +66,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Core Functionality**: Initial implementation of multi-format archive processing
 - **Verification System**: Basic integrity checking and PAR2 recovery infrastructure
 
-[Unreleased]: https://github.com/RxChi1d/coldpack/compare/v0.2.0a1...HEAD
-[0.2.0a1]: https://github.com/RxChi1d/coldpack/releases/tag/v0.2.0a1
+[Unreleased]: https://github.com/RxChi1d/coldpack/compare/v0.2.0a2...HEAD
+[0.2.0a2]: https://github.com/RxChi1d/coldpack/releases/tag/v0.2.0a2
 [0.1.1]: https://github.com/RxChi1d/coldpack/releases/tag/v0.1.1
 [0.1.0]: https://github.com/RxChi1d/coldpack/releases/tag/v0.1.0
 [0.1.0b5]: https://github.com/RxChi1d/coldpack/releases/tag/v0.1.0b5
