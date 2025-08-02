@@ -280,8 +280,10 @@ class ArchiveLister:
                     from datetime import datetime
 
                     modified = datetime(*info.date_time)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to parse modification time from info.date_time={getattr(info, 'date_time', None)}: {e}"
+                    )
 
             # Try to get CRC if available
             crc = None
