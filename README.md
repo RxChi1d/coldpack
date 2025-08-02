@@ -38,7 +38,7 @@ coldpack is a command-line tool for creating standardized cold storage archives.
 ### Cross-Platform Support
 - **Operating systems**: Windows, macOS, Linux
 - **System file handling**: Automatically excludes platform-specific files (.DS_Store, Thumbs.db)
-- **Unicode support**: Handles international filenames correctly
+- **Unicode support**: Handles international filenames correctly with py7zz v1.0.0 automatic compatibility
 - **Progress tracking**: Real-time progress display during operations
 
 For detailed installation and usage instructions, see [Installation Guide](docs/INSTALLATION.md) and [CLI Reference](docs/CLI_REFERENCE.md).
@@ -157,21 +157,6 @@ uv run mypy src/ && uv run pytest
 
 See [CLAUDE.md](CLAUDE.md) for complete development instructions.
 
-## Known Limitations
-
-### Windows Filename Compatibility
-
-Currently, coldpack relies on py7zz/7-Zip's built-in cross-platform filename handling. While this works for most cases, extraction may fail on Windows systems when archives contain:
-
-- Reserved Windows names (CON, PRN, AUX, NUL, COM1-9, LPT1-9)
-- Invalid Windows characters (< > : " | ? * and control characters)
-- Very long filenames (>255 characters)
-- Case-sensitive duplicates on case-insensitive filesystems
-
-If you encounter filename-related extraction errors on Windows, you may need to:
-- Extract the archive using a different tool that handles these cases
-- Manually rename problematic files before creating the archive
-- Use the archive on a non-Windows system
 
 ## License & Support
 

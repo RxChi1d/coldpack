@@ -103,52 +103,25 @@ class TestArchiveListerNew:
         ):
             lister.list_archive(unsupported_file)
 
-    @patch("coldpack.core.lister.py7zz.run_7z")
-    def test_list_archive_basic(self, mock_run_7z, lister, mock_archive_path):
-        """Test basic archive listing functionality."""
-        # Mock 7zz l -slt output with realistic data
-        mock_output = """
-7-Zip (z) 25.00 (arm64) : Copyright (c) 1999-2025 Igor Pavlov : 2025-07-05
+    @patch("coldpack.core.lister.py7zz")
+    def test_list_archive_basic(self, mock_py7zz, lister, mock_archive_path):
+        """Test basic archive listing functionality with py7zz v1.0.0."""
+        # Mock py7zz.SevenZipFile for file listing
+        mock_archive = mock_py7zz.SevenZipFile.return_value.__enter__.return_value
+        mock_info_list = []
 
-Scanning the drive for archives:
-1 file, 100 bytes (1 KiB)
+        # Create mock ArchiveInfo objects for each file
+        for filename in ["test_file.txt", "subdir/", "subdir/nested_file.py"]:
+            mock_info = type("MockArchiveInfo", (), {})()
+            mock_info.filename = filename
+            mock_info.file_size = 0
+            mock_info.compress_size = 0
+            mock_info.date_time = None
+            mock_info.CRC = 0
+            mock_info.is_dir = filename.endswith("/")
+            mock_info_list.append(mock_info)
 
-Listing archive: test.7z
-
---
-Path = test.7z
-Type = 7z
-Physical Size = 100
-
-----------
-Path = test_file.txt
-Size = 36
-Packed Size = 20
-Modified = 2025-07-22 00:05:10
-Attributes = A -rw-r--r--
-CRC = 5CB2342E
-
-Path = subdir
-Size = 0
-Packed Size = 0
-Modified = 2025-07-22 00:05:10
-Attributes = D drwxr-xr-x
-CRC =
-
-Path = subdir/nested_file.py
-Size = 100
-Packed Size = 60
-Modified = 2025-07-22 00:05:10
-Attributes = A -rw-r--r--
-CRC = ABC12345
-"""
-
-        # Mock the run_7z call
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = mock_output
-        mock_result.stderr = ""
-        mock_run_7z.return_value = mock_result
+        mock_archive.infolist.return_value = mock_info_list
 
         # Test listing
         result = lister.list_archive(mock_archive_path)
@@ -165,59 +138,45 @@ CRC = ABC12345
         files_by_path = {f.path: f for f in result["files"]}
 
         txt_file = files_by_path["test_file.txt"]
-        assert txt_file.size == 36
+        assert txt_file.size == 0  # Mock provides size 0
         assert not txt_file.is_directory
-        assert txt_file.crc == "5CB2342E"
+        assert txt_file.crc == "00000000"  # Mock CRC value
 
-        subdir = files_by_path["subdir"]
+        subdir = files_by_path["subdir/"]
         assert subdir.is_directory
         assert subdir.size == 0
 
         py_file = files_by_path["subdir/nested_file.py"]
-        assert py_file.size == 100
+        assert py_file.size == 0  # Mock provides size 0
         assert not py_file.is_directory
-        assert py_file.crc == "ABC12345"
+        assert py_file.crc == "00000000"  # Mock CRC value
 
-    @patch("coldpack.core.lister.py7zz.run_7z")
-    def test_list_archive_with_filter(self, mock_run_7z, lister, mock_archive_path):
-        """Test archive listing with filter."""
-        # Mock output with various file types
-        mock_output = """
-----------
-Path = document.txt
-Size = 100
-Packed Size = 50
-Modified = 2025-07-22 00:05:10
-Attributes = A -rw-r--r--
-CRC = 12345678
+    @patch("coldpack.core.lister.py7zz")
+    def test_list_archive_with_filter(self, mock_py7zz, lister, mock_archive_path):
+        """Test archive listing with filter using py7zz v1.0.0."""
+        # Mock py7zz.SevenZipFile for file listing
+        mock_archive = mock_py7zz.SevenZipFile.return_value.__enter__.return_value
+        mock_info_list = []
 
-Path = script.py
-Size = 200
-Packed Size = 100
-Modified = 2025-07-22 00:05:10
-Attributes = A -rw-r--r--
-CRC = 87654321
+        # Create mock ArchiveInfo objects for each file
+        files_data = [
+            ("document.txt", 100, 50, 0x12345678),
+            ("script.py", 200, 100, 0x87654321),
+            ("image.jpg", 5000, 4500, 0xABCDEF12),
+            ("data.txt", 300, 150, 0x87654321),
+        ]
 
-Path = image.jpg
-Size = 5000
-Packed Size = 4500
-Modified = 2025-07-22 00:05:10
-Attributes = A -rw-r--r--
-CRC = ABCDEF12
+        for filename, size, compressed_size, crc in files_data:
+            mock_info = type("MockArchiveInfo", (), {})()
+            mock_info.filename = filename
+            mock_info.file_size = size
+            mock_info.compress_size = compressed_size
+            mock_info.date_time = (2025, 7, 22, 0, 5, 10)
+            mock_info.CRC = crc
+            mock_info.is_dir = False
+            mock_info_list.append(mock_info)
 
-Path = data.txt
-Size = 300
-Packed Size = 150
-Modified = 2025-07-22 00:05:10
-Attributes = A -rw-r--r--
-CRC = 87654321
-"""
-
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = mock_output
-        mock_result.stderr = ""
-        mock_run_7z.return_value = mock_result
+        mock_archive.infolist.return_value = mock_info_list
 
         # Test filter for txt files
         result = lister.list_archive(mock_archive_path, filter_pattern="*.txt")
@@ -228,66 +187,49 @@ CRC = 87654321
         assert "data.txt" in txt_files
         assert "script.py" not in txt_files
 
-    @patch("coldpack.core.lister.py7zz.run_7z")
-    def test_list_archive_dirs_only(self, mock_run_7z, lister, mock_archive_path):
-        """Test archive listing with dirs_only filter."""
-        mock_output = """
-----------
-Path = file.txt
-Size = 100
-Packed Size = 50
-Modified = 2025-07-22 00:05:10
-Attributes = A -rw-r--r--
-CRC = 12345678
+    @patch("coldpack.core.lister.py7zz")
+    def test_list_archive_dirs_only(self, mock_py7zz, lister, mock_archive_path):
+        """Test archive listing with dirs_only filter using py7zz v1.0.0."""
+        # Mock py7zz.SevenZipFile for file listing
+        mock_archive = mock_py7zz.SevenZipFile.return_value.__enter__.return_value
+        mock_info_list = []
 
-Path = dir1
-Size = 0
-Packed Size = 0
-Modified = 2025-07-22 00:05:10
-Attributes = D drwxr-xr-x
-CRC =
+        # Create mock ArchiveInfo objects with mixed files and directories
+        files_data = [
+            ("file.txt", 100, 50, 0x12345678, False),
+            ("dir1/", 0, 0, 0, True),
+            ("dir1/subfile.py", 200, 100, 0x87654321, False),
+            ("dir2/", 0, 0, 0, True),
+        ]
 
-Path = dir1/subfile.py
-Size = 200
-Packed Size = 100
-Modified = 2025-07-22 00:05:10
-Attributes = A -rw-r--r--
-CRC = 87654321
+        for filename, size, compressed_size, crc, is_dir in files_data:
+            mock_info = type("MockArchiveInfo", (), {})()
+            mock_info.filename = filename
+            mock_info.file_size = size
+            mock_info.compress_size = compressed_size
+            mock_info.date_time = (2025, 7, 22, 0, 5, 10)
+            mock_info.CRC = crc
+            mock_info.is_dir = is_dir
+            mock_info_list.append(mock_info)
 
-Path = dir2
-Size = 0
-Packed Size = 0
-Modified = 2025-07-22 00:05:10
-Attributes = D drwxr-xr-x
-CRC =
-"""
-
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = mock_output
-        mock_result.stderr = ""
-        mock_run_7z.return_value = mock_result
+        mock_archive.infolist.return_value = mock_info_list
 
         # Test dirs_only
         result = lister.list_archive(mock_archive_path, dirs_only=True)
 
         assert len(result["files"]) == 2
         dir_paths = [f.path for f in result["files"]]
-        assert "dir1" in dir_paths
-        assert "dir2" in dir_paths
+        assert "dir1/" in dir_paths
+        assert "dir2/" in dir_paths
         assert all(f.is_directory for f in result["files"])
 
-    @patch("coldpack.core.lister.py7zz.run_7z")
-    def test_list_archive_error_handling(self, mock_run_7z, lister, mock_archive_path):
-        """Test error handling when 7zz command fails."""
-        # Mock failed command
-        mock_result = MagicMock()
-        mock_result.returncode = 2
-        mock_result.stdout = ""
-        mock_result.stderr = "Archive corrupted"
-        mock_run_7z.return_value = mock_result
+    @patch("coldpack.core.lister.py7zz")
+    def test_list_archive_error_handling(self, mock_py7zz, lister, mock_archive_path):
+        """Test error handling when py7zz operations fail."""
+        # Mock SevenZipFile to raise an exception
+        mock_py7zz.SevenZipFile.side_effect = RuntimeError("Archive corrupted")
 
-        with pytest.raises(ListingError, match="7zz command failed"):
+        with pytest.raises(ListingError, match="Failed to list archive contents"):
             lister.list_archive(mock_archive_path)
 
 

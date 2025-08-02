@@ -1,6 +1,6 @@
 # Usage Examples
 
-Usage scenarios and workflows for coldpack v0.1.1.
+Usage scenarios and workflows for coldpack v0.2.0a2.
 
 ## Table of Contents
 
@@ -161,7 +161,7 @@ done
 ### Cross-Platform Extraction
 
 ```bash
-# Windows to Linux/macOS (automatic filename sanitization)
+# Windows to Linux/macOS (automatic cross-platform compatibility)
 cpack extract windows_backup.7z --output-dir /linux-safe
 
 # Preserve permissions and timestamps
@@ -853,7 +853,7 @@ fi
 
 ## Summary
 
-coldpack v0.1.1 provides 7z cold storage with optimizations:
+coldpack v0.2.0a2 provides 7z cold storage with optimizations:
 
 - **🚀 Dynamic Compression**: 7-tier intelligent optimization
 - **🛡️ 4-Layer Verification**: Complete integrity assurance

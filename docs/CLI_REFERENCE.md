@@ -1,6 +1,6 @@
 # CLI Reference
 
-Complete command-line interface reference for coldpack v0.1.1.
+Complete command-line interface reference for coldpack v0.2.0a2.
 
 ## Overview
 

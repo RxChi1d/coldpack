@@ -213,21 +213,13 @@ class MultiFormatExtractor:
                 )
 
             # Check archive structure to determine extraction strategy
-            # Use the improved analysis method with proper filtering
+            # py7zz v1.0.0: get_archive_info no longer provides file list
             try:
-                py7zz_info = py7zz.get_archive_info(archive_path)
-                actual_files = [
-                    f
-                    for f in py7zz_info["files"]
-                    if not (f.startswith("files,") or f.startswith("folders,"))
-                ]
-                has_single_root, _ = self._analyze_archive_structure(
-                    actual_files, archive_path
-                )
-            except Exception:
-                # Fallback to original method if py7zz.get_archive_info fails
-                logger.debug("Falling back to legacy structure check")
                 has_single_root = self._check_archive_structure(archive_path)
+            except Exception as e:
+                logger.debug(f"Archive structure check failed: {e}")
+                # Fallback: assume no single root (safer to create directory)
+                has_single_root = False
 
             if has_single_root and preserve_structure:
                 # Archive has single root directory, extract directly
@@ -387,20 +379,8 @@ class MultiFormatExtractor:
             output_dir.mkdir(parents=True, exist_ok=True)
 
             # Extract 7z archive using py7zz
+            # New py7zz version automatically handles Windows filename compatibility
             with py7zz.SevenZipFile(archive_path, "r") as archive:
-                # TODO: Windows filename compatibility handling
-                # Currently, we rely on py7zz/7-Zip's built-in handling for cross-platform
-                # filename compatibility. This works for most cases but may fail with:
-                # - Reserved Windows names (CON, PRN, AUX, NUL, COM1-9, LPT1-9)
-                # - Invalid Windows characters (< > : " | ? * and control chars)
-                # - Very long filenames (>255 characters)
-                # - Case-sensitive duplicates on case-insensitive filesystems
-                #
-                # For now, we let py7zz handle these cases naturally. If extraction
-                # fails due to filename issues, users will need to handle manually.
-                # Consider implementing automatic filename sanitization in the future
-                # if this becomes a common issue.
-
                 self._extract_normally(archive, output_dir, py7zz_callback)
 
             # Determine extracted structure
@@ -821,9 +801,7 @@ class MultiFormatExtractor:
         with safe_file_operations():
             try:
                 with py7zz.SevenZipFile(archive_path, "r") as archive:
-                    # TODO: Consider Windows filename compatibility handling here too
-                    # Similar to _extract_7z_archive, we currently rely on py7zz's
-                    # built-in cross-platform filename handling.
+                    # py7zz automatically handles Windows filename compatibility
                     archive.extractall(path=str(output_dir))
 
                 # Find the extracted root directory
@@ -882,7 +860,7 @@ class MultiFormatExtractor:
 
                 # Extract to target directory
                 with py7zz.SevenZipFile(archive_path, "r") as archive:
-                    # TODO: Consider Windows filename compatibility handling here too
+                    # py7zz automatically handles Windows filename compatibility
                     archive.extractall(path=str(target_dir))
 
                 # Verify extraction
@@ -900,7 +878,7 @@ class MultiFormatExtractor:
     def get_archive_info(self, archive_path: Union[str, Path]) -> dict:
         """Get information about an archive without extracting it.
 
-        Uses py7zz.get_archive_info for improved performance and simplicity.
+        Uses py7zz v1.0.0 API for efficient information retrieval.
 
         Args:
             archive_path: Path to the archive
@@ -922,27 +900,39 @@ class MultiFormatExtractor:
             raise UnsupportedFormatError(f"Unsupported format: {archive_obj.suffix}")
 
         try:
-            # Use py7zz.get_archive_info for efficient information retrieval
-            py7zz_info = py7zz.get_archive_info(archive_obj)
+            # Use py7zz.get_archive_info for basic statistics
+            # py7zz v1.0.0: get_archive_info only returns statistical information
+            py7zz_info = py7zz.get_archive_info(str(archive_obj))
 
-            # Filter out statistical information from py7zz (e.g., "files, 5 folders")
-            # These are not actual file paths and interfere with structure analysis
-            actual_files = [
-                f
-                for f in py7zz_info["files"]
-                if not (f.startswith("files,") or f.startswith("folders,"))
-            ]
+            # For structure analysis, use SevenZipFile to get file list
+            has_single_root = False
+            root_name = None
 
-            # Analyze archive structure for extraction strategy
-            has_single_root, root_name = self._analyze_archive_structure(
-                actual_files, archive_obj
-            )
+            try:
+                with py7zz.SevenZipFile(str(archive_obj), "r") as archive:
+                    file_list = archive.namelist()
+
+                    if file_list:
+                        # Analyze archive structure
+                        has_single_root, root_name = self._analyze_archive_structure(
+                            file_list, archive_obj
+                        )
+            except Exception as e:
+                logger.debug(f"Could not analyze archive structure: {e}")
+                # Fallback: use archive name as root name
+                archive_stem = archive_obj.stem
+                if archive_stem.endswith(".tar"):
+                    archive_stem = archive_stem[:-4]
+                has_single_root = True
+                root_name = archive_stem
 
             return {
                 "path": str(archive_obj),
                 "format": archive_obj.suffix,
-                "size": py7zz_info["compressed_size"],
-                "file_count": py7zz_info["file_count"],
+                "size": py7zz_info.get("compressed_size", archive_obj.stat().st_size),
+                "file_count": py7zz_info.get("file_count", 0),
+                "uncompressed_size": py7zz_info.get("uncompressed_size", 0),
+                "compression_ratio": py7zz_info.get("compression_ratio", 0.0),
                 "has_single_root": has_single_root,
                 "root_name": root_name,
             }
