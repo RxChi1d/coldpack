@@ -103,7 +103,7 @@ class TestSevenZipCompressor:
         compressor = SevenZipCompressor()
         assert compressor.settings.level == 5
         assert compressor.settings.dictionary_size == "16m"
-        assert compressor._config_dict["level"] == 5
+        assert compressor._preset == "balanced"  # level 5 maps to balanced
 
     def test_initialization_custom_settings(self):
         """Test SevenZipCompressor initialization with custom settings."""
@@ -111,7 +111,7 @@ class TestSevenZipCompressor:
         compressor = SevenZipCompressor(settings)
         assert compressor.settings.level == 7
         assert compressor.settings.dictionary_size == "64m"
-        assert compressor._config_dict["level"] == 7
+        assert compressor._preset == "maximum"  # level 7 maps to maximum
 
     @patch("coldpack.utils.sevenzip.py7zz")
     def test_compress_directory_success(self, mock_py7zz, tmp_path):
@@ -122,23 +122,16 @@ class TestSevenZipCompressor:
         (test_dir / "file1.txt").write_text("test content 1")
         (test_dir / "file2.txt").write_text("test content 2")
 
-        # Setup mocks
-        mock_config = Mock()
-        mock_py7zz.Config.return_value = mock_config
-        mock_archive = Mock()
-        mock_py7zz.SevenZipFile.return_value.__enter__.return_value = mock_archive
-
         # Test compression
         compressor = SevenZipCompressor()
         archive_path = tmp_path / "test.7z"
 
         compressor.compress_directory(test_dir, archive_path)
 
-        # Verify py7zz was called correctly
-        mock_py7zz.SevenZipFile.assert_called_once_with(
-            str(archive_path), mode="w", config=mock_config
+        # Verify py7zz.create_archive was called correctly
+        mock_py7zz.create_archive.assert_called_once_with(
+            str(archive_path), [str(test_dir)], preset="balanced"
         )
-        mock_archive.add.assert_called_once_with(str(test_dir))
 
     @patch("coldpack.utils.sevenzip.py7zz")
     def test_compress_directory_with_progress_callback(self, mock_py7zz, tmp_path):
@@ -148,29 +141,22 @@ class TestSevenZipCompressor:
         test_dir.mkdir()
         (test_dir / "file1.txt").write_text("test content")
 
-        # Setup mocks
-        mock_config = Mock()
-        mock_py7zz.Config.return_value = mock_config
-        mock_archive = Mock()
-        mock_py7zz.SevenZipFile.return_value.__enter__.return_value = mock_archive
-
         # Create progress callback
         progress_calls = []
 
         def progress_callback(percentage, current_file):
             progress_calls.append((percentage, current_file))
 
-        # Test compression with callback (progress callbacks not supported in current implementation)
+        # Test compression with callback (progress callbacks not supported in current simple API)
         compressor = SevenZipCompressor()
         archive_path = tmp_path / "test.7z"
 
         compressor.compress_directory(test_dir, archive_path, progress_callback)
 
-        # Verify py7zz was called correctly
-        mock_py7zz.SevenZipFile.assert_called_once_with(
-            str(archive_path), mode="w", config=mock_config
+        # Verify py7zz.create_archive was called correctly
+        mock_py7zz.create_archive.assert_called_once_with(
+            str(archive_path), [str(test_dir)], preset="balanced"
         )
-        mock_archive.add.assert_called_once_with(str(test_dir))
 
     def test_compress_directory_nonexistent_source(self, tmp_path):
         """Test compression with non-existent source."""
@@ -200,11 +186,9 @@ class TestSevenZipCompressor:
         (test_dir / "file1.txt").write_text("test content")
 
         # Setup mocks to raise error
-        mock_config = Mock()
-        mock_py7zz.Config.return_value = mock_config
         # Create proper exception class for py7zz
         mock_py7zz.CompressionError = type("CompressionError", (Exception,), {})
-        mock_py7zz.SevenZipFile.side_effect = mock_py7zz.CompressionError(
+        mock_py7zz.create_archive.side_effect = mock_py7zz.CompressionError(
             "Compression failed"
         )
 
@@ -400,17 +384,24 @@ class TestUtilityFunctions:
 
     @patch("coldpack.utils.sevenzip.py7zz")
     def test_get_7z_info_success(self, mock_py7zz, tmp_path):
-        """Test successful 7z archive info retrieval."""
+        """Test successful 7z archive info retrieval with py7zz v1.0.0 API."""
         archive_path = tmp_path / "test.7z"
         archive_path.write_text("mock archive")
 
-        # Mock py7zz SevenZipFile
-        mock_archive = Mock()
+        # Mock py7zz.get_archive_info (v1.0.0: only returns statistics)
+        mock_py7zz.get_archive_info.return_value = {
+            "compressed_size": 1024,
+            "file_count": 2,
+            "uncompressed_size": 2048,
+            "compression_ratio": 0.5,
+        }
+
+        # Mock SevenZipFile for file list analysis
+        mock_archive = mock_py7zz.SevenZipFile.return_value.__enter__.return_value
         mock_archive.namelist.return_value = [
             "root_dir/file1.txt",
             "root_dir/file2.txt",
         ]
-        mock_py7zz.SevenZipFile.return_value.__enter__.return_value = mock_archive
 
         info = get_7z_info(archive_path)
 
@@ -426,13 +417,21 @@ class TestUtilityFunctions:
         archive_path = tmp_path / "test.7z"
         archive_path.write_text("mock archive")
 
-        mock_archive = Mock()
+        # Mock py7zz.get_archive_info (v1.0.0: only returns statistics)
+        mock_py7zz.get_archive_info.return_value = {
+            "compressed_size": 1024,
+            "file_count": 3,
+            "uncompressed_size": 2048,
+            "compression_ratio": 0.5,
+        }
+
+        # Mock SevenZipFile for file list analysis (multiple roots)
+        mock_archive = mock_py7zz.SevenZipFile.return_value.__enter__.return_value
         mock_archive.namelist.return_value = [
             "dir1/file1.txt",
             "dir2/file2.txt",
             "file3.txt",
         ]
-        mock_py7zz.SevenZipFile.return_value.__enter__.return_value = mock_archive
 
         info = get_7z_info(archive_path)
 
@@ -490,24 +489,15 @@ class TestCrossPlatformCompatibility:
 
         # This should not raise an error about Path objects - just test that it works
         with patch("coldpack.utils.sevenzip.py7zz") as mock_py7zz:
-            mock_config = Mock()
-            mock_py7zz.Config.return_value = mock_config
-            mock_archive = Mock()
-            mock_py7zz.SevenZipFile.return_value.__enter__.return_value = mock_archive
-
             # Should complete without errors
             compressor.compress_directory(test_dir, archive_path)
 
-            # Verify that SevenZipFile was called with string paths
-            assert mock_py7zz.SevenZipFile.call_count == 1
-            call_args = mock_py7zz.SevenZipFile.call_args
+            # Verify that create_archive was called with string paths
+            assert mock_py7zz.create_archive.call_count == 1
+            call_args = mock_py7zz.create_archive.call_args
             assert isinstance(call_args[0][0], str)  # archive path is string
-            assert call_args[1]["mode"] == "w"
-
-            # Verify add was called with string path
-            assert mock_archive.add.call_count == 1
-            add_call_args = mock_archive.add.call_args
-            assert isinstance(add_call_args[0][0], str)  # source path is string
+            assert isinstance(call_args[0][1][0], str)  # source path is string
+            assert call_args[1]["preset"] == "balanced"
 
 
 class TestErrorHandling:
@@ -520,8 +510,6 @@ class TestErrorHandling:
         test_dir.mkdir()
         archive_path = tmp_path / "test.7z"
 
-        mock_config = Mock()
-        mock_py7zz.Config.return_value = mock_config
         compressor = SevenZipCompressor()
 
         # Create proper exception classes for py7zz
@@ -532,28 +520,28 @@ class TestErrorHandling:
         )
 
         # Test CompressionError
-        mock_py7zz.SevenZipFile.side_effect = mock_py7zz.CompressionError(
+        mock_py7zz.create_archive.side_effect = mock_py7zz.CompressionError(
             "Compression failed"
         )
         with pytest.raises(CompressionError):
             compressor.compress_directory(test_dir, archive_path)
 
         # Test FileNotFoundError
-        mock_py7zz.SevenZipFile.side_effect = mock_py7zz.FileNotFoundError(
+        mock_py7zz.create_archive.side_effect = mock_py7zz.FileNotFoundError(
             "File not found"
         )
         with pytest.raises(FileNotFoundError):
             compressor.compress_directory(test_dir, archive_path)
 
         # Test InsufficientSpaceError
-        mock_py7zz.SevenZipFile.side_effect = mock_py7zz.InsufficientSpaceError(
+        mock_py7zz.create_archive.side_effect = mock_py7zz.InsufficientSpaceError(
             "Not enough space"
         )
         with pytest.raises(CompressionError, match="Insufficient disk space"):
             compressor.compress_directory(test_dir, archive_path)
 
         # Test generic Exception
-        mock_py7zz.SevenZipFile.side_effect = Exception("Generic error")
+        mock_py7zz.create_archive.side_effect = Exception("Generic error")
         with pytest.raises(CompressionError, match="Unexpected error"):
             compressor.compress_directory(test_dir, archive_path)
 

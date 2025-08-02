@@ -440,9 +440,21 @@ class ArchiveVerifier:
             return VerificationResult(
                 "7z_integrity", False, "py7zz library not available for 7z verification"
             )
+        except py7zz.FileNotFoundError:
+            return VerificationResult("7z_integrity", False, "Archive file not found")
+        except py7zz.CorruptedArchiveError:
+            return VerificationResult(
+                "7z_integrity", False, "Archive is corrupted or damaged"
+            )
+        except py7zz.UnsupportedFormatError:
+            return VerificationResult(
+                "7z_integrity", False, "Unsupported archive format"
+            )
+        except py7zz.Py7zzError as e:
+            return VerificationResult("7z_integrity", False, f"py7zz error: {e}")
         except Exception as e:
             return VerificationResult(
-                "7z_integrity", False, f"7z verification error: {e}"
+                "7z_integrity", False, f"Unexpected verification error: {e}"
             )
 
     def get_verification_summary(self, results: list[VerificationResult]) -> dict:

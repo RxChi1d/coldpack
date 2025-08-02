@@ -1,7 +1,6 @@
 """Archive content listing functionality using py7zz."""
 
 import fnmatch
-import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional, Union
@@ -189,7 +188,7 @@ class ArchiveLister:
             raise ListingError(f"Failed to list archive contents: {e}") from e
 
     def _extract_file_list(self, archive_path: Path) -> list[ArchiveFile]:
-        """Extract file list from archive using py7zz run_7z with detailed info.
+        """Extract file list from archive using py7zz improved API.
 
         Args:
             archive_path: Path to the archive
@@ -203,211 +202,84 @@ class ArchiveLister:
         try:
             files = []
 
-            # Use 7zz l -slt to get detailed technical listing
-            result = py7zz.run_7z(["l", "-slt", str(archive_path)])
-
-            if result.returncode != 0:
-                raise ListingError(
-                    f"7zz command failed with code {result.returncode}: {result.stderr}"
-                )
-
-            # Parse the technical format output
-            files = self._parse_slt_output(result.stdout)
+            # Use py7zz.SevenZipFile for detailed file information
+            # py7zz v1.0.0 removed file list from get_archive_info, use SevenZipFile instead
+            with py7zz.SevenZipFile(str(archive_path), "r") as archive:
+                # Get detailed information about each file
+                for info in archive.infolist():
+                    try:
+                        # Create ArchiveFile object from ArchiveInfo
+                        file_obj = self._create_archive_file_from_info(info)
+                        if file_obj:
+                            files.append(file_obj)
+                    except Exception as e:
+                        logger.debug(f"Error processing file info: {e}")
+                        continue
 
             logger.debug(f"Extracted {len(files)} entries from archive")
             return files
 
-        except subprocess.CalledProcessError as e:
-            raise ListingError(f"Failed to run 7zz command: {e}") from e
+        except py7zz.FileNotFoundError as e:
+            raise ListingError(f"Archive file not found: {archive_path}") from e
+        except py7zz.CorruptedArchiveError as e:
+            raise ListingError(f"Archive is corrupted: {archive_path}") from e
+        except py7zz.UnsupportedFormatError as e:
+            raise ListingError(f"Unsupported archive format: {archive_path}") from e
+        except py7zz.Py7zzError as e:
+            raise ListingError(f"py7zz error: {e}") from e
         except Exception as e:
             raise ListingError(f"Failed to extract file list from archive: {e}") from e
 
-    def _parse_slt_output(self, output: str) -> list[ArchiveFile]:
-        """Parse 7zz l -slt technical format output.
+    def _create_archive_file_from_info(self, info: Any) -> Optional[ArchiveFile]:
+        """Create ArchiveFile from py7zz ArchiveInfo object.
 
         Args:
-            output: The stdout from 7zz l -slt command
+            info: py7zz ArchiveInfo object
 
         Returns:
-            List of ArchiveFile objects with detailed metadata
+            ArchiveFile object or None if creation fails
         """
-        files: list[ArchiveFile] = []
-
-        # Find the data section (after "----------")
-        sections = output.split("----------")
-        if len(sections) < 2:
-            return files
-
-        data_section = sections[1]
-
-        # Split into individual file entries - each entry starts with "Path = "
-        file_entries: list[str] = []
-        current_entry: list[str] = []
-
-        for line in data_section.split("\n"):
-            line = line.strip()
-            if line.startswith("Path = "):
-                # Start of a new file entry
-                if current_entry:
-                    file_entries.append("\n".join(current_entry))
-                current_entry = [line]
-            elif line and current_entry:
-                # Continue current entry
-                current_entry.append(line)
-
-        # Don't forget the last entry
-        if current_entry:
-            file_entries.append("\n".join(current_entry))
-
-        # Parse each file entry
-        for entry in file_entries:
-            try:
-                file_info = self._parse_file_section(entry.strip())
-                if file_info:
-                    files.append(file_info)
-            except Exception as e:
-                logger.debug(f"Error parsing file entry: {e}")
-                continue
-
-        return files
-
-    def _parse_file_section(self, section: str) -> Optional[ArchiveFile]:
-        """Parse a single file section from 7zz -slt output.
-
-        Args:
-            section: A single file section from the output
-
-        Returns:
-            ArchiveFile object or None if parsing fails
-        """
-        if not section.strip():
-            return None
-
-        # Parse key-value pairs
-        properties = {}
-        for line in section.split("\n"):
-            line = line.strip()
-            if not line:
-                continue
-            if " = " in line:
-                key, value = line.split(" = ", 1)
-                properties[key.strip()] = value.strip()
-
-        # Extract required fields
-        path = properties.get("Path", "")
-        if not path:
-            return None
-
-        # Normalize path separators
-        path = path.replace("\\", "/")
-
-        # Parse size (default to 0 if empty or invalid)
         try:
-            size = int(properties.get("Size", "0") or "0")
-        except ValueError:
-            size = 0
+            # Get filename from ArchiveInfo
+            path = info.filename.replace("\\", "/")
 
-        # Parse compressed size (default to 0 if empty or invalid)
-        try:
-            compressed_size = int(properties.get("Packed Size", "0") or "0")
-        except ValueError:
-            compressed_size = 0
-
-        # Parse modification time
-        modified = None
-        modified_str = properties.get("Modified", "")
-        if modified_str:
-            try:
-                # Format: "2025-07-22 00:05:10.3517944"
-                # Remove microseconds part for simpler parsing
-                if "." in modified_str:
-                    modified_str = modified_str.split(".")[0]
-                modified = datetime.strptime(modified_str, "%Y-%m-%d %H:%M:%S")
-            except ValueError:
-                logger.debug(f"Failed to parse modification time: {modified_str}")
-
-        # Determine if it's a directory from multiple indicators
-        attributes = properties.get("Attributes", "")
-
-        # Primary method: Check if attributes indicate directory
-        # Unix/Linux: "D " prefix, Windows: may vary
-        is_directory_from_attr = False
-        if attributes:
-            attr_upper = attributes.upper()
-            is_directory_from_attr = (
-                attributes.startswith("D ")  # Unix/Linux format
-                or attributes.startswith("D")  # Windows format (no space)
-                or "D" in attributes.split()[0]  # First attribute contains D
-                or "DIR" in attr_upper  # Windows may use DIR
-                or "DIRECTORY" in attr_upper  # Full word
-                or attr_upper.startswith("D")  # Any D prefix
+            # Determine if it's a directory
+            # In 7z, directories usually end with / or have size 0 and specific attributes
+            is_directory = path.endswith("/") or (
+                hasattr(info, "is_dir") and info.is_dir
             )
 
-        # Secondary method: Check if path ends with "/" (directory indicator)
-        is_directory_from_path = path.endswith("/")
+            # Extract metadata from ArchiveInfo
+            size = getattr(info, "file_size", 0)
+            compressed_size = getattr(info, "compress_size", 0)
 
-        # Additional method: Check for Windows-specific folder indicators
-        folder_prop = properties.get("Folder", "")
-        is_directory_from_folder_prop = folder_prop.strip().lower() in [
-            "+",
-            "true",
-            "1",
-        ]
+            # Try to get modification time if available
+            modified = None
+            if hasattr(info, "date_time"):
+                try:
+                    from datetime import datetime
 
-        # Extract CRC if available
-        crc = properties.get("CRC", "") or None
-        if crc == "":
+                    modified = datetime(*info.date_time)
+                except Exception:
+                    pass
+
+            # Try to get CRC if available
             crc = None
+            if hasattr(info, "CRC"):
+                crc = f"{info.CRC:08x}"
 
-        # Tertiary method: Check if size is 0 and no CRC (typical for directories)
-        is_directory_from_metadata = (
-            size == 0
-            and crc is None
-            and not path.endswith((".txt", ".exe", ".dll", ".zip", ".7z"))
-        )
-
-        # Final determination: Use multiple indicators for robust cross-platform detection
-        is_directory = (
-            is_directory_from_attr
-            or is_directory_from_path
-            or is_directory_from_folder_prop
-            or (
-                is_directory_from_metadata
-                and not any(
-                    path.endswith(ext)
-                    for ext in [
-                        ".txt",
-                        ".log",
-                        ".md",
-                        ".py",
-                        ".js",
-                        ".css",
-                        ".html",
-                        ".xml",
-                        ".json",
-                    ]
-                )
+            return ArchiveFile(
+                path=path,
+                size=size,
+                compressed_size=compressed_size,
+                modified=modified,
+                is_directory=is_directory,
+                crc=crc,
             )
-        )
 
-        # Debug logging for cross-platform compatibility
-        logger.debug(
-            f"Directory detection for '{path}': "
-            f"attrs='{attributes}' -> {is_directory_from_attr}, "
-            f"path_ends_slash={is_directory_from_path}, "
-            f"folder_prop='{folder_prop}' -> {is_directory_from_folder_prop}, "
-            f"metadata={is_directory_from_metadata} -> "
-            f"final={is_directory}"
-        )
-
-        return ArchiveFile(
-            path=path,
-            size=size,
-            compressed_size=compressed_size,
-            modified=modified,
-            is_directory=is_directory,
-            crc=crc,
-        )
+        except Exception as e:
+            logger.debug(f"Error creating ArchiveFile from info: {e}")
+            return None
 
     def _apply_filter(
         self, files: list[ArchiveFile], pattern: str

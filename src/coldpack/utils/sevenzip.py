@@ -31,10 +31,32 @@ class SevenZipCompressor:
             settings: 7z compression settings
         """
         self.settings = settings or SevenZipSettings()
-        self._config_dict = self.settings.to_py7zz_config()
-        # Create py7zz Config object
-        self._py7zz_config = py7zz.Config(**self._config_dict)
-        logger.debug(f"7z compressor initialized: {self._config_dict}")
+        # Convert settings to py7zz preset
+        self._preset = self._settings_to_preset(self.settings)
+        logger.debug(f"7z compressor initialized with preset: {self._preset}")
+
+    def _settings_to_preset(self, settings: SevenZipSettings) -> str:
+        """Convert SevenZipSettings to py7zz preset.
+
+        Args:
+            settings: SevenZipSettings to convert
+
+        Returns:
+            Appropriate py7zz preset string
+        """
+        # Map compression levels to presets
+        # Level 1-3: fast compression
+        if settings.level <= 3:
+            return "fast"
+        # Level 4-6: balanced compression (default)
+        elif settings.level <= 6:
+            return "balanced"
+        # Level 7-8: maximum compression
+        elif settings.level <= 8:
+            return "maximum"
+        # Level 9: ultra compression
+        else:
+            return "ultra"
 
     def compress_directory(
         self,
@@ -66,15 +88,13 @@ class SevenZipCompressor:
         archive_obj.parent.mkdir(parents=True, exist_ok=True)
 
         logger.debug(f"Compressing directory: {source_path.name} → {archive_obj.name}")
-        logger.debug(f"7z settings: {self._config_dict}")
+        logger.debug(f"7z preset: {self._preset}")
 
         try:
-            # Use SevenZipFile for compression with Config
-            with py7zz.SevenZipFile(
-                str(archive_obj), mode="w", config=self._py7zz_config
-            ) as archive:
-                # Add the source directory to the archive
-                archive.add(str(source_path))
+            # Use simplified create_archive API with preset
+            py7zz.create_archive(
+                str(archive_obj), [str(source_path)], preset=self._preset
+            )
 
             # Success will be logged in archiver with file size info
             logger.debug(f"7z compression completed: {archive_obj.name}")
@@ -129,13 +149,9 @@ class SevenZipCompressor:
         )
 
         try:
-            # Use SevenZipFile for compression with Config
-            with py7zz.SevenZipFile(
-                str(archive_obj), mode="w", config=self._py7zz_config
-            ) as archive:
-                # Add each file to the archive
-                for file_path in file_paths:
-                    archive.add(str(file_path))
+            # Use simplified create_archive API with preset
+            file_strings = [str(f) for f in file_paths]
+            py7zz.create_archive(str(archive_obj), file_strings, preset=self._preset)
 
             logger.debug(f"7z archive created: {archive_obj.name} ({len(files)} files)")
 
@@ -201,16 +217,20 @@ class SevenZipCompressor:
             """Adapter function for py7zz progress callbacks.
 
             Args:
-                progress_info: py7zz ProgressInfo object
+                progress_info: py7zz ProgressInfo object with enhanced attributes
             """
             try:
                 # Extract percentage and current file from py7zz ProgressInfo
+                # New ProgressInfo has better structured data
                 if hasattr(progress_info, "percentage"):
                     percentage = int(progress_info.percentage)
                 else:
                     percentage = 0
 
-                if hasattr(progress_info, "current_file"):
+                if (
+                    hasattr(progress_info, "current_file")
+                    and progress_info.current_file
+                ):
                     current_file = str(progress_info.current_file)
                 else:
                     current_file = "Processing..."
@@ -342,7 +362,7 @@ def optimize_7z_compression_settings(
 
 
 def get_7z_info(archive_path: Union[str, Path]) -> dict[str, Any]:
-    """Get information about a 7z archive.
+    """Get information about a 7z archive using py7zz v1.0.0 API.
 
     Args:
         archive_path: Path to 7z archive
@@ -362,38 +382,55 @@ def get_7z_info(archive_path: Union[str, Path]) -> dict[str, Any]:
     try:
         logger.debug(f"Getting 7z archive info: {archive_obj}")
 
-        with py7zz.SevenZipFile(str(archive_obj), "r") as archive:
-            file_list = archive.namelist()
+        # Use get_archive_info API for basic statistics
+        # py7zz v1.0.0: get_archive_info only returns statistical information
+        info = py7zz.get_archive_info(str(archive_obj))
 
-            # Calculate basic statistics
-            file_count = len(file_list)
-            archive_size = archive_obj.stat().st_size
+        # For structure analysis, use SevenZipFile to get file list
+        # py7zz v1.0.0 removed file list from get_archive_info
+        has_single_root = False
+        root_name = None
 
-            # Check for single root directory
-            has_single_root = False
-            root_name = None
+        try:
+            with py7zz.SevenZipFile(str(archive_obj), "r") as archive:
+                file_list = archive.namelist()
 
-            if file_list:
-                # Extract first-level items
-                first_level_items = set()
-                for item in file_list:
-                    normalized_path = item.replace("\\", "/")
-                    parts = normalized_path.split("/")
-                    if parts[0]:
-                        first_level_items.add(parts[0])
+                if file_list:
+                    # Extract first-level items for structure analysis
+                    first_level_items = set()
+                    for item in file_list:
+                        normalized_path = item.replace("\\", "/")
+                        parts = normalized_path.split("/")
+                        if parts[0]:
+                            first_level_items.add(parts[0])
 
-                if len(first_level_items) == 1:
-                    root_name = next(iter(first_level_items))
-                    has_single_root = True
+                    # Check if archive has single root directory
+                    if len(first_level_items) == 1:
+                        root_name = next(iter(first_level_items))
+                        has_single_root = True
+                        logger.debug(f"Archive has single root directory: {root_name}")
+                    else:
+                        logger.debug(f"Archive has {len(first_level_items)} root items")
+        except Exception as e:
+            logger.debug(f"Could not analyze archive structure: {e}")
+            # Fallback: assume single root based on archive name
+            archive_stem = archive_obj.stem
+            if archive_stem.endswith(".tar"):
+                archive_stem = archive_stem[:-4]
+            has_single_root = True
+            root_name = archive_stem
+            logger.debug(f"Using fallback root name: {root_name}")
 
-            return {
-                "path": str(archive_obj),
-                "format": ".7z",
-                "size": archive_size,
-                "file_count": file_count,
-                "has_single_root": has_single_root,
-                "root_name": root_name,
-            }
+        return {
+            "path": str(archive_obj),
+            "format": ".7z",
+            "size": info.get("compressed_size", archive_obj.stat().st_size),
+            "file_count": info.get("file_count", 0),
+            "uncompressed_size": info.get("uncompressed_size", 0),
+            "compression_ratio": info.get("compression_ratio", 0.0),
+            "has_single_root": has_single_root,
+            "root_name": root_name,
+        }
 
     except Exception as e:
         raise SevenZipError(f"Failed to get 7z archive info: {e}") from e

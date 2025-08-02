@@ -50,7 +50,7 @@ classifiers = [
     "Natural Language :: English",
 ]
 dependencies = [
-    "py7zz>=0.1.1",
+    "py7zz==1.0.0",
     "zstandard>=0.23.0",
     "blake3>=1.0.5",
     "typer>=0.16.0",
