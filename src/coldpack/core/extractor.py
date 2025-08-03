@@ -54,7 +54,6 @@ class MultiFormatExtractor:
             ".tar.lz",
             ".tar.lzma",
             ".tar.Z",
-            ".tar.zst",
             ".tar.lz4",
         ]
 
@@ -104,7 +103,7 @@ class MultiFormatExtractor:
             output_dir: Directory to extract to
             preserve_structure: Whether to preserve archive structure
             force_overwrite: Force overwrite existing files
-            metadata: Optional metadata for parameter recovery (for tar.zst archives)
+            metadata: Optional metadata for parameter recovery
             progress_callback: Optional progress callback for extraction progress
 
         Returns:
@@ -196,16 +195,6 @@ class MultiFormatExtractor:
                     progress_callback,
                 )
 
-            # Check if this is a tar.zst archive (coldpack tar.zst format)
-            if self._is_tar_zst_format(archive_path):
-                return self._extract_tar_zst_archive(
-                    archive_path,
-                    output_dir,
-                    preserve_structure,
-                    force_overwrite,
-                    metadata,
-                )
-
             # Check if this is a compound tar archive (tar.gz, tar.bz2, tar.xz, etc.)
             if self._is_compound_tar_format(archive_path):
                 return self._extract_compound_tar_archive(
@@ -266,20 +255,6 @@ class MultiFormatExtractor:
             True if file is 7z format
         """
         return file_path.suffix.lower() == ".7z"
-
-    def _is_tar_zst_format(self, file_path: Path) -> bool:
-        """Check if file is a tar.zst archive (coldpack format).
-
-        Args:
-            file_path: Path to the file
-
-        Returns:
-            True if file is tar.zst format
-        """
-        if len(file_path.suffixes) >= 2:
-            compound_suffix = "".join(file_path.suffixes[-2:]).lower()
-            return compound_suffix == ".tar.zst"
-        return False
 
     def _is_compound_tar_format(self, file_path: Path) -> bool:
         """Check if file is a compound tar archive (tar.gz, tar.bz2, tar.xz, etc.).
@@ -431,135 +406,6 @@ class MultiFormatExtractor:
                 archive.extractall(path=str(output_dir))
         else:
             archive.extractall(path=str(output_dir))
-
-    def _extract_tar_zst_archive(
-        self,
-        archive_path: Path,
-        output_dir: Path,
-        preserve_structure: bool,
-        force_overwrite: bool,
-        metadata: Optional[Any] = None,
-    ) -> Path:
-        """Extract tar.zst archive by first extracting zst, then tar.
-
-        Args:
-            archive_path: Path to the .tar.zst archive
-            output_dir: Directory to extract to
-            preserve_structure: Whether to preserve archive structure
-            force_overwrite: Force overwrite existing files
-            metadata: Optional metadata containing original compression parameters
-
-        Returns:
-            Path to the extracted content directory
-
-        Raises:
-            ExtractionError: If extraction fails at any stage
-        """
-        logger.info(f"Extracting tar.zst archive: {archive_path.name}")
-
-        if metadata:
-            logger.debug("Using metadata from coldpack archive")
-            # Legacy support: Check for old compression_settings (for backward compatibility)
-            if (
-                hasattr(metadata, "compression_settings")
-                and metadata.compression_settings
-            ):
-                logger.debug(
-                    f"  Legacy Zstd Level: {metadata.compression_settings.level}"
-                )
-                logger.debug(
-                    f"  Legacy Threads: {metadata.compression_settings.threads}"
-                )
-                logger.debug(
-                    f"  Legacy Long mode: {metadata.compression_settings.long_mode}"
-                )
-            elif metadata.sevenzip_settings:
-                # 7Z format metadata (shouldn't occur in tar.zst extraction, but handle gracefully)
-                logger.debug(f"  7z Level: {metadata.sevenzip_settings.level}")
-                logger.debug(f"  7z Threads: {metadata.sevenzip_settings.threads}")
-                logger.debug(f"  7z Method: {metadata.sevenzip_settings.method}")
-
-        # Use a temporary directory for the intermediate tar file
-        temp_dir = None
-
-        try:
-            # Create temporary directory for intermediate tar file with enhanced cleanup
-            from ..utils.temp_manager import (
-                create_temp_directory as create_enhanced_temp_dir,
-            )
-
-            temp_dir = create_enhanced_temp_dir(prefix="coldpack_extract_")
-            logger.debug(f"Using temporary directory: {temp_dir}")
-
-            # Step 1: Extract .zst compression to get .tar file
-            tar_name = (
-                archive_path.stem
-            )  # This gives us the name without .zst (should be .tar)
-            intermediate_tar = temp_dir / tar_name
-
-            logger.debug(f"Step 1: Extracting zst compression to {intermediate_tar}")
-
-            # For tar.zst files, we could potentially use zstd command line with original parameters
-            # if metadata is available, but py7zz should handle decompression automatically
-            # The original compression parameters are mainly useful for recompression, not decompression
-            with py7zz.SevenZipFile(archive_path, "r") as zst_archive:
-                zst_archive.extractall(path=str(temp_dir))
-
-            # Verify intermediate tar file exists
-            if not intermediate_tar.exists():
-                # py7zz might extract with a different name, find the tar file
-                tar_files = list(temp_dir.glob("*.tar"))
-                if not tar_files:
-                    raise ExtractionError("No tar file found after zst extraction")
-                intermediate_tar = tar_files[0]
-                logger.debug(f"Found intermediate tar file: {intermediate_tar}")
-
-            # Step 2: Extract tar file to final destination
-            logger.debug(f"Step 2: Extracting tar file to {output_dir}")
-
-            # For tar.zst files, extract tar contents directly to output_dir
-            with py7zz.SevenZipFile(intermediate_tar, "r") as tar_archive:
-                # Extract tar contents directly to the output directory
-                tar_archive.extractall(path=str(output_dir))
-
-                # Check what was extracted
-                extracted_items = list(output_dir.iterdir())
-
-                if len(extracted_items) == 1 and extracted_items[0].is_dir():
-                    # Single directory was extracted - this should be the content
-                    result_path = extracted_items[0]
-                elif len(extracted_items) > 1:
-                    # Multiple items extracted - wrap them in a named directory
-                    archive_name = self._get_clean_archive_name(archive_path)
-
-                    # Use a unique wrapper directory name to avoid conflicts
-                    wrapper_dir = output_dir / archive_name
-                    counter = 1
-                    while wrapper_dir.exists():
-                        wrapper_dir = output_dir / f"{archive_name}_{counter}"
-                        counter += 1
-
-                    wrapper_dir.mkdir(exist_ok=True)
-
-                    # Move all extracted items into the wrapper directory
-                    for item in extracted_items:
-                        target = wrapper_dir / item.name
-                        item.rename(target)
-
-                    result_path = wrapper_dir
-                else:
-                    # No items extracted - error
-                    raise ExtractionError("No content found after tar extraction")
-
-            logger.success(f"tar.zst archive extracted: {archive_path.name}")
-            return result_path
-
-        except Exception as e:
-            raise ExtractionError(f"Failed to extract tar.zst archive: {e}") from e
-        finally:
-            # Enhanced temp manager handles cleanup automatically
-            # No manual cleanup needed - temp_dir is tracked globally
-            pass
 
     def _check_archive_structure_from_filelist(
         self, file_list: list, archive_name: str

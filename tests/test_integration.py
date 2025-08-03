@@ -101,17 +101,12 @@ class TestModuleImports:
 
     def test_utils_module_imports(self):
         """Test that utility modules can be imported."""
-        from coldpack.utils.compression import ZstdCompressor, ZstdDecompressor
         from coldpack.utils.hashing import DualHasher, HashVerifier
 
         # Test instantiation
-        compressor = ZstdCompressor()
-        decompressor = ZstdDecompressor()
         hasher = DualHasher()
         verifier = HashVerifier()
 
-        assert compressor is not None
-        assert decompressor is not None
         assert hasher is not None
         assert verifier is not None
 

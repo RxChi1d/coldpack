@@ -22,7 +22,6 @@ SUPPORTED_INPUT_FORMATS = {
     ".tbz2",
     ".tar.xz",
     ".txz",
-    ".tar.zst",
 }
 
 SUPPORTED_ARCHIVE_FORMATS = SUPPORTED_INPUT_FORMATS.union(
