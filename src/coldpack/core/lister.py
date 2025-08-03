@@ -161,9 +161,18 @@ class ArchiveLister:
             paginated_files = files[offset : offset + limit if limit else None]
 
             # Determine if there are more entries
-            has_more = (
-                limit is not None and (offset + len(paginated_files)) < total_count
-            )
+            # - With limit: check if we have more after current page
+            # - With offset only: check if we skipped any entries (offset > 0)
+            # - With both: standard pagination check
+            if limit is not None:
+                # Standard pagination with limit
+                has_more = (offset + len(paginated_files)) < total_count
+            elif offset > 0:
+                # Offset only: indicate there were skipped entries
+                has_more = True
+            else:
+                # No pagination at all
+                has_more = False
 
             return {
                 "archive_path": str(archive_obj),
