@@ -1,5 +1,7 @@
 """Tests for configuration modules."""
 
+import pytest
+
 from coldpack.config.constants import DEFAULT_COMPRESSION_LEVEL, SUPPORTED_INPUT_FORMATS
 from coldpack.config.settings import (
     ArchiveMetadata,
