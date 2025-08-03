@@ -19,6 +19,7 @@ from rich.progress import (
 from rich.table import Table
 
 from ..config.constants import PROGRESS_UPDATE_INTERVAL
+from .console import create_windows_compatible_console
 
 
 class ProgressInfo:
@@ -76,7 +77,7 @@ class ProgressTracker:
             show_speed: Whether to show processing speed
             show_eta: Whether to show estimated time remaining
         """
-        self.console = console or Console()
+        self.console = console or create_windows_compatible_console()
         self.show_speed = show_speed
         self.show_eta = show_eta
         self._progress: Optional[Progress] = None
@@ -375,7 +376,7 @@ def display_operation_summary(
         console: Rich console instance
     """
     if console is None:
-        console = Console()
+        console = create_windows_compatible_console()
 
     table = Table(
         title="Operation Summary", show_header=True, header_style="bold magenta"
@@ -387,7 +388,7 @@ def display_operation_summary(
     table.add_column("Duration", justify="right")
 
     for operation_name, result in operations.items():
-        status = "✓ Success" if result.get("success", False) else "✗ Failed"
+        status = "[OK] Success" if result.get("success", False) else "[FAIL] Failed"
         status_style = "green" if result.get("success", False) else "red"
 
         table.add_row(
@@ -426,4 +427,4 @@ def create_status_console() -> Console:
     Returns:
         Configured Rich console
     """
-    return Console(force_terminal=True, width=120, legacy_windows=False)
+    return create_windows_compatible_console(width=120)

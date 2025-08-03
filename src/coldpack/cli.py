@@ -6,7 +6,6 @@ from typing import Any, Optional
 
 import typer
 from loguru import logger
-from rich.console import Console
 from rich.table import Table
 
 from . import __version__
@@ -20,6 +19,7 @@ from .core.extractor import MultiFormatExtractor
 from .core.lister import ArchiveLister, ListingError, UnsupportedFormatError
 from .core.repairer import ArchiveRepairer
 from .core.verifier import ArchiveVerifier
+from .utils.console import create_windows_compatible_console, safe_print
 from .utils.filesystem import format_file_size, get_file_size
 from .utils.par2 import PAR2Manager, check_par2_availability, install_par2_instructions
 from .utils.progress import ProgressTracker
@@ -34,8 +34,8 @@ app = typer.Typer(
     context_settings={"help_option_names": ["-h", "--help"]},
 )
 
-# Initialize Rich console
-console = Console()
+# Initialize Rich console with Windows compatibility
+console = create_windows_compatible_console()
 
 
 def version_callback(value: bool) -> None:
@@ -420,13 +420,15 @@ def create(
             result = archiver.create_archive(source, output_dir, name, "7z")
 
             if result.success:
-                console.print("[green]✓ Archive created successfully![/green]")
+                safe_print(console, "[green]✓ Archive created successfully![/green]")
 
                 # Display summary
                 display_archive_summary(result)
 
             else:
-                console.print(f"[red]✗ Archive creation failed: {result.message}[/red]")
+                safe_print(
+                    console, f"[red]✗ Archive creation failed: {result.message}[/red]"
+                )
                 if verbose and result.error_details:
                     console.print(f"[red]Details: {result.error_details}[/red]")
                 raise typer.Exit(ExitCodes.COMPRESSION_FAILED)
@@ -538,7 +540,7 @@ def extract(
 
                 # Show each layer result
                 for result in results:
-                    status_icon = "✓" if result.success else "✗"
+                    status_icon = "[OK]" if result.success else "[FAIL]"
                     status_color = "green" if result.success else "red"
                     console.print(
                         f"[{status_color}]{status_icon} {result.layer}: {result.message}[/{status_color}]"
@@ -546,17 +548,19 @@ def extract(
 
                 # Overall result
                 if passed_layers == total_layers:
-                    console.print("[green]✓ Archive integrity fully verified[/green]")
+                    safe_print(
+                        console, "[green]✓ Archive integrity fully verified[/green]"
+                    )
                 else:
                     console.print(
-                        f"[yellow]⚠ Partial verification: {passed_layers}/{total_layers} layers passed[/yellow]"
+                        f"[yellow][WARN] Partial verification: {passed_layers}/{total_layers} layers passed[/yellow]"
                     )
                     console.print(
                         "[yellow]Continuing with extraction attempt...[/yellow]"
                     )
 
             except Exception as e:
-                console.print(f"[red]✗ Verification failed: {e}[/red]")
+                safe_print(console, f"[red]✗ Verification failed: {e}[/red]")
                 console.print("[yellow]Continuing with extraction attempt...[/yellow]")
 
         # Step 2: Try to load coldpack metadata (standard compliant archives)
@@ -625,7 +629,7 @@ def extract(
 
                 raise typer.Exit(ExitCodes.EXTRACTION_FAILED) from direct_extract_error
 
-        console.print("[green]✓ Extraction completed successfully![/green]")
+        safe_print(console, "[green]✓ Extraction completed successfully![/green]")
         console.print(f"[green]Extracted to: {extracted_path}[/green]")
 
     except typer.Exit:
@@ -897,13 +901,13 @@ def repair(
         result = repairer.repair_archive(par2_file)
 
         if result.success:
-            console.print(f"[green]✓ {result.message}[/green]")
+            safe_print(console, f"[green]✓ {result.message}[/green]")
             if result.repaired_files:
                 console.print(
                     f"[green]Repaired files: {', '.join(result.repaired_files)}[/green]"
                 )
         else:
-            console.print(f"[red]✗ {result.message}[/red]")
+            safe_print(console, f"[red]✗ {result.message}[/red]")
             if verbose and result.error_details:
                 console.print(f"[red]Details: {result.error_details}[/red]")
             raise typer.Exit(ExitCodes.GENERAL_ERROR)
@@ -1012,9 +1016,9 @@ def display_verification_results(results: Any) -> None:
     failed_results = []
     for result in results:
         if result.success:
-            status = "[green]✓ PASS[/green]"
+            status = "[green][OK] PASS[/green]"
         else:
-            status = "[red]✗ FAIL[/red]"
+            status = "[red][FAIL] FAIL[/red]"
             failed_results.append(result)
 
         table.add_row(result.layer.replace("_", " ").title(), status, result.message)
@@ -1118,7 +1122,7 @@ def display_metadata_info(archive_path: Path, metadata: Any) -> None:
     compressed_size_str = format_file_size(metadata.compressed_size)
     compression_pct = metadata.compression_percentage
 
-    size_info = f"{compressed_size_str} ({original_size_str} → {compressed_size_str}, {compression_pct:.1f}% compression)"
+    size_info = f"{compressed_size_str} ({original_size_str} -> {compressed_size_str}, {compression_pct:.1f}% compression)"
     basic_table.add_row("Size", size_info)
 
     console.print(basic_table)
@@ -1184,7 +1188,7 @@ def display_metadata_info(archive_path: Path, metadata: Any) -> None:
             if algorithm in metadata.verification_hashes:
                 hash_value = metadata.verification_hashes[algorithm]
                 # Truncate hash for display
-                display_hash = f"{hash_value[:16]}... ✓"
+                display_hash = f"{hash_value[:16]}... [OK]"
                 prefix = "├──" if i < len(hash_algorithms) - 1 else "├──"
                 integrity_table.add_row(f"{prefix} {algorithm.upper()}", display_hash)
 
@@ -1192,7 +1196,7 @@ def display_metadata_info(archive_path: Path, metadata: Any) -> None:
         if metadata.par2_settings:
             par2_info = f"{metadata.par2_settings.redundancy_percent}% redundancy"
             if metadata.par2_files:
-                par2_info += f", {len(metadata.par2_files)} recovery file{'s' if len(metadata.par2_files) > 1 else ''} ✓"
+                par2_info += f", {len(metadata.par2_files)} recovery file{'s' if len(metadata.par2_files) > 1 else ''} [OK]"
             else:
                 par2_info += " (no files generated)"
             integrity_table.add_row("└── PAR2", par2_info)
@@ -1296,7 +1300,7 @@ def display_basic_archive_info(archive_path: Path) -> None:
 
         # Warning about limited information
         console.print(
-            "\n[yellow]⚠️  Limited information available - no metadata file found.[/yellow]"
+            "\n[yellow][WARN] Limited information available - no metadata file found.[/yellow]"
         )
         console.print(
             "[dim]For complete archive information, ensure the metadata/ directory is present.[/dim]"
