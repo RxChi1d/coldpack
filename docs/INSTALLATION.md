@@ -143,7 +143,6 @@ python --version
 
 # Check core dependencies
 python -c "import py7zz; print('py7zz OK')"
-python -c "import zstandard; print('zstandard OK')"
 python -c "import blake3; print('BLAKE3 OK')"
 ```
 
