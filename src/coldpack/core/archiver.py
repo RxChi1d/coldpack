@@ -332,7 +332,6 @@ class ColdStorageArchiver:
             ".tar.lz",
             ".tar.lzma",
             ".tar.Z",
-            ".tar.zst",
             ".tar.lz4",
         ]
 
@@ -658,12 +657,12 @@ class ColdStorageArchiver:
         Creates structure:
         output_dir/
         └── archive_name/
-            ├── archive_name.tar.zst
+            ├── archive_name.7z
             └── metadata/
-                ├── archive_name.tar.zst.sha256
-                ├── archive_name.tar.zst.blake3
-                ├── archive_name.tar.zst.par2
-                └── archive_name.tar.zst.vol000+xxx.par2
+                ├── archive_name.7z.sha256
+                ├── archive_name.7z.blake3
+                ├── archive_name.7z.par2
+                └── archive_name.7z.vol000+xxx.par2
 
         Args:
             archive_path: Current archive file path

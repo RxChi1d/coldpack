@@ -34,53 +34,6 @@ else:
         pass
 
 
-class CompressionSettings(BaseModel):
-    """Compression configuration for zstd operations."""
-
-    level: int = Field(default=19, ge=1, le=22, description="Compression level")
-    threads: int = Field(default=0, ge=0, description="Number of threads (0=auto)")
-    long_mode: bool = Field(default=True, description="Enable long-distance matching")
-    long_distance: Optional[int] = Field(
-        default=None,
-        ge=10,
-        le=31,
-        description="Long-distance matching value (overrides long_mode)",
-    )
-    ultra_mode: bool = Field(
-        default=False, description="Enable ultra mode (levels 20-22)"
-    )
-
-    @field_validator("ultra_mode")
-    @classmethod
-    def validate_ultra_mode(cls, v: bool, info: Any) -> bool:
-        """Validate ultra mode based on compression level."""
-        level = info.data.get("level", 19)
-        if v and level < 20:
-            raise ValueError("Ultra mode requires compression level >= 20")
-        return v
-
-    def to_zstd_params(self) -> list[str]:
-        """Convert settings to zstd command line parameters."""
-        params = [f"-{self.level}"]
-
-        if self.ultra_mode:
-            params.append("--ultra")
-
-        if self.threads > 0:
-            params.append(f"-T{self.threads}")
-        else:
-            params.append("-T0")
-
-        if self.long_distance is not None:
-            # Manual long distance value overrides long_mode
-            params.append(f"--long={self.long_distance}")
-        elif self.long_mode:
-            params.append("--long=31")
-
-        params.extend(["--check", "--force"])
-        return params
-
-
 class PAR2Settings(BaseModel):
     """Configuration for PAR2 recovery files."""
 
@@ -143,29 +96,6 @@ class SevenZipSettings(BaseModel):
             "solid": self.solid,
             "threads": self.threads,
         }
-
-
-class TarSettings(BaseModel):
-    """Configuration for TAR operations."""
-
-    method: str = Field(
-        default="auto", description="TAR creation method (auto/gnu/bsd/python)"
-    )
-    sort_files: bool = Field(
-        default=True, description="Sort files for deterministic output"
-    )
-    preserve_permissions: bool = Field(
-        default=True, description="Preserve file permissions"
-    )
-
-    @field_validator("method")
-    @classmethod
-    def validate_method(cls, v: str) -> str:
-        """Validate TAR method."""
-        valid_methods = {"auto", "gnu", "bsd", "python"}
-        if v not in valid_methods:
-            raise ValueError(f"TAR method must be one of: {valid_methods}")
-        return v
 
 
 class ArchiveMetadata(BaseModel):
@@ -424,10 +354,6 @@ class ProcessingOptions(BaseModel):
         default=True, description="Enable integrity verification (overall control)"
     )
     # Individual verification layer controls
-    verify_tar: bool = Field(default=True, description="Enable TAR header verification")
-    verify_zstd: bool = Field(
-        default=True, description="Enable Zstd integrity verification"
-    )
     verify_sha256: bool = Field(
         default=True, description="Enable SHA-256 hash verification"
     )

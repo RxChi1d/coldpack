@@ -1,6 +1,5 @@
 """Utility modules for coldpack operations."""
 
-from .compression import ZstdCompressor, ZstdDecompressor
 from .filesystem import (
     check_disk_space,
     cleanup_temp_directory,
@@ -32,8 +31,6 @@ __all__ = [
     "WindowsTempCleanupError",
     "force_cleanup_all",
     "get_tracked_resources",
-    "ZstdCompressor",
-    "ZstdDecompressor",
     "DualHasher",
     "HashVerifier",
     "PAR2Manager",

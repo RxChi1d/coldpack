@@ -37,7 +37,6 @@ class TestMultiFormatExtractor:
         assert extractor._is_supported_format(Path("test.zip"))
         assert extractor._is_supported_format(Path("test.rar"))
         assert extractor._is_supported_format(Path("test.tar.gz"))
-        assert extractor._is_supported_format(Path("test.tar.zst"))
 
         # Test unsupported format
         assert not extractor._is_supported_format(Path("test.unsupported"))
@@ -48,21 +47,11 @@ class TestMultiFormatExtractor:
         assert extractor._is_7z_format(Path("TEST.7Z"))  # case insensitive
         assert not extractor._is_7z_format(Path("test.zip"))
 
-    def test_is_tar_zst_format(self, extractor):
-        """Test tar.zst format detection."""
-        assert extractor._is_tar_zst_format(Path("test.tar.zst"))
-        assert extractor._is_tar_zst_format(Path("TEST.TAR.ZST"))  # case insensitive
-        assert not extractor._is_tar_zst_format(Path("test.zst"))
-        assert not extractor._is_tar_zst_format(Path("test.tar.gz"))
-
     def test_is_compound_tar_format(self, extractor):
         """Test compound tar format detection."""
         assert extractor._is_compound_tar_format(Path("test.tar.gz"))
         assert extractor._is_compound_tar_format(Path("test.tar.bz2"))
         assert extractor._is_compound_tar_format(Path("test.tar.xz"))
-        assert not extractor._is_compound_tar_format(
-            Path("test.tar.zst")
-        )  # This is handled separately
         assert not extractor._is_compound_tar_format(Path("test.tar"))
 
     def test_get_clean_archive_name(self, extractor):
@@ -73,7 +62,6 @@ class TestMultiFormatExtractor:
 
         # Test compound extensions
         assert extractor._get_clean_archive_name(Path("test.tar.gz")) == "test"
-        assert extractor._get_clean_archive_name(Path("test.tar.zst")) == "test"
         assert extractor._get_clean_archive_name(Path("test.tar.bz2")) == "test"
 
         # Test no extension

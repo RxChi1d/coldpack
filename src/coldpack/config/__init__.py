@@ -6,10 +6,9 @@ from .constants import (
     SUPPORTED_INPUT_FORMATS,
     TEMP_DIR_PREFIX,
 )
-from .settings import ArchiveMetadata, CompressionSettings
+from .settings import ArchiveMetadata
 
 __all__ = [
-    "CompressionSettings",
     "ArchiveMetadata",
     "DEFAULT_COMPRESSION_LEVEL",
     "DEFAULT_PAR2_REDUNDANCY",

@@ -1,13 +1,10 @@
 """5-layer verification system for comprehensive archive integrity checking."""
 
-import subprocess
-import tarfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Union
 
 from loguru import logger
 
-from ..utils.compression import ZstdDecompressor
 from ..utils.hashing import HashVerifier
 
 if TYPE_CHECKING:
@@ -55,7 +52,6 @@ class ArchiveVerifier:
 
     def __init__(self) -> None:
         """Initialize the archive verifier."""
-        self.decompressor = ZstdDecompressor()
         self.hash_verifier = HashVerifier()
         self.par2_manager: Optional[Any] = None  # Initialized when needed
         logger.debug("Archive verifier initialized")
@@ -88,7 +84,6 @@ class ArchiveVerifier:
             raise FileNotFoundError(f"Archive not found: {archive_obj}")
 
         # Calculate expected number of layers based on what will actually be checked
-        # Note: CLI only supports 7z format output, so no tar/zstd layers
         expected_layers_count = 1  # 7z_integrity
         if hash_files:
             expected_layers_count += len(hash_files)  # hash verifications
@@ -170,126 +165,6 @@ class ArchiveVerifier:
             )
 
         return results
-
-    def verify_zstd_integrity(
-        self, archive_path: Union[str, Path]
-    ) -> VerificationResult:
-        """Verify Zstd compression integrity.
-
-        Args:
-            archive_path: Path to the zst archive
-
-        Returns:
-            Verification result
-        """
-        archive_obj = Path(archive_path)
-
-        try:
-            logger.debug(f"Verifying Zstd integrity: {archive_obj}")
-
-            # Use zstd decompressor to test integrity
-            is_valid = self.decompressor.test_integrity(archive_obj)
-
-            if is_valid:
-                return VerificationResult(
-                    "zstd_integrity", True, "Zstd integrity check passed"
-                )
-            else:
-                return VerificationResult(
-                    "zstd_integrity", False, "Zstd integrity check failed"
-                )
-
-        except Exception as e:
-            return VerificationResult(
-                "zstd_integrity", False, f"Zstd verification error: {e}"
-            )
-
-    def verify_tar_structure(
-        self, archive_path: Union[str, Path]
-    ) -> VerificationResult:
-        """Verify TAR structure after decompression.
-
-        Args:
-            archive_path: Path to the tar.zst archive
-
-        Returns:
-            Verification result
-        """
-        archive_obj = Path(archive_path)
-
-        try:
-            logger.debug(f"Verifying TAR structure: {archive_obj}")
-
-            # Method 1: Use tarfile with zstd decompression stream
-            try:
-                if self.decompressor._context is None:
-                    raise ValueError("Decompressor context not initialized")
-
-                with (
-                    open(archive_obj, "rb") as f,
-                    self.decompressor._context.stream_reader(f) as reader,
-                    tarfile.open(fileobj=reader, mode="r|") as tar,
-                ):
-                    # Try to read tar info - this will fail if structure is invalid
-                    members = []
-                    for member in tar:
-                        members.append(member.name)
-                        # Limit check to avoid memory issues
-                        if len(members) > 1000:
-                            break
-
-                return VerificationResult(
-                    "tar_header",
-                    True,
-                    f"TAR structure valid ({len(members)} entries checked)",
-                    {"entries_checked": len(members)},
-                )
-
-            except Exception:
-                # Method 2: Use external tar command as fallback
-                return self._verify_tar_with_command(archive_obj)
-
-        except Exception as e:
-            return VerificationResult(
-                "tar_header", False, f"TAR verification error: {e}"
-            )
-
-    def _verify_tar_with_command(self, archive_path: Path) -> VerificationResult:
-        """Verify TAR structure using external tar command.
-
-        Args:
-            archive_path: Path to the tar.zst archive
-
-        Returns:
-            Verification result
-        """
-        try:
-            # Use zstd + tar pipeline for verification
-            cmd = f"zstd -dc '{archive_path}' | tar -tf - > /dev/null"
-
-            result = subprocess.run(
-                cmd,
-                shell=True,
-                capture_output=True,
-                text=True,
-                timeout=300,  # 5 minute timeout
-            )
-
-            if result.returncode == 0:
-                return VerificationResult(
-                    "tar_header", True, "TAR structure valid (external verification)"
-                )
-            else:
-                return VerificationResult(
-                    "tar_header", False, f"TAR verification failed: {result.stderr}"
-                )
-
-        except subprocess.TimeoutExpired:
-            return VerificationResult("tar_header", False, "TAR verification timed out")
-        except Exception as e:
-            return VerificationResult(
-                "tar_header", False, f"TAR command verification error: {e}"
-            )
 
     def verify_hash_files(
         self, archive_path: Union[str, Path], hash_files: dict[str, Path]
@@ -660,17 +535,13 @@ class ArchiveVerifier:
             archive_obj: Path to archive file
 
         Returns:
-            Archive format ('7z' or 'tar.zst')
+            Archive format ('7z' only)
         """
         if archive_obj.suffix.lower() == ".7z":
             return "7z"
-        elif archive_obj.suffixes and len(archive_obj.suffixes) >= 2:
-            compound_suffix = "".join(archive_obj.suffixes[-2:]).lower()
-            if compound_suffix == ".tar.zst":
-                return "tar.zst"
 
-        # Default fallback - assume tar.zst for compatibility
-        return "tar.zst"
+        # Default fallback - assume 7z
+        return "7z"
 
     def _adjust_skip_layers_for_format(
         self, archive_format: str, skip_layers: set[str]
@@ -678,7 +549,7 @@ class ArchiveVerifier:
         """Adjust skip layers based on archive format.
 
         Args:
-            archive_format: Detected archive format
+            archive_format: Detected archive format (7z only)
             skip_layers: Original set of layers to skip
 
         Returns:
@@ -686,14 +557,8 @@ class ArchiveVerifier:
         """
         adjusted_skip_layers = skip_layers.copy()
 
-        if archive_format == "7z":
-            # For 7z format, skip tar and zstd verification layers
-            adjusted_skip_layers.update({"tar_header", "zstd_integrity"})
-            logger.debug("Skipping tar_header and zstd_integrity layers for 7z format")
-        else:
-            # For tar.zst format, skip 7z verification layer
-            adjusted_skip_layers.add("7z_integrity")
-            logger.debug("Skipping 7z_integrity layer for tar.zst format")
+        # For 7z format, no additional layers to skip
+        logger.debug("Using 7z format verification layers")
 
         return adjusted_skip_layers
 
@@ -726,7 +591,7 @@ class ArchiveVerifier:
 
         skip_layers = skip_layers or set()
 
-        # CLI only supports 7z format, so we only need 7z verification layers
+        # Only supports 7z format
         from ..config.constants import VERIFICATION_LAYERS
 
         total_possible_layers = VERIFICATION_LAYERS  # ["7z_integrity", "sha256_hash", "blake3_hash", "par2_recovery"]
@@ -810,7 +675,7 @@ class ArchiveVerifier:
         return results
 
     def verify_quick(self, archive_path: Union[str, Path]) -> bool:
-        """Perform quick verification (zstd integrity only).
+        """Perform quick verification (7z integrity only).
 
         Args:
             archive_path: Path to the archive
@@ -819,7 +684,7 @@ class ArchiveVerifier:
             True if quick verification passes
         """
         try:
-            result = self.verify_zstd_integrity(archive_path)
+            result = self.verify_7z_integrity(archive_path)
             return result.success
         except Exception:
             return False

@@ -51,7 +51,6 @@ classifiers = [
 ]
 dependencies = [
     "py7zz==1.0.0",
-    "zstandard>=0.23.0",
     "blake3>=1.0.5",
     "typer>=0.16.0",
     "rich>=14.0.0",
