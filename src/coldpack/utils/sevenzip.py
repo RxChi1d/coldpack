@@ -31,32 +31,9 @@ class SevenZipCompressor:
             settings: 7z compression settings
         """
         self.settings = settings or SevenZipSettings()
-        # Convert settings to py7zz preset
-        self._preset = self._settings_to_preset(self.settings)
-        logger.debug(f"7z compressor initialized with preset: {self._preset}")
-
-    def _settings_to_preset(self, settings: SevenZipSettings) -> str:
-        """Convert SevenZipSettings to py7zz preset.
-
-        Args:
-            settings: SevenZipSettings to convert
-
-        Returns:
-            Appropriate py7zz preset string
-        """
-        # Map compression levels to presets
-        # Level 1-3: fast compression
-        if settings.level <= 3:
-            return "fast"
-        # Level 4-6: balanced compression (default)
-        elif settings.level <= 6:
-            return "balanced"
-        # Level 7-8: maximum compression
-        elif settings.level <= 8:
-            return "maximum"
-        # Level 9: ultra compression
-        else:
-            return "ultra"
+        logger.debug(
+            f"7z compressor initialized with settings: level={self.settings.level}, dict={self.settings.dictionary_size}, threads={self.settings.threads}"
+        )
 
     def compress_directory(
         self,
@@ -88,18 +65,29 @@ class SevenZipCompressor:
         archive_obj.parent.mkdir(parents=True, exist_ok=True)
 
         logger.debug(f"Compressing directory: {source_path.name} → {archive_obj.name}")
-        logger.debug(f"7z preset: {self._preset}")
+        logger.debug(
+            f"7z settings: level={self.settings.level}, dict={self.settings.dictionary_size}, threads={self.settings.threads}"
+        )
 
         try:
-            # Use simplified create_archive API with preset
-            py7zz.create_archive(
-                str(archive_obj), [str(source_path)], preset=self._preset
+            # Create detailed configuration from settings instead of using preset
+            config = py7zz.Config(
+                level=self.settings.level,
+                dictionary_size=self.settings.dictionary_size,
+                threads=self.settings.threads,
+                compression=self.settings.method.lower(),
+                solid=self.settings.solid,
+                auto_compression=False,  # Disable auto compression to use our specified method
             )
+
+            # Use SevenZipFile with detailed config for precise control
+            with py7zz.SevenZipFile(str(archive_obj), "w", config=config) as sz:
+                sz.add(str(source_path))
 
             # Success will be logged in archiver with file size info
             logger.debug(f"7z compression completed: {archive_obj.name}")
 
-        except py7zz.CompressionError as e:
+        except RuntimeError as e:
             raise CompressionError(f"7z compression failed: {e}") from e
         except py7zz.FileNotFoundError as e:
             raise FileNotFoundError(
@@ -149,13 +137,24 @@ class SevenZipCompressor:
         )
 
         try:
-            # Use simplified create_archive API with preset
-            file_strings = [str(f) for f in file_paths]
-            py7zz.create_archive(str(archive_obj), file_strings, preset=self._preset)
+            # Create detailed configuration from settings instead of using preset
+            config = py7zz.Config(
+                level=self.settings.level,
+                dictionary_size=self.settings.dictionary_size,
+                threads=self.settings.threads,
+                compression=self.settings.method.lower(),
+                solid=self.settings.solid,
+                auto_compression=False,  # Disable auto compression to use our specified method
+            )
+
+            # Use SevenZipFile with detailed config for precise control
+            with py7zz.SevenZipFile(str(archive_obj), "w", config=config) as sz:
+                for file_path in file_paths:
+                    sz.add(str(file_path))
 
             logger.debug(f"7z archive created: {archive_obj.name} ({len(files)} files)")
 
-        except py7zz.CompressionError as e:
+        except RuntimeError as e:
             raise CompressionError(f"7z compression failed: {e}") from e
         except py7zz.FileNotFoundError as e:
             raise FileNotFoundError(
