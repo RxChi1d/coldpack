@@ -264,3 +264,65 @@ class TestConvenienceFunction:
             files_only=False,
             summary_only=False,
         )
+
+
+class TestPaginationBehavior:
+    """Test pagination behavior for --offset and --limit."""
+
+    @pytest.fixture
+    def lister(self):
+        """Create a lister instance."""
+        return ArchiveLister()
+
+    @pytest.fixture
+    def mock_archive_path(self, tmp_path):
+        """Create a mock archive file."""
+        archive_path = tmp_path / "test.7z"
+        archive_path.write_bytes(b"dummy archive content")
+        return archive_path
+
+    @patch("coldpack.core.lister.py7zz")
+    def test_offset_only_shows_has_more(self, mock_py7zz, lister, mock_archive_path):
+        """Test that using --offset only shows has_more=True when offset > 0."""
+        # Mock SevenZipFile
+        mock_archive = MagicMock()
+        mock_py7zz.SevenZipFile.return_value.__enter__.return_value = mock_archive
+
+        # Create test data with 10 files
+        mock_info_list = []
+        for i in range(10):
+            mock_info = type("MockArchiveInfo", (), {})()
+            mock_info.filename = f"file{i:02d}.txt"
+            mock_info.file_size = 100
+            mock_info.compress_size = 50
+            mock_info.date_time = (2025, 7, 22, 0, 5, 10)
+            mock_info.CRC = 0x12345678
+
+            def mock_is_dir():
+                return False
+
+            mock_info.is_dir = mock_is_dir
+
+            mock_info_list.append(mock_info)
+
+        mock_archive.infolist.return_value = mock_info_list
+
+        # Test: offset=0, no limit (should NOT have more)
+        result = lister.list_archive(mock_archive_path, offset=0)
+        assert result["has_more"] is False
+        assert len(result["files"]) == 10  # All files
+
+        # Test: offset=5, no limit (should have more because we skipped entries)
+        result = lister.list_archive(mock_archive_path, offset=5)
+        assert result["has_more"] is True  # Should be True now
+        assert len(result["files"]) == 5  # Files 5-9
+
+        # Test: offset=5, limit=2 (should have more because there are more entries after current page)
+        result = lister.list_archive(mock_archive_path, offset=5, limit=2)
+        assert result["has_more"] is True
+        assert len(result["files"]) == 2  # Files 5-6
+
+        # Test: offset=8, limit=5 (should NOT have more because we reached the end)
+        result = lister.list_archive(mock_archive_path, offset=8, limit=5)
+        assert result["has_more"] is False
+        assert len(result["files"]) == 2  # Files 8-9
