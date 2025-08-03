@@ -7,11 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Planned
-- Enhanced compression algorithm selection
-- Archive metadata database
-- Incremental archive updates
-- Advanced filtering options
+## [0.3.0] - 2025-08-03
+
+### Changed
+- **Compression Parameter Control**: Migrated from py7zz preset system to detailed Config API for precise compression parameter control and better resource management
+- **List Command Enhancement**: Improved pagination hints to show guidance when using --offset without --limit for more consistent user experience
+
+### Fixed
+- **Windows Compatibility**: Resolved Windows cp950 encoding errors with Rich console output through comprehensive Unicode symbol fallback and UTF-8 environment setup
+
+### Removed
+- **Legacy Output Format**: Removed unused tar.zst output format support and related zstandard dependencies, eliminating 500+ lines of legacy code for improved maintainability
 
 ## [0.2.0] - 2025-08-02
 
@@ -87,7 +93,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Core Functionality**: Initial implementation of multi-format archive processing
 - **Verification System**: Basic integrity checking and PAR2 recovery infrastructure
 
-[Unreleased]: https://github.com/RxChi1d/coldpack/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/RxChi1d/coldpack/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/RxChi1d/coldpack/releases/tag/v0.3.0
 [0.2.0]: https://github.com/RxChi1d/coldpack/releases/tag/v0.2.0
 [0.2.0a2]: https://github.com/RxChi1d/coldpack/releases/tag/v0.2.0a2
 [0.1.1]: https://github.com/RxChi1d/coldpack/releases/tag/v0.1.1
