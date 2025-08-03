@@ -12,6 +12,8 @@ from typing import Optional, Union
 from loguru import logger
 from rich.console import Console
 
+from .console import create_windows_compatible_console
+
 
 def check_windows_par2_unicode_compatibility(
     path: Union[str, Path], console: Optional[Console] = None
@@ -30,7 +32,7 @@ def check_windows_par2_unicode_compatibility(
         SystemExit: If Windows PAR2 Unicode incompatibility is detected
     """
     if not console:
-        console = Console()
+        console = create_windows_compatible_console()
 
     # Only check on Windows
     if platform.system().lower() != "windows":
@@ -144,7 +146,7 @@ def check_par2_related_paths_compatibility(
         SystemExit: If Windows PAR2 Unicode incompatibility is detected
     """
     if not console:
-        console = Console()
+        console = create_windows_compatible_console()
 
     # Only check on Windows
     if platform.system().lower() != "windows":
