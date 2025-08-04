@@ -485,5 +485,5 @@ def filter_files_for_archive(source_dir: Path) -> list[Path]:
     return included_files
 
 
-# Note: Windows filename compatibility is now handled automatically by py7zz v1.0.0
+# Note: Windows filename compatibility is now handled automatically by py7zz
 # Previous Windows filename handling utilities have been removed as they are no longer needed

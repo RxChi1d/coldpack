@@ -105,7 +105,7 @@ class TestArchiveListerNew:
 
     @patch("coldpack.core.lister.py7zz")
     def test_list_archive_basic(self, mock_py7zz, lister, mock_archive_path):
-        """Test basic archive listing functionality with py7zz v1.0.0."""
+        """Test basic archive listing functionality with py7zz."""
         # Mock py7zz.SevenZipFile for file listing
         mock_archive = mock_py7zz.SevenZipFile.return_value.__enter__.return_value
         mock_info_list = []
@@ -153,7 +153,7 @@ class TestArchiveListerNew:
 
     @patch("coldpack.core.lister.py7zz")
     def test_list_archive_with_filter(self, mock_py7zz, lister, mock_archive_path):
-        """Test archive listing with filter using py7zz v1.0.0."""
+        """Test archive listing with filter using py7zz."""
         # Mock py7zz.SevenZipFile for file listing
         mock_archive = mock_py7zz.SevenZipFile.return_value.__enter__.return_value
         mock_info_list = []
@@ -189,7 +189,7 @@ class TestArchiveListerNew:
 
     @patch("coldpack.core.lister.py7zz")
     def test_list_archive_dirs_only(self, mock_py7zz, lister, mock_archive_path):
-        """Test archive listing with dirs_only filter using py7zz v1.0.0."""
+        """Test archive listing with dirs_only filter using py7zz."""
         # Mock py7zz.SevenZipFile for file listing
         mock_archive = mock_py7zz.SevenZipFile.return_value.__enter__.return_value
         mock_info_list = []

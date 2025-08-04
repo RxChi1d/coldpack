@@ -38,7 +38,7 @@ coldpack is a command-line tool for creating standardized cold storage archives.
 ### Cross-Platform Support
 - **Operating systems**: Windows, macOS, Linux
 - **System file handling**: Automatically excludes platform-specific files (.DS_Store, Thumbs.db)
-- **Unicode support**: Handles international filenames correctly with py7zz v1.0.0 automatic compatibility
+- **Unicode support**: Handles international filenames correctly with automatic compatibility
 - **Progress tracking**: Real-time progress display during operations
 
 For detailed installation and usage instructions, see [Installation Guide](docs/INSTALLATION.md) and [CLI Reference](docs/CLI_REFERENCE.md).
