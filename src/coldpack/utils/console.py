@@ -182,7 +182,8 @@ class SafeConsole:
     def print(self, *args: Any, **kwargs: Any) -> None:
         """Print with automatic Unicode/fallback handling."""
         if not args:
-            return self._console.print(*args, **kwargs)
+            self._console.print(*args, **kwargs)
+            return
 
         # Convert all positional arguments to strings and process them
         processed_args = []
