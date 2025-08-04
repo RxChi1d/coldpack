@@ -179,7 +179,7 @@ def create(
         0,
         "--threads",
         "-t",
-        help="Number of threads",
+        help="Number of threads (0=all cores)",
         show_default="auto-detect",
         rich_help_panel="Compression Options",
     ),
@@ -371,6 +371,9 @@ def create(
         # Configure 7z settings
         from .config.settings import SevenZipSettings
 
+        # Convert CLI threads parameter (0 = all cores for backward compatibility)
+        settings_threads = True if threads == 0 else threads
+
         # Check if manual 7z parameters are provided
         if level is not None or dict_size is not None:
             # Manual configuration - disable dynamic optimization
@@ -382,7 +385,7 @@ def create(
             sevenzip_settings = SevenZipSettings(
                 level=manual_level,
                 dictionary_size=manual_dict,
-                threads=threads,
+                threads=settings_threads,
                 manual_settings=True,  # Mark as manual to disable dynamic optimization
             )
             console.print(
@@ -397,7 +400,7 @@ def create(
             sevenzip_settings = SevenZipSettings(
                 level=5,  # Will be overridden
                 dictionary_size="16m",  # Will be overridden
-                threads=threads,
+                threads=settings_threads,
             )
             console.print(
                 "[cyan]Using dynamic 7z optimization based on source size[/cyan]"
