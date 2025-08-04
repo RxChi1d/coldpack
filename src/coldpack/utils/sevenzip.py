@@ -366,7 +366,7 @@ def optimize_7z_compression_settings(
 
 
 def get_7z_info(archive_path: Union[str, Path]) -> dict[str, Any]:
-    """Get information about a 7z archive using py7zz v1.0.0 API.
+    """Get information about a 7z archive using py7zz API.
 
     Args:
         archive_path: Path to 7z archive
@@ -387,11 +387,11 @@ def get_7z_info(archive_path: Union[str, Path]) -> dict[str, Any]:
         logger.debug(f"Getting 7z archive info: {archive_obj}")
 
         # Use get_archive_info API for basic statistics
-        # py7zz v1.0.0: get_archive_info only returns statistical information
+        # py7zz: get_archive_info only returns statistical information
         info = py7zz.get_archive_info(str(archive_obj))
 
         # For structure analysis, use SevenZipFile to get file list
-        # py7zz v1.0.0 removed file list from get_archive_info
+        # py7zz removed file list from get_archive_info
         has_single_root = False
         root_name = None
 

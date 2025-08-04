@@ -202,7 +202,7 @@ class MultiFormatExtractor:
                 )
 
             # Check archive structure to determine extraction strategy
-            # py7zz v1.0.0: get_archive_info no longer provides file list
+            # py7zz: get_archive_info no longer provides file list
             try:
                 has_single_root = self._check_archive_structure(archive_path)
             except Exception as e:
@@ -724,7 +724,7 @@ class MultiFormatExtractor:
     def get_archive_info(self, archive_path: Union[str, Path]) -> dict:
         """Get information about an archive without extracting it.
 
-        Uses py7zz v1.0.0 API for efficient information retrieval.
+        Uses py7zz API for efficient information retrieval.
 
         Args:
             archive_path: Path to the archive
@@ -747,7 +747,7 @@ class MultiFormatExtractor:
 
         try:
             # Use py7zz.get_archive_info for basic statistics
-            # py7zz v1.0.0: get_archive_info only returns statistical information
+            # py7zz: get_archive_info only returns statistical information
             py7zz_info = py7zz.get_archive_info(str(archive_obj))
 
             # For structure analysis, use SevenZipFile to get file list

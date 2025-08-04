@@ -215,7 +215,7 @@ class ArchiveLister:
             files = []
 
             # Use py7zz.SevenZipFile for detailed file information
-            # py7zz v1.0.0 removed file list from get_archive_info, use SevenZipFile instead
+            # py7zz removed file list from get_archive_info, use SevenZipFile instead
             with py7zz.SevenZipFile(str(archive_path), "r") as archive:
                 # Get detailed information about each file
                 for info in archive.infolist():

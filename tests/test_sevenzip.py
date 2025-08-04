@@ -409,7 +409,7 @@ class TestUtilityFunctions:
 
     @patch("coldpack.utils.sevenzip.py7zz")
     def test_get_7z_info_success(self, mock_py7zz, tmp_path):
-        """Test successful 7z archive info retrieval with py7zz v1.0.0 API."""
+        """Test successful 7z archive info retrieval with py7zz API."""
         archive_path = tmp_path / "test.7z"
         archive_path.write_text("mock archive")
 
