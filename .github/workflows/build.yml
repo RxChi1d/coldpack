@@ -17,11 +17,47 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Verify CI status
+      shell: bash
+      run: |
+        echo "Verifying CI workflow status for commit: $GITHUB_SHA"
+
+        # Query CI workflow status for the specific commit using gh run list
+        # This avoids Windows Git Bash path rewriting issues with gh api
+        CI_STATUS=$(gh run list \
+          --workflow="CI" \
+          --json conclusion,headSha \
+          --jq ".[] | select(.headSha == \"$GITHUB_SHA\") | .conclusion" \
+          | head -1)
+
+        echo "CI workflow status: $CI_STATUS"
+
+        if [ "$CI_STATUS" = "success" ]; then
+          echo "✅ CI workflow passed - proceeding with build"
+        elif [ "$CI_STATUS" = "failure" ]; then
+          echo "❌ CI workflow failed - aborting build"
+          echo "Please ensure all CI checks pass before building"
+          exit 1
+        elif [ -z "$CI_STATUS" ]; then
+          echo "⚠️ No CI workflow found for this commit"
+          echo "This may indicate the commit was not properly tested"
+          echo "Please ensure CI workflow runs and passes before building"
+          exit 1
+        else
+          echo "⏳ CI workflow status: $CI_STATUS"
+          echo "Please wait for CI workflow to complete successfully before building"
+          exit 1
+        fi
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      timeout-minutes: 3
+
     - name: Install uv
       uses: astral-sh/setup-uv@v6
       with:
         version: "latest"
         enable-cache: true
+      timeout-minutes: 3
 
     - name: Set up Python
       run: uv python install 3.11
@@ -30,6 +66,7 @@ jobs:
       run: |
         uv sync --dev
         uv pip install -e .
+      timeout-minutes: 5
 
     - name: Run quality checks
       run: |
@@ -37,6 +74,7 @@ jobs:
         uv run ruff format --check --diff .
         uv run pytest --tb=short
         uv run mypy src/
+      timeout-minutes: 10
 
   build:
     needs: quality-check  # Only build after quality check passes
@@ -52,6 +90,7 @@ jobs:
       with:
         version: "latest"
         enable-cache: true
+      timeout-minutes: 3
 
     - name: Set up Python
       run: uv python install 3.11
@@ -60,6 +99,7 @@ jobs:
       run: |
         uv sync --dev
         uv pip install -e .
+      timeout-minutes: 5
 
     - name: Validate tag format
       id: validate_tag
@@ -86,6 +126,25 @@ jobs:
 
         # Set outputs
         echo "git_tag=$TAG" >> $GITHUB_OUTPUT
+
+    - name: Validate stable release ancestry (for stable releases only)
+      if: "!contains(steps.validate_tag.outputs.git_tag, 'dev') && !contains(steps.validate_tag.outputs.git_tag, 'a') && !contains(steps.validate_tag.outputs.git_tag, 'b') && !contains(steps.validate_tag.outputs.git_tag, 'rc')"
+      shell: bash
+      run: |
+        echo "Validating stable release ancestry..."
+
+        # Fetch origin/main to ensure we have latest main branch
+        git fetch origin main
+
+        # Check if current tag commit is an ancestor of main
+        if git merge-base --is-ancestor $GITHUB_SHA origin/main; then
+          echo "✓ Tag commit is an ancestor of main branch - valid for stable release"
+        else
+          echo "✗ Tag commit is not an ancestor of main branch - stable releases must come from main"
+          echo "Current commit: $GITHUB_SHA"
+          echo "Main branch head: $(git rev-parse origin/main)"
+          exit 1
+        fi
 
     - name: Validate dynamic version generation
       shell: bash
@@ -133,6 +192,7 @@ jobs:
       run: |
         uv build --wheel
         ls -la dist/
+      timeout-minutes: 5
 
     - name: Verify wheel version consistency
       shell: bash
@@ -157,6 +217,7 @@ jobs:
         echo "Testing wheel installation and import..."
         uv pip install dist/*.whl --force-reinstall
         uv run python -c "import coldpack; print(f'coldpack imported successfully, version: {coldpack.__version__}')"
+      timeout-minutes: 3
 
     - name: Upload wheel artifacts
       uses: actions/upload-artifact@v4
