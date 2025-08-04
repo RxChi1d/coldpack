@@ -392,13 +392,23 @@ jobs:
 
         if [ -n "$LAST_TAG" ]; then
           # Generate categorized changelog based on conventional commits
-          echo "## What's Changed" > release_notes.md
-          echo "" >> release_notes.md
+          # Initialize release notes (using variable instead of temp file)
+          RELEASE_NOTES="## What's Changed"$'\n'
 
-          # Get all commits since last tag
+          # Get all commits since last tag - preserve original format with hash
           COMMITS=$(git log --format="%H|%s" --no-merges ${LAST_TAG}..HEAD)
 
-          # Initialize category flags
+          # Initialize commit collections (replace temp files with variables)
+          FEATURES=""
+          FIXES=""
+          DOCS=""
+          PERF=""
+          CHORES=""
+          TESTS=""
+          CI=""
+          OTHER=""
+
+          # Initialize category flags (preserve original logic)
           HAS_FEATURES=false
           HAS_FIXES=false
           HAS_DOCS=false
@@ -408,121 +418,80 @@ jobs:
           HAS_CI=false
           HAS_OTHER=false
 
-          # Create temporary files for each category
-          mkdir -p /tmp/changelog
-          > /tmp/changelog/features.md
-          > /tmp/changelog/fixes.md
-          > /tmp/changelog/docs.md
-          > /tmp/changelog/perf.md
-          > /tmp/changelog/chores.md
-          > /tmp/changelog/tests.md
-          > /tmp/changelog/ci.md
-          > /tmp/changelog/other.md
-
-          # Categorize commits
+          # Categorize commits (preserve exact original logic)
           while IFS='|' read -r hash subject; do
             if [[ "$subject" =~ ^feat(\(.+\))?: ]]; then
-              echo "- $subject" >> /tmp/changelog/features.md
+              FEATURES+="- $subject"$'\n'
               HAS_FEATURES=true
             elif [[ "$subject" =~ ^fix(\(.+\))?: ]]; then
-              echo "- $subject" >> /tmp/changelog/fixes.md
+              FIXES+="- $subject"$'\n'
               HAS_FIXES=true
             elif [[ "$subject" =~ ^docs(\(.+\))?: ]]; then
-              echo "- $subject" >> /tmp/changelog/docs.md
+              DOCS+="- $subject"$'\n'
               HAS_DOCS=true
             elif [[ "$subject" =~ ^perf(\(.+\))?: ]]; then
-              echo "- $subject" >> /tmp/changelog/perf.md
+              PERF+="- $subject"$'\n'
               HAS_PERF=true
             elif [[ "$subject" =~ ^(chore|refactor|style)(\(.+\))?: ]]; then
-              echo "- $subject" >> /tmp/changelog/chores.md
+              CHORES+="- $subject"$'\n'
               HAS_CHORES=true
             elif [[ "$subject" =~ ^test(\(.+\))?: ]]; then
-              echo "- $subject" >> /tmp/changelog/tests.md
+              TESTS+="- $subject"$'\n'
               HAS_TESTS=true
             elif [[ "$subject" =~ ^ci(\(.+\))?: ]]; then
-              echo "- $subject" >> /tmp/changelog/ci.md
+              CI+="- $subject"$'\n'
               HAS_CI=true
             else
-              echo "- $subject" >> /tmp/changelog/other.md
+              OTHER+="- $subject"$'\n'
               HAS_OTHER=true
             fi
           done <<< "$COMMITS"
 
-          # Build categorized changelog
+          # Build categorized changelog (preserve exact original order and format)
           if [ "$HAS_FEATURES" = true ]; then
-            echo "### 🚀 Features" >> release_notes.md
-            echo "" >> release_notes.md
-            cat /tmp/changelog/features.md >> release_notes.md
-            echo "" >> release_notes.md
+            RELEASE_NOTES+=$'\n'"### 🚀 Features"$'\n\n'"$FEATURES"$'\n'
           fi
 
           if [ "$HAS_FIXES" = true ]; then
-            echo "### 🐛 Bug Fixes" >> release_notes.md
-            echo "" >> release_notes.md
-            cat /tmp/changelog/fixes.md >> release_notes.md
-            echo "" >> release_notes.md
+            RELEASE_NOTES+=$'\n'"### 🐛 Bug Fixes"$'\n\n'"$FIXES"$'\n'
           fi
 
           if [ "$HAS_DOCS" = true ]; then
-            echo "### 📚 Documentation" >> release_notes.md
-            echo "" >> release_notes.md
-            cat /tmp/changelog/docs.md >> release_notes.md
-            echo "" >> release_notes.md
+            RELEASE_NOTES+=$'\n'"### 📚 Documentation"$'\n\n'"$DOCS"$'\n'
           fi
 
           if [ "$HAS_PERF" = true ]; then
-            echo "### ⚡ Performance" >> release_notes.md
-            echo "" >> release_notes.md
-            cat /tmp/changelog/perf.md >> release_notes.md
-            echo "" >> release_notes.md
+            RELEASE_NOTES+=$'\n'"### ⚡ Performance"$'\n\n'"$PERF"$'\n'
           fi
 
           if [ "$HAS_CHORES" = true ]; then
-            echo "### 🔧 Maintenance" >> release_notes.md
-            echo "" >> release_notes.md
-            cat /tmp/changelog/chores.md >> release_notes.md
-            echo "" >> release_notes.md
+            RELEASE_NOTES+=$'\n'"### 🔧 Maintenance"$'\n\n'"$CHORES"$'\n'
           fi
 
           if [ "$HAS_TESTS" = true ]; then
-            echo "### 🧪 Testing" >> release_notes.md
-            echo "" >> release_notes.md
-            cat /tmp/changelog/tests.md >> release_notes.md
-            echo "" >> release_notes.md
+            RELEASE_NOTES+=$'\n'"### 🧪 Testing"$'\n\n'"$TESTS"$'\n'
           fi
 
           if [ "$HAS_CI" = true ]; then
-            echo "### 🔄 CI/CD" >> release_notes.md
-            echo "" >> release_notes.md
-            cat /tmp/changelog/ci.md >> release_notes.md
-            echo "" >> release_notes.md
+            RELEASE_NOTES+=$'\n'"### 🔄 CI/CD"$'\n\n'"$CI"$'\n'
           fi
 
           if [ "$HAS_OTHER" = true ]; then
-            echo "### Other Changes" >> release_notes.md
-            echo "" >> release_notes.md
-            cat /tmp/changelog/other.md >> release_notes.md
-            echo "" >> release_notes.md
+            RELEASE_NOTES+=$'\n'"### Other Changes"$'\n\n'"$OTHER"$'\n'
           fi
 
-          # Clean up temporary files
-          rm -rf /tmp/changelog
-
-          echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${LAST_TAG}...${{ github.ref_name }}" >> release_notes.md
+          RELEASE_NOTES+="**Full Changelog**: https://github.com/${{ github.repository }}/compare/${LAST_TAG}...${{ github.ref_name }}"
         else
-          echo "## What's Changed" > release_notes.md
-          echo "" >> release_notes.md
-          echo "### 🚀 Features" >> release_notes.md
-          echo "" >> release_notes.md
-          echo "- Initial development release" >> release_notes.md
-          echo "" >> release_notes.md
-          echo "**Full Changelog**: https://github.com/${{ github.repository }}/commits/${{ github.ref_name }}" >> release_notes.md
+          # Initial release case - preserve exact original format
+          RELEASE_NOTES="## What's Changed"$'\n\n'"### 🚀 Features"$'\n\n'"- Initial development release"$'\n\n'"**Full Changelog**: https://github.com/${{ github.repository }}/commits/${{ github.ref_name }}"
         fi
 
-        # Set output
-        echo "notes<<EOF" >> $GITHUB_OUTPUT
-        cat release_notes.md >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
+        # Set output (preserve original output method but eliminate temp file)
+        {
+          echo "notes<<EOF"
+          echo "$RELEASE_NOTES"
+          echo "EOF"
+        } >> $GITHUB_OUTPUT
 
     - name: Create GitHub Release (Dev/Alpha)
       uses: ncipollo/release-action@v1
