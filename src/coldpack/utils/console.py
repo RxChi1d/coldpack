@@ -71,25 +71,10 @@ def safe_print(
             "🔍": "[SEARCH]",
             "📁": "[FOLDER]",
             "📄": "[FILE]",
+            "•": "*",
         }
 
-    # On Windows, always use safe message first to avoid encoding issues
-    if platform.system().lower() == "windows":
-        safe_message = message
-        for unicode_char, replacement in fallback_chars.items():
-            safe_message = safe_message.replace(unicode_char, replacement)
-        try:
-            console.print(safe_message)
-            return
-        except UnicodeEncodeError:
-            # If even the safe message fails, strip all non-ASCII
-            ascii_message = safe_message.encode("ascii", errors="replace").decode(
-                "ascii"
-            )
-            console.print(ascii_message)
-            return
-
-    # Non-Windows systems: try original first, then fallback
+    # Try original message first, then fallback on encoding errors (all platforms)
     try:
         console.print(message)
     except UnicodeEncodeError:

@@ -1046,7 +1046,7 @@ def display_verification_results(results: Any) -> None:
             console.print("[red]Failed Verification Details:[/red]")
             for result in failed_results:
                 layer_name = result.layer.replace("_", " ").title()
-                console.print(f"[red]• {layer_name}:[/red] {result.message}")
+                safe_print(console, f"[red]• {layer_name}:[/red] {result.message}")
 
                 # Show additional details if available
                 if hasattr(result, "details") and result.details:
@@ -1465,9 +1465,11 @@ def display_archive_listing(result: dict, verbose: bool = False) -> None:
         "All"
     ):
         console.print("\n[dim]Tips:[/dim]")
-        console.print("[dim]  • Use --filter '*.ext' to filter by file type[/dim]")
-        console.print("[dim]  • Use --dirs-only to show only directories[/dim]")
-        console.print("[dim]  • Use --summary-only for overview[/dim]")
+        safe_print(
+            console, "[dim]  • Use --filter '*.ext' to filter by file type[/dim]"
+        )
+        safe_print(console, "[dim]  • Use --dirs-only to show only directories[/dim]")
+        safe_print(console, "[dim]  • Use --summary-only for overview[/dim]")
 
 
 def list_archive(
