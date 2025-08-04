@@ -116,7 +116,7 @@
 
 coldpack 是一個 Python CLI 套件（`cpack`），專門用於建立標準化的冷儲存封存檔案。它將各種來源（資料夾、7z、zip、tar.gz 等）轉換為統一的 7z 格式，並提供雙重雜湊驗證、PAR2 修復冗餘等完整的長期保存功能。
 
-- **Python 支援版本**：Python >= 3.8
+- **Python 支援版本**：Python >= 3.9
 - **Python 套件管理工具**：uv
 - **uv 管理的虛擬環境**：`.venv/`
 
