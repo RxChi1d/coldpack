@@ -36,16 +36,30 @@ jobs:
           echo "✅ CI workflow passed - proceeding with build"
         elif [ "$CI_STATUS" = "failure" ]; then
           echo "❌ CI workflow failed - aborting build"
-          echo "Please ensure all CI checks pass before building"
+          echo ""
+          echo "🔍 Troubleshooting:"
+          echo "  1. Check CI workflow results: https://github.com/${{ github.repository }}/actions/runs"
+          echo "  2. Fix any failing tests or linting issues"
+          echo "  3. Push fixes and wait for CI to pass before retrying build"
+          echo "  4. Current commit: $GITHUB_SHA"
           exit 1
         elif [ -z "$CI_STATUS" ]; then
           echo "⚠️ No CI workflow found for this commit"
-          echo "This may indicate the commit was not properly tested"
-          echo "Please ensure CI workflow runs and passes before building"
+          echo ""
+          echo "🔍 Troubleshooting:"
+          echo "  1. Verify CI workflow is configured in .github/workflows/"
+          echo "  2. Check if commit triggered CI: https://github.com/${{ github.repository }}/actions"
+          echo "  3. Ensure commit is on correct branch with CI workflow"
+          echo "  4. Current commit: $GITHUB_SHA"
           exit 1
         else
-          echo "⏳ CI workflow status: $CI_STATUS"
-          echo "Please wait for CI workflow to complete successfully before building"
+          echo "⏳ CI workflow status: $CI_STATUS (not completed)"
+          echo ""
+          echo "🔍 Action required:"
+          echo "  1. Wait for CI workflow to complete"
+          echo "  2. Check progress: https://github.com/${{ github.repository }}/actions"
+          echo "  3. Current commit: $GITHUB_SHA"
+          echo "  4. Retry build after CI completes successfully"
           exit 1
         fi
       env:
@@ -64,8 +78,27 @@ jobs:
 
     - name: Install dependencies
       run: |
+        echo "📦 Installing dependencies for quality checks..."
+        echo "Python version: $(uv run python --version)"
+        echo "UV version: $(uv --version)"
+
+        # Show lock file info for debugging
+        if [ -f "uv.lock" ]; then
+          echo "Lock file found: uv.lock ($(wc -l < uv.lock) lines)"
+        else
+          echo "⚠️ No lock file found - dependencies will be resolved freshly"
+        fi
+
+        # Install with verbose output for better debugging
+        echo "Installing development dependencies..."
         uv sync --dev
+
+        echo "Installing package in editable mode..."
         uv pip install -e .
+
+        # Verify installation
+        echo "✅ Verifying installation..."
+        uv run python -c "import coldpack; print(f'coldpack {coldpack.__version__} installed successfully')"
       timeout-minutes: 5
 
     - name: Run quality checks
@@ -97,8 +130,39 @@ jobs:
 
     - name: Install dependencies
       run: |
+        echo "📦 Installing dependencies for build..."
+        echo "Python version: $(uv run python --version)"
+        echo "UV version: $(uv --version)"
+
+        # Show environment info
+        echo "🔧 Build environment:"
+        echo "  Runner OS: ${{ runner.os }}"
+        echo "  GitHub SHA: $GITHUB_SHA"
+        echo "  Working directory: $(pwd)"
+
+        # Show lock file info for debugging
+        if [ -f "uv.lock" ]; then
+          echo "Lock file found: uv.lock ($(wc -l < uv.lock) lines)"
+          echo "Lock file hash: $(shasum uv.lock | cut -d' ' -f1)"
+        else
+          echo "⚠️ No lock file found - dependencies will be resolved freshly"
+        fi
+
+        # Install with better debugging
+        echo "Installing development dependencies..."
         uv sync --dev
+
+        echo "Installing package in editable mode..."
         uv pip install -e .
+
+        # Verify installation with more details
+        echo "✅ Verifying installation..."
+        uv run python -c "import coldpack; print(f'coldpack {coldpack.__version__} installed successfully')"
+        uv run python -c "import sys; print(f'Python executable: {sys.executable}')"
+
+        # Show installed packages for debugging
+        echo "📋 Key installed packages:"
+        uv pip list | grep -E "(coldpack|hatch|build|wheel)" || echo "  (filtering failed, showing all packages)"
       timeout-minutes: 5
 
     - name: Validate tag format
@@ -176,8 +240,17 @@ jobs:
           echo "✓ Tag commit is an ancestor of main branch - valid for stable release"
         else
           echo "✗ Tag commit is not an ancestor of main branch - stable releases must come from main"
-          echo "Current commit: $GITHUB_SHA"
-          echo "Main branch head: $(git rev-parse origin/main)"
+          echo ""
+          echo "📊 Branch information:"
+          echo "  Current commit: $GITHUB_SHA"
+          echo "  Main branch head: $(git rev-parse origin/main)"
+          echo "  Current branch: $(git branch --show-current)"
+          echo ""
+          echo "🔍 Troubleshooting:"
+          echo "  1. Ensure stable release tags are created from main branch"
+          echo "  2. If this is a hotfix, merge to main first before tagging"
+          echo "  3. For development releases, use .dev, .a, .b, or .rc suffixes"
+          echo "  4. Check branch history: git log --oneline --graph main..HEAD"
           exit 1
         fi
 
@@ -260,16 +333,61 @@ jobs:
           echo "✓ Generated version is consistent with git tag"
         else
           echo "✗ Version consistency check failed"
-          echo "  Expected: $EXPECTED_VERSION"
-          echo "  Got: $BASE_GENERATED_VERSION"
-          echo "  This indicates a problem with version generation or tag format"
+          echo ""
+          echo "📊 Version details:"
+          echo "  Git tag: $GIT_TAG"
+          echo "  Expected version: $EXPECTED_VERSION"
+          echo "  Generated version: $GENERATED_VERSION"
+          echo "  Generated base version: $BASE_GENERATED_VERSION"
+          echo "  Git describe output: $(git describe --tags --match='v*')"
+          echo ""
+          echo "🔍 Troubleshooting:"
+          echo "  1. Verify git tag format follows PEP 440: v{major}.{minor}.{patch}[.{dev|a|b|rc}{N}]"
+          echo "  2. Check if hatch-vcs is properly configured in pyproject.toml"
+          echo "  3. Ensure tag is properly annotated: git tag -a v1.0.0 -m 'Release v1.0.0'"
+          echo "  4. Verify working directory is clean and matches tagged commit"
           exit 1
         fi
 
     - name: Build wheel
       run: |
-        uv build --wheel
+        echo "🔨 Building wheel package..."
+        echo "Build environment details:"
+        echo "  Current directory: $(pwd)"
+        echo "  Python executable: $(uv run python -c 'import sys; print(sys.executable)')"
+        echo "  Python version: $(uv run python --version)"
+
+        # Show project configuration
+        echo "📋 Project configuration:"
+        if [ -f "pyproject.toml" ]; then
+          echo "  pyproject.toml found"
+          grep -E "^(name|version|build-system)" pyproject.toml | head -10 || echo "  (could not extract basic info)"
+        else
+          echo "  ⚠️ No pyproject.toml found"
+        fi
+
+        # Build with verbose output
+        echo "Building wheel..."
+        uv build --wheel --verbose
+
+        # Show build results
+        echo "✅ Build completed. Artifacts:"
         ls -la dist/
+
+        # Verify wheel content
+        if ls dist/*.whl 1> /dev/null 2>&1; then
+          WHEEL_FILE=$(ls dist/*.whl | head -1)
+          echo "📦 Wheel details:"
+          echo "  File: $(basename $WHEEL_FILE)"
+          echo "  Size: $(stat -c%s "$WHEEL_FILE" 2>/dev/null || stat -f%z "$WHEEL_FILE" 2>/dev/null || echo "unknown") bytes"
+          echo "  Wheel metadata:"
+          uv run python -m wheel unpack --dest /tmp/wheel_check "$WHEEL_FILE" 2>/dev/null && \
+          find /tmp/wheel_check -name "METADATA" -exec head -10 {} \; 2>/dev/null || \
+          echo "  (could not extract wheel metadata)"
+        else
+          echo "❌ No wheel file found in dist/"
+          exit 1
+        fi
       timeout-minutes: 5
 
     - name: Verify wheel version consistency
@@ -322,33 +440,71 @@ jobs:
     - name: Final version validation before PyPI publish
       shell: bash
       run: |
+        echo "🔍 Final validation before PyPI publish..."
+
         # Get git tag and expected version
         GIT_TAG=$(echo ${{ github.ref }} | sed 's/refs\/tags\///')
         EXPECTED_VERSION=$(echo "$GIT_TAG" | sed 's/^v//')
-        echo "Git tag: $GIT_TAG"
-        echo "Expected PyPI version: $EXPECTED_VERSION"
+
+        echo "📊 Release information:"
+        echo "  Git reference: ${{ github.ref }}"
+        echo "  Git tag: $GIT_TAG"
+        echo "  Expected PyPI version: $EXPECTED_VERSION"
+        echo "  Current commit: $GITHUB_SHA"
+        echo "  Release type: $(if [[ "$GIT_TAG" =~ \.(dev|a|b|rc) ]]; then echo "pre-release"; else echo "stable"; fi)"
+
+        # Show environment context
+        echo "🔧 Publish environment:"
+        echo "  Runner OS: ${{ runner.os }}"
+        echo "  Working directory: $(pwd)"
+        echo "  Available artifacts:"
+        ls -la dist/ || echo "  No dist/ directory found"
 
         # Verify wheel has consistent version
-        echo "Verifying wheel version..."
+        echo "🔍 Verifying wheel version..."
+        WHEEL_COUNT=0
         for wheel in dist/*.whl; do
-          WHEEL_VERSION=$(echo "$wheel" | sed -n 's/.*coldpack-\([^-]*\)-.*/\1/p')
-          echo "  $wheel -> $WHEEL_VERSION"
+          if [ -f "$wheel" ]; then
+            WHEEL_COUNT=$((WHEEL_COUNT + 1))
+            WHEEL_VERSION=$(echo "$wheel" | sed -n 's/.*coldpack-\([^-]*\)-.*/\1/p')
+            echo "  ✓ $wheel -> $WHEEL_VERSION"
 
-          if [ "$WHEEL_VERSION" != "$EXPECTED_VERSION" ]; then
-            echo "✗ Wheel version mismatch: $wheel"
-            echo "  Expected: $EXPECTED_VERSION"
-            echo "  Got: $WHEEL_VERSION"
-            exit 1
+            if [ "$WHEEL_VERSION" != "$EXPECTED_VERSION" ]; then
+              echo "✗ Wheel version mismatch: $wheel"
+              echo "  Expected: $EXPECTED_VERSION"
+              echo "  Got: $WHEEL_VERSION"
+              echo ""
+              echo "🔍 Troubleshooting:"
+              echo "  1. Verify git tag format: $GIT_TAG"
+              echo "  2. Check wheel naming in build process"
+              echo "  3. Ensure version generation is consistent"
+              exit 1
+            fi
           fi
         done
 
-        echo "✓ All wheels have consistent version: $EXPECTED_VERSION"
+        if [ $WHEEL_COUNT -eq 0 ]; then
+          echo "❌ No wheel files found for publishing"
+          echo ""
+          echo "🔍 Troubleshooting:"
+          echo "  1. Check if build step completed successfully"
+          echo "  2. Verify artifacts were uploaded correctly"
+          echo "  3. Check dist/ directory contents"
+          exit 1
+        fi
 
-        # Final confirmation
+        echo "✅ All $WHEEL_COUNT wheel(s) have consistent version: $EXPECTED_VERSION"
+
+        # Final confirmation with comprehensive details
+        echo ""
         echo "🚀 Ready to publish to PyPI:"
         echo "  Git tag: $GIT_TAG"
         echo "  PyPI version: $EXPECTED_VERSION"
-        echo "  Wheel count: $(ls dist/*.whl | wc -l)"
+        echo "  Wheel count: $WHEEL_COUNT"
+        echo "  Package name: coldpack"
+        echo "  Release notes: $(if [[ "$GIT_TAG" =~ \.(dev|a) ]]; then echo "Generated automatically"; else echo "From release-drafter"; fi)"
+        echo ""
+        echo "📦 Final artifact list:"
         ls -la dist/
 
     - name: Publish to PyPI
