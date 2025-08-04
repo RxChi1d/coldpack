@@ -220,52 +220,76 @@ class TestGlobalConsoleManagement:
 
     def test_get_console_singleton(self):
         """Test that get_console returns the same instance."""
-        # Reset global console
-        import coldpack.utils.console
+        # Reset global console by creating a new one
+        from coldpack.utils import console as console_module
 
-        coldpack.utils.console._global_console = None
+        # Save original
+        original_console = getattr(console_module, "_global_console", None)
 
-        console1 = get_console()
-        console2 = get_console()
+        try:
+            # Reset to None
+            console_module._global_console = None
 
-        assert console1 is console2
-        assert isinstance(console1, SafeConsole)
+            console1 = get_console()
+            console2 = get_console()
+
+            assert console1 is console2
+            assert isinstance(console1, SafeConsole)
+        finally:
+            # Restore original
+            console_module._global_console = original_console
 
     def test_set_console(self):
         """Test setting a custom global console."""
         # Reset global console
-        import coldpack.utils.console
+        from coldpack.utils import console as console_module
 
-        coldpack.utils.console._global_console = None
+        # Save original
+        original_console = getattr(console_module, "_global_console", None)
 
-        custom_console = SafeConsole()
-        set_console(custom_console)
+        try:
+            # Reset to None
+            console_module._global_console = None
 
-        retrieved_console = get_console()
-        assert retrieved_console is custom_console
+            custom_console = SafeConsole()
+            set_console(custom_console)
+
+            retrieved_console = get_console()
+            assert retrieved_console is custom_console
+        finally:
+            # Restore original
+            console_module._global_console = original_console
 
     def test_thread_safety(self):
         """Test thread safety of global console management."""
         # Reset global console
-        import coldpack.utils.console
+        from coldpack.utils import console as console_module
 
-        coldpack.utils.console._global_console = None
+        # Save original
+        original_console = getattr(console_module, "_global_console", None)
 
-        consoles = []
+        try:
+            # Reset to None
+            console_module._global_console = None
 
-        def get_console_thread():
-            consoles.append(get_console())
+            consoles = []
 
-        threads = [threading.Thread(target=get_console_thread) for _ in range(10)]
+            def get_console_thread():
+                consoles.append(get_console())
 
-        for thread in threads:
-            thread.start()
+            threads = [threading.Thread(target=get_console_thread) for _ in range(10)]
 
-        for thread in threads:
-            thread.join()
+            for thread in threads:
+                thread.start()
 
-        # All threads should get the same console instance
-        assert len({id(console) for console in consoles}) == 1
+            for thread in threads:
+                thread.join()
+
+            # All threads should get the same console instance
+            assert len({id(console) for console in consoles}) == 1
+        finally:
+            # Restore original
+            console_module._global_console = original_console
 
 
 class TestBackwardCompatibility:
@@ -287,37 +311,53 @@ class TestBackwardCompatibility:
     def test_safe_print_with_custom_fallbacks(self):
         """Test safe_print with custom fallback characters."""
         # Reset global console
-        import coldpack.utils.console
+        from coldpack.utils import console as console_module
 
-        coldpack.utils.console._global_console = None
+        # Save original
+        original_console = getattr(console_module, "_global_console", None)
 
-        console = MagicMock()
-        custom_fallbacks = {"✓": "[CUSTOM_OK]"}
+        try:
+            # Reset to None
+            console_module._global_console = None
 
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            safe_print(console, "✓ test", custom_fallbacks)
+            console = MagicMock()
+            custom_fallbacks = {"✓": "[CUSTOM_OK]"}
 
-        # Should use global console, not the passed one
-        global_console = get_console()
-        assert global_console._fallback_chars["✓"] == "[OK]"  # Should be restored
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                safe_print(console, "✓ test", custom_fallbacks)
+
+            # Should use global console, not the passed one
+            global_console = get_console()
+            assert global_console._fallback_chars["✓"] == "[OK]"  # Should be restored
+        finally:
+            # Restore original
+            console_module._global_console = original_console
 
     def test_safe_print_without_custom_fallbacks(self):
         """Test safe_print without custom fallback characters."""
         # Reset global console
-        import coldpack.utils.console
+        from coldpack.utils import console as console_module
 
-        coldpack.utils.console._global_console = None
+        # Save original
+        original_console = getattr(console_module, "_global_console", None)
 
-        console = MagicMock()
+        try:
+            # Reset to None
+            console_module._global_console = None
 
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            safe_print(console, "✓ test")
+            console = MagicMock()
 
-        # Should use global console with default fallbacks
-        global_console = get_console()
-        assert global_console._fallback_chars["✓"] == "[OK]"
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                safe_print(console, "✓ test")
+
+            # Should use global console with default fallbacks
+            global_console = get_console()
+            assert global_console._fallback_chars["✓"] == "[OK]"
+        finally:
+            # Restore original
+            console_module._global_console = original_console
 
 
 class TestIntegration:
