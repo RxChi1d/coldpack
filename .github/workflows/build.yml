@@ -12,10 +12,13 @@ on:
         type: string
 
 jobs:
-  quality-check:
+  build:
     runs-on: ubuntu-latest
+
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Get full history for version generation
 
     - name: Verify CI status
       shell: bash
@@ -65,58 +68,6 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       timeout-minutes: 3
-
-    - name: Install uv
-      uses: astral-sh/setup-uv@v6
-      with:
-        version: "latest"
-        enable-cache: true
-      timeout-minutes: 3
-
-    - name: Set up Python
-      run: uv python install 3.11
-
-    - name: Install dependencies
-      run: |
-        echo "📦 Installing dependencies for quality checks..."
-        echo "Python version: $(uv run python --version)"
-        echo "UV version: $(uv --version)"
-
-        # Show lock file info for debugging
-        if [ -f "uv.lock" ]; then
-          echo "Lock file found: uv.lock ($(wc -l < uv.lock) lines)"
-        else
-          echo "⚠️ No lock file found - dependencies will be resolved freshly"
-        fi
-
-        # Install with verbose output for better debugging
-        echo "Installing development dependencies..."
-        uv sync --dev
-
-        echo "Installing package in editable mode..."
-        uv pip install -e .
-
-        # Verify installation
-        echo "✅ Verifying installation..."
-        uv run python -c "import coldpack; print(f'coldpack {coldpack.__version__} installed successfully')"
-      timeout-minutes: 5
-
-    - name: Run quality checks
-      run: |
-        uv run ruff check . --output-format=github
-        uv run ruff format --check --diff .
-        uv run pytest --tb=short
-        uv run mypy src/
-      timeout-minutes: 10
-
-  build:
-    needs: quality-check  # Only build after quality check passes
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0  # Get full history for version generation
 
     - name: Install uv
       uses: astral-sh/setup-uv@v6
@@ -422,7 +373,7 @@ jobs:
         path: dist/*.whl
 
   publish:
-    needs: [quality-check, build]
+    needs: build
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     environment: pypi
@@ -514,7 +465,7 @@ jobs:
         packages-dir: dist/
 
   github-release:
-    needs: [quality-check, build]
+    needs: build
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     permissions:
@@ -649,9 +600,9 @@ jobs:
           echo "EOF"
         } >> $GITHUB_OUTPUT
 
-    - name: Create GitHub Release (Dev/Alpha)
+    - name: Create GitHub Release (Pre-release)
       uses: ncipollo/release-action@v1
-      if: ${{ contains(github.ref_name, 'dev') || contains(github.ref_name, 'a') }}
+      if: ${{ contains(github.ref_name, 'dev') || contains(github.ref_name, 'a') || contains(github.ref_name, 'b') || contains(github.ref_name, 'rc') }}
       with:
         tag: ${{ github.ref_name }}
         name: "${{ github.ref_name }}"
@@ -666,7 +617,7 @@ jobs:
 
     - name: Create GitHub Release (Stable)
       uses: ncipollo/release-action@v1
-      if: ${{ !contains(github.ref_name, 'dev') && !contains(github.ref_name, 'a') }}
+      if: ${{ !contains(github.ref_name, 'dev') && !contains(github.ref_name, 'a') && !contains(github.ref_name, 'b') && !contains(github.ref_name, 'rc') }}
       with:
         tag: ${{ github.ref_name }}
         name: "${{ github.ref_name }}"
