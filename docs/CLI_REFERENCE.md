@@ -31,7 +31,7 @@ cpack create [OPTIONS] SOURCE
 ```bash
 --level, -l LEVEL               # Compression level 0-9 (default: dynamic)
 --dict, -d SIZE                 # Dictionary size: 128k-512m (default: dynamic)
---threads, -t COUNT             # Thread count (default: 0 = all cores)
+--threads, -t COUNT             # Thread count (default: all cores)
 --output-dir, -o DIRECTORY      # Output directory (default: current)
 --name, -n NAME                 # Archive name (default: source name)
 ```
@@ -456,7 +456,7 @@ coldpack supports configuration through environment variables and configuration 
 ```bash
 COLDPACK_DEFAULT_OUTPUT=/backup        # Default output directory
 COLDPACK_COMPRESSION_LEVEL=7           # Default compression level (0-9)
-COLDPACK_THREADS=0                     # Thread count (0 = all cores)
+COLDPACK_THREADS=4                     # Thread count (default: all cores)
 ```
 
 ### Configuration Files
@@ -577,7 +577,7 @@ df -h && cpack create data/ --output-dir /large-partition
 
 # Performance: Adjust threads for your system
 cpack create large-data/ --threads 8  # Limit threads
-cpack create small-data/ --threads 0  # Use all cores
+cpack create small-data/              # Use all cores (default)
 ```
 
 ### Getting Help

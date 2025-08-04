@@ -179,7 +179,7 @@ def create(
         0,
         "--threads",
         "-t",
-        help="Number of threads",
+        help="Number of threads (0=all cores)",
         show_default="auto-detect",
         rich_help_panel="Compression Options",
     ),
@@ -371,6 +371,9 @@ def create(
         # Configure 7z settings
         from .config.settings import SevenZipSettings
 
+        # Convert CLI threads parameter (0 = all cores for backward compatibility)
+        settings_threads = True if threads == 0 else threads
+
         # Check if manual 7z parameters are provided
         if level is not None or dict_size is not None:
             # Manual configuration - disable dynamic optimization
@@ -382,7 +385,7 @@ def create(
             sevenzip_settings = SevenZipSettings(
                 level=manual_level,
                 dictionary_size=manual_dict,
-                threads=threads,
+                threads=settings_threads,
                 manual_settings=True,  # Mark as manual to disable dynamic optimization
             )
             console.print(
@@ -397,7 +400,7 @@ def create(
             sevenzip_settings = SevenZipSettings(
                 level=5,  # Will be overridden
                 dictionary_size="16m",  # Will be overridden
-                threads=threads,
+                threads=settings_threads,
             )
             console.print(
                 "[cyan]Using dynamic 7z optimization based on source size[/cyan]"
@@ -576,11 +579,12 @@ def extract(
                 console.print(
                     f"[cyan]  Compression level: {metadata.sevenzip_settings.level}[/cyan]"
                 )
-                threads_display = (
-                    "all"
-                    if metadata.sevenzip_settings.threads == 0
-                    else str(metadata.sevenzip_settings.threads)
-                )
+                if metadata.sevenzip_settings.threads is True:
+                    threads_display = "all"
+                elif metadata.sevenzip_settings.threads is False:
+                    threads_display = "1"
+                else:
+                    threads_display = str(metadata.sevenzip_settings.threads)
                 console.print(f"[cyan]  Threads: {threads_display}[/cyan]")
                 console.print(
                     f"[cyan]  Method: {metadata.sevenzip_settings.method}[/cyan]"
@@ -1042,7 +1046,7 @@ def display_verification_results(results: Any) -> None:
             console.print("[red]Failed Verification Details:[/red]")
             for result in failed_results:
                 layer_name = result.layer.replace("_", " ").title()
-                console.print(f"[red]• {layer_name}:[/red] {result.message}")
+                safe_print(console, f"[red]• {layer_name}:[/red] {result.message}")
 
                 # Show additional details if available
                 if hasattr(result, "details") and result.details:
@@ -1461,9 +1465,11 @@ def display_archive_listing(result: dict, verbose: bool = False) -> None:
         "All"
     ):
         console.print("\n[dim]Tips:[/dim]")
-        console.print("[dim]  • Use --filter '*.ext' to filter by file type[/dim]")
-        console.print("[dim]  • Use --dirs-only to show only directories[/dim]")
-        console.print("[dim]  • Use --summary-only for overview[/dim]")
+        safe_print(
+            console, "[dim]  • Use --filter '*.ext' to filter by file type[/dim]"
+        )
+        safe_print(console, "[dim]  • Use --dirs-only to show only directories[/dim]")
+        safe_print(console, "[dim]  • Use --summary-only for overview[/dim]")
 
 
 def list_archive(

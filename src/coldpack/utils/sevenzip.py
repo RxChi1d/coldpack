@@ -245,7 +245,7 @@ class SevenZipCompressor:
 
 
 def optimize_7z_compression_settings(
-    source_size: int, threads: int = 0
+    source_size: int, threads: Union[int, bool] = True
 ) -> SevenZipSettings:
     """Optimize 7z compression settings based on precise source directory size.
 
@@ -260,7 +260,7 @@ def optimize_7z_compression_settings(
 
     Args:
         source_size: Size of source directory in bytes
-        threads: Number of threads to use (0=auto-detect)
+        threads: Thread configuration (True=all cores, False=single-thread, int=specific count)
 
     Returns:
         Optimized SevenZipSettings based on precise size thresholds
@@ -353,7 +353,12 @@ def optimize_7z_compression_settings(
         logger.debug("Using huge file optimization (> 2 GiB)")
 
     # Format threads display in a more user-friendly way
-    threads_display = "all" if threads == 0 else str(threads)
+    if threads is True:
+        threads_display = "all"
+    elif threads is False:
+        threads_display = "1"
+    else:
+        threads_display = str(threads)
     logger.info(
         f"Optimized 7z settings: level={settings.level}, dict={settings.dictionary_size}, threads={threads_display}"
     )

@@ -22,9 +22,32 @@ class TestSevenZipSettings:
         settings = SevenZipSettings()
         assert settings.level == 5
         assert settings.dictionary_size == "16m"
-        assert settings.threads == 0
+        assert settings.threads is True
         assert settings.solid is True
         assert settings.method == "LZMA2"
+
+    def test_threads_validation(self):
+        """Test threads parameter validation."""
+        import pytest
+
+        # Valid boolean values
+        settings = SevenZipSettings(threads=True)
+        assert settings.threads is True
+
+        settings = SevenZipSettings(threads=False)
+        assert settings.threads is False
+
+        # Valid integer values
+        settings = SevenZipSettings(threads=4)
+        assert settings.threads == 4
+
+        # Invalid: threads=0 should raise error
+        with pytest.raises(ValueError, match="threads=0 is not supported"):
+            SevenZipSettings(threads=0)
+
+        # Invalid: negative threads should raise error
+        with pytest.raises(ValueError, match="threads must be positive"):
+            SevenZipSettings(threads=-1)
 
     def test_custom_settings(self):
         """Test custom 7z settings."""
@@ -378,7 +401,7 @@ class TestOptimization:
 
         # Test with auto-detect threads (default)
         settings = optimize_7z_compression_settings(1024 * 1024)
-        assert settings.threads == 0  # Auto-detect
+        assert settings.threads is True  # All cores
 
 
 class TestUtilityFunctions:

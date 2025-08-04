@@ -3,7 +3,7 @@
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 import toml
 from pydantic import BaseModel, Field, field_validator
@@ -61,7 +61,10 @@ class SevenZipSettings(BaseModel):
         default="16m",
         description="Dictionary size (128k, 1m, 4m, 16m, 64m, 256m, 512m)",
     )
-    threads: int = Field(default=0, ge=0, description="Number of threads (0=auto)")
+    threads: Union[int, bool] = Field(
+        default=True,
+        description="Number of threads (True=all cores, False=single-thread, int=specific count)",
+    )
     solid: bool = Field(default=True, description="Enable solid compression")
     method: str = Field(default="LZMA2", description="Compression method")
     manual_settings: bool = Field(
@@ -86,6 +89,26 @@ class SevenZipSettings(BaseModel):
         if v not in valid_methods:
             raise ValueError(f"Compression method must be one of: {valid_methods}")
         return v
+
+    @field_validator("threads")
+    @classmethod
+    def validate_threads(cls, v: Union[int, bool]) -> Union[int, bool]:
+        """Validate threads parameter."""
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, int):
+            if v == 0:
+                raise ValueError(
+                    "threads=0 is not supported, use threads=True for all cores or threads=False for single-thread"
+                )
+            if v < 0:
+                raise ValueError(
+                    "threads must be positive integer, True (all cores), or False (single-thread)"
+                )
+            return v
+        raise ValueError(
+            "threads must be int, bool True (all cores), or bool False (single-thread)"
+        )
 
     def to_py7zz_config(self) -> dict[str, Any]:
         """Convert settings to py7zz Config compatible dictionary."""
@@ -251,10 +274,20 @@ class ArchiveMetadata(BaseModel):
     def _get_sevenzip_dict(self) -> dict[str, Any]:
         """Get sevenzip settings dictionary for TOML serialization."""
         if self.sevenzip_settings is not None:
+            # Convert threads to serializable format
+            threads_value = self.sevenzip_settings.threads
+            threads_serialized: Union[str, int]
+            if threads_value is True:
+                threads_serialized = "all"
+            elif threads_value is False:
+                threads_serialized = "single"
+            else:
+                threads_serialized = threads_value
+
             return {
                 "level": self.sevenzip_settings.level,
                 "dictionary_size": self.sevenzip_settings.dictionary_size,
-                "threads": self.sevenzip_settings.threads,
+                "threads": threads_serialized,
                 "solid": self.sevenzip_settings.solid,
                 "method": self.sevenzip_settings.method,
             }
@@ -304,7 +337,18 @@ class ArchiveMetadata(BaseModel):
         # Reconstruct 7z settings
         sevenzip_settings = None
         if sevenzip_section:
-            sevenzip_settings = SevenZipSettings(**sevenzip_section)
+            # Convert threads from serialized format
+            threads_data = sevenzip_section.get("threads", True)
+            if threads_data == "all":
+                threads_value = True
+            elif threads_data == "single":
+                threads_value = False
+            else:
+                threads_value = threads_data
+
+            sevenzip_data = dict(sevenzip_section)
+            sevenzip_data["threads"] = threads_value
+            sevenzip_settings = SevenZipSettings(**sevenzip_data)
 
         par2_settings = PAR2Settings(
             redundancy_percent=par2_section.get("redundancy_percent", 10),

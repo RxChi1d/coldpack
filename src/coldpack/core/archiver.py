@@ -418,11 +418,12 @@ class ColdStorageArchiver:
         # Check if settings are manually configured
         if self.sevenzip_settings.manual_settings:
             # Use manual settings without optimization
-            threads_display = (
-                "all"
-                if self.sevenzip_settings.threads == 0
-                else str(self.sevenzip_settings.threads)
-            )
+            if self.sevenzip_settings.threads is True:
+                threads_display = "all"
+            elif self.sevenzip_settings.threads is False:
+                threads_display = "1"
+            else:
+                threads_display = str(self.sevenzip_settings.threads)
             logger.info(
                 f"Using manual 7z settings: level={self.sevenzip_settings.level}, "
                 f"dict={self.sevenzip_settings.dictionary_size}, threads={threads_display}"

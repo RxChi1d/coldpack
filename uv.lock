@@ -450,7 +450,7 @@ requires-dist = [
     { name = "blake3", specifier = ">=1.0.5" },
     { name = "loguru", specifier = ">=0.7.0" },
     { name = "par2cmdline-turbo", specifier = ">=1.3.0" },
-    { name = "py7zz", specifier = "==1.0.0" },
+    { name = "py7zz", specifier = "==1.0.1" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "rich", specifier = ">=14.0.0" },
     { name = "toml", specifier = ">=0.10.0" },
@@ -1195,7 +1195,7 @@ wheels = [
 
 [[package]]
 name = "py7zz"
-version = "1.0.0"
+version = "1.0.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "packaging" },
@@ -1204,9 +1204,9 @@ dependencies = [
     { name = "typer" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/38/b0/668b656677f2791dfdf4c1982a717d8cc6816d8af08859b8a9666c32f994/py7zz-1.0.0-py3-none-macosx_10_9_universal2.whl", hash = "sha256:6ee0a00168a56aba9293e8bead7c03b0ec0403fc6983f5aead73b086903b82b1", size = 5278344, upload-time = "2025-08-01T16:13:46.482Z" },
-    { url = "https://files.pythonhosted.org/packages/ab/bd/d56a4403c14501636d6d124746c605b66ca4c06b19dcf5c4fa31fcfcc141/py7zz-1.0.0-py3-none-manylinux1_x86_64.whl", hash = "sha256:ec4b7023d52840f753547bf3dac850dcb12447fca0e64bbf7612d5eddff27cbb", size = 2676297, upload-time = "2025-08-01T16:13:49.206Z" },
-    { url = "https://files.pythonhosted.org/packages/92/5e/94b22ff06ad509df2e4c24d4dc49390ac06c682b1e2ba813b7dcb29415ad/py7zz-1.0.0-py3-none-win_amd64.whl", hash = "sha256:76e01e22a40ecffdf2709604dd64ab528cfabc82a3ebb1b2b377a96f46d7dab4", size = 2312287, upload-time = "2025-08-01T16:13:51.099Z" },
+    { url = "https://files.pythonhosted.org/packages/94/e9/f75fdabc595b4d7dd4737462e5704589b6dfe7e6e0b8391b10f6138c1e9e/py7zz-1.0.1-py3-none-macosx_10_9_universal2.whl", hash = "sha256:0e1b5eb0179db504a6fe82495b14e5c4c01aa156b41fa5b5a67a69bb5705d309", size = 5278784, upload-time = "2025-08-04T03:54:58.069Z" },
+    { url = "https://files.pythonhosted.org/packages/8a/ac/e1de764238bbf23315241e5ab95515e6170c3eb7965e39304b8cd41e9f0d/py7zz-1.0.1-py3-none-manylinux1_x86_64.whl", hash = "sha256:4877cd2a3c6a79831d413d4f4f8be0997a92a8606f6dd1bdd8dc2980d9159c50", size = 2676737, upload-time = "2025-08-04T03:55:00.271Z" },
+    { url = "https://files.pythonhosted.org/packages/6f/58/b4acad61dccffa49aaa770896c2d3d0c3d5a4b4a81a4d335b0ec2a7f3035/py7zz-1.0.1-py3-none-win_amd64.whl", hash = "sha256:8d22326507232035609b9cf35d0c19782c6eb88a155e31df20bc7ddec8877443", size = 2312724, upload-time = "2025-08-04T03:55:02.396Z" },
 ]
 
 [[package]]

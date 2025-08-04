@@ -31,9 +31,20 @@ def create_windows_compatible_console(**kwargs: Any) -> Console:
     }
 
     # On Windows, try to ensure UTF-8 handling
-    if platform.system().lower() == "windows" and "PYTHONIOENCODING" not in os.environ:
-        # Set environment variable to hint Python about encoding preference
+    if platform.system().lower() == "windows":
+        # Always set UTF-8 encoding for Windows
         os.environ["PYTHONIOENCODING"] = "utf-8"
+        # Also try to set console output encoding
+        try:
+            import sys
+
+            if hasattr(sys.stdout, "reconfigure"):
+                sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+            if hasattr(sys.stderr, "reconfigure"):
+                sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, OSError):
+            # Fallback for older Python versions or unsupported terminals
+            pass
 
     console = Console(**console_args)
 
@@ -60,8 +71,10 @@ def safe_print(
             "🔍": "[SEARCH]",
             "📁": "[FOLDER]",
             "📄": "[FILE]",
+            "•": "*",
         }
 
+    # Try original message first, then fallback on encoding errors (all platforms)
     try:
         console.print(message)
     except UnicodeEncodeError:
@@ -69,4 +82,11 @@ def safe_print(
         safe_message = message
         for unicode_char, replacement in fallback_chars.items():
             safe_message = safe_message.replace(unicode_char, replacement)
-        console.print(safe_message)
+        try:
+            console.print(safe_message)
+        except UnicodeEncodeError:
+            # Last resort: strip all non-ASCII
+            ascii_message = safe_message.encode("ascii", errors="replace").decode(
+                "ascii"
+            )
+            console.print(ascii_message)
