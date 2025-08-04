@@ -40,23 +40,23 @@ check_project_root() {
 # Function to ensure uv environment is set up
 setup_environment() {
     print_status "Setting up development environment..."
-    
+
     if ! command -v uv &> /dev/null; then
         print_error "uv is not installed. Please install uv first."
         exit 1
     fi
-    
+
     # Ensure dependencies are installed
     uv sync --dev
     uv pip install -e .
-    
+
     print_success "Environment setup complete"
 }
 
 # Function to run code formatting checks
 check_formatting() {
     print_status "Checking code formatting with ruff..."
-    
+
     # Check formatting
     if uv run ruff format --check --diff .; then
         print_success "Code formatting is correct"
@@ -69,7 +69,7 @@ check_formatting() {
 # Function to run linting
 check_linting() {
     print_status "Running linting checks with ruff..."
-    
+
     if uv run ruff check .; then
         print_success "Linting checks passed"
     else
@@ -81,10 +81,10 @@ check_linting() {
 # Function to run type checking
 check_types() {
     print_status "Running type checking with mypy..."
-    
+
     # Uninstall editable package to avoid path conflicts
     uv pip uninstall coldpack > /dev/null 2>&1 || true
-    
+
     if uv run mypy src/ tests/ --ignore-missing-imports; then
         print_success "Type checking passed"
         # Reinstall editable package
@@ -103,17 +103,17 @@ main() {
     echo "  Quick CI Checks for Local Development"
     echo "=========================================="
     echo
-    
+
     check_project_root
-    
+
     local exit_code=0
-    
+
     # Run checks
     setup_environment || exit_code=1
     check_formatting || exit_code=1
     check_linting || exit_code=1
     check_types || exit_code=1
-    
+
     echo
     echo "=========================================="
     if [[ $exit_code -eq 0 ]]; then
@@ -124,7 +124,7 @@ main() {
         echo "Please fix the issues above before pushing to remote."
     fi
     echo "=========================================="
-    
+
     exit $exit_code
 }
 

@@ -11,7 +11,7 @@ A lightweight script for frequent local testing during development.
 **What it does:**
 - 🔧 Sets up development environment
 - 📝 Checks code formatting (ruff format)
-- 🔍 Runs linting checks (ruff check)  
+- 🔍 Runs linting checks (ruff check)
 - 🎯 Performs type checking (mypy)
 
 **Usage:**
