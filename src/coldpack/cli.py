@@ -576,11 +576,12 @@ def extract(
                 console.print(
                     f"[cyan]  Compression level: {metadata.sevenzip_settings.level}[/cyan]"
                 )
-                threads_display = (
-                    "all"
-                    if metadata.sevenzip_settings.threads == 0
-                    else str(metadata.sevenzip_settings.threads)
-                )
+                if metadata.sevenzip_settings.threads is True:
+                    threads_display = "all"
+                elif metadata.sevenzip_settings.threads is False:
+                    threads_display = "1"
+                else:
+                    threads_display = str(metadata.sevenzip_settings.threads)
                 console.print(f"[cyan]  Threads: {threads_display}[/cyan]")
                 console.print(
                     f"[cyan]  Method: {metadata.sevenzip_settings.method}[/cyan]"

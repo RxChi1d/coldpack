@@ -510,7 +510,7 @@ echo "Backup completed: app_data_$DATE.7z" >> /backup/backup.log
 cpack create large_dataset/ --level 3 --dict 16m --threads 2
 
 # High-performance workstations (maximize compression)
-cpack create source_code/ --level 9 --dict 512m --threads 0
+cpack create source_code/ --level 9 --dict 512m
 
 # Network storage optimization (balance speed vs compression)
 cpack create network_data/ --level 5 --dict 64m --threads 4
