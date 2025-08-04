@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Build System Reliability**: Enhanced build and release process for improved stability and error prevention
+
 ## [0.3.0] - 2025-08-03
 
 ### Changed
