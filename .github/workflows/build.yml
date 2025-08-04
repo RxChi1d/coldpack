@@ -114,13 +114,48 @@ jobs:
 
         echo "Git tag: $TAG"
 
-        # Validate tag format (PEP 440 compliant)
-        if [[ $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\.dev[0-9]+|a[0-9]+|b[0-9]+|rc[0-9]+)?$ ]]; then
-          echo "✓ Tag format is valid: $TAG"
-        else
-          echo "✗ Invalid tag format: $TAG"
-          echo "Expected format: v{major}.{minor}.{patch}[.dev{N}|a{N}|b{N}|rc{N}]"
-          echo "Examples: v1.0.0, v1.0.0a1, v1.0.0b1, v1.0.0rc1, v1.0.0.dev1"
+        # Unified version validation function
+        validate_version_format() {
+          local version="$1"
+          local version_type="$2"
+
+          # Simplified regex patterns for better readability
+          local git_tag_pattern="^v[0-9]+\.[0-9]+\.[0-9]+(\.(dev[0-9]+|a[0-9]+|b[0-9]+|rc[0-9]+))?$"
+          local generated_version_pattern="^[0-9]+\.[0-9]+\.[0-9]+(\.(dev[0-9]+|a[0-9]+|b[0-9]+|rc[0-9]+))?(-[0-9]+-g[0-9a-f]+)?$"
+
+          if [[ "$version_type" == "git_tag" ]]; then
+            if [[ $version =~ $git_tag_pattern ]]; then
+              echo "✓ Git tag format is valid: $version"
+              return 0
+            else
+              echo "✗ Invalid git tag format: $version"
+              echo "Expected format: v{major}.{minor}.{patch}[.{dev|a|b|rc}{N}]"
+              echo "Valid examples:"
+              echo "  - Stable: v1.0.0, v2.1.3"
+              echo "  - Development: v1.0.0.dev1, v1.2.0.dev5"
+              echo "  - Alpha: v1.0.0.a1, v1.0.0.a2"
+              echo "  - Beta: v1.0.0.b1, v1.0.0.b2"
+              echo "  - Release Candidate: v1.0.0.rc1, v1.0.0.rc2"
+              return 1
+            fi
+          elif [[ "$version_type" == "generated" ]]; then
+            if [[ $version =~ $generated_version_pattern ]]; then
+              echo "✓ Generated version format is valid: $version"
+              return 0
+            else
+              echo "✗ Invalid generated version format: $version"
+              echo "Expected format: {major}.{minor}.{patch}[.{dev|a|b|rc}{N}][-{commits}-g{hash}]"
+              echo "Valid examples:"
+              echo "  - Stable: 1.0.0, 2.1.3"
+              echo "  - Development: 1.0.0.dev1, 1.2.0.dev5"
+              echo "  - With git suffix: 1.0.0-5-g1a2b3c4, 1.0.0.dev1-2-g5d6e7f8"
+              return 1
+            fi
+          fi
+        }
+
+        # Validate git tag format
+        if ! validate_version_format "$TAG" "git_tag"; then
           exit 1
         fi
 
@@ -163,28 +198,71 @@ jobs:
           exit 0
         fi
 
-        # Verify version format is PEP 440 compliant (including development versions)
-        if [[ $GENERATED_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.dev[0-9]+|a[0-9]+|b[0-9]+|rc[0-9]+)?(-[0-9]+-g[0-9a-f]+)?$ ]]; then
-          echo "✓ Generated version is PEP 440 compliant: $GENERATED_VERSION"
-        else
-          echo "✗ Generated version is not PEP 440 compliant: $GENERATED_VERSION"
+        # Reuse unified validation function from previous step
+        validate_version_format() {
+          local version="$1"
+          local version_type="$2"
+
+          # Simplified regex patterns for better readability
+          local git_tag_pattern="^v[0-9]+\.[0-9]+\.[0-9]+(\.(dev[0-9]+|a[0-9]+|b[0-9]+|rc[0-9]+))?$"
+          local generated_version_pattern="^[0-9]+\.[0-9]+\.[0-9]+(\.(dev[0-9]+|a[0-9]+|b[0-9]+|rc[0-9]+))?(-[0-9]+-g[0-9a-f]+)?$"
+
+          if [[ "$version_type" == "git_tag" ]]; then
+            if [[ $version =~ $git_tag_pattern ]]; then
+              echo "✓ Git tag format is valid: $version"
+              return 0
+            else
+              echo "✗ Invalid git tag format: $version"
+              echo "Expected format: v{major}.{minor}.{patch}[.{dev|a|b|rc}{N}]"
+              echo "Valid examples:"
+              echo "  - Stable: v1.0.0, v2.1.3"
+              echo "  - Development: v1.0.0.dev1, v1.2.0.dev5"
+              echo "  - Alpha: v1.0.0.a1, v1.0.0.a2"
+              echo "  - Beta: v1.0.0.b1, v1.0.0.b2"
+              echo "  - Release Candidate: v1.0.0.rc1, v1.0.0.rc2"
+              return 1
+            fi
+          elif [[ "$version_type" == "generated" ]]; then
+            if [[ $version =~ $generated_version_pattern ]]; then
+              echo "✓ Generated version format is valid: $version"
+              return 0
+            else
+              echo "✗ Invalid generated version format: $version"
+              echo "Expected format: {major}.{minor}.{patch}[.{dev|a|b|rc}{N}][-{commits}-g{hash}]"
+              echo "Valid examples:"
+              echo "  - Stable: 1.0.0, 2.1.3"
+              echo "  - Development: 1.0.0.dev1, 1.2.0.dev5"
+              echo "  - With git suffix: 1.0.0-5-g1a2b3c4, 1.0.0.dev1-2-g5d6e7f8"
+              return 1
+            fi
+          fi
+        }
+
+        # Validate generated version format
+        if ! validate_version_format "$GENERATED_VERSION" "generated"; then
           exit 1
         fi
 
-        # Verify version is based on git tag (allow development versions)
+        # Enhanced version consistency verification
         GIT_TAG="${{ steps.validate_tag.outputs.git_tag }}"
         EXPECTED_VERSION=$(echo "$GIT_TAG" | sed 's/^v//')
 
-        # Extract base version from generated version (remove -N-gXXXXXXX suffix if present)
+        # Extract base version from generated version (remove git suffix if present)
         BASE_GENERATED_VERSION=$(echo "$GENERATED_VERSION" | sed 's/-[0-9]\{1,\}-g[0-9a-f]\{1,\}$//')
 
+        echo "Version consistency check:"
+        echo "  Git tag: $GIT_TAG"
+        echo "  Expected base version: $EXPECTED_VERSION"
+        echo "  Generated version: $GENERATED_VERSION"
+        echo "  Generated base version: $BASE_GENERATED_VERSION"
+
         if [ "$BASE_GENERATED_VERSION" = "$EXPECTED_VERSION" ]; then
-          echo "✓ Generated version is based on git tag: $GENERATED_VERSION (base: $BASE_GENERATED_VERSION)"
-        elif [[ "$GENERATED_VERSION" == "$EXPECTED_VERSION-"*"-g"* ]]; then
-          echo "✓ Generated version is development version of git tag: $GENERATED_VERSION"
+          echo "✓ Generated version is consistent with git tag"
         else
-          echo "✗ Version mismatch - Git tag: $GIT_TAG, Generated: $GENERATED_VERSION"
-          echo "Expected base version: $EXPECTED_VERSION, Got base: $BASE_GENERATED_VERSION"
+          echo "✗ Version consistency check failed"
+          echo "  Expected: $EXPECTED_VERSION"
+          echo "  Got: $BASE_GENERATED_VERSION"
+          echo "  This indicates a problem with version generation or tag format"
           exit 1
         fi
 
