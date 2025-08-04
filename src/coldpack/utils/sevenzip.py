@@ -245,7 +245,7 @@ class SevenZipCompressor:
 
 
 def optimize_7z_compression_settings(
-    source_size: int, threads: int | bool = True
+    source_size: int, threads: Union[int, bool] = True
 ) -> SevenZipSettings:
     """Optimize 7z compression settings based on precise source directory size.
 

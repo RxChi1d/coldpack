@@ -3,7 +3,7 @@
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 import toml
 from pydantic import BaseModel, Field, field_validator
@@ -61,7 +61,7 @@ class SevenZipSettings(BaseModel):
         default="16m",
         description="Dictionary size (128k, 1m, 4m, 16m, 64m, 256m, 512m)",
     )
-    threads: int | bool = Field(
+    threads: Union[int, bool] = Field(
         default=True,
         description="Number of threads (True=all cores, False=single-thread, int=specific count)",
     )
@@ -92,7 +92,7 @@ class SevenZipSettings(BaseModel):
 
     @field_validator("threads")
     @classmethod
-    def validate_threads(cls, v: int | bool) -> int | bool:
+    def validate_threads(cls, v: Union[int, bool]) -> Union[int, bool]:
         """Validate threads parameter."""
         if isinstance(v, bool):
             return v
@@ -276,6 +276,7 @@ class ArchiveMetadata(BaseModel):
         if self.sevenzip_settings is not None:
             # Convert threads to serializable format
             threads_value = self.sevenzip_settings.threads
+            threads_serialized: Union[str, int]
             if threads_value is True:
                 threads_serialized = "all"
             elif threads_value is False:
