@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Multicore Performance**: Upgraded py7zz to v1.0.1 with improved multicore thread handling (threads=0 now correctly uses all CPU cores)
 - **Console Architecture**: Refactored console output system with centralized SafeConsole wrapper for better Unicode compatibility and maintainability
+- **Build System Reliability**: Enhanced build and release process for improved stability and error prevention
 
 ### Fixed
 - **Thread Parameter Handling**: Fixed py7zz multicore settings where threads=0 was incorrectly treated as single-thread instead of all cores

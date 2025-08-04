@@ -17,26 +17,97 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Verify CI status
+      shell: bash
+      run: |
+        echo "Verifying CI workflow status for commit: $GITHUB_SHA"
+
+        # Query CI workflow status for the specific commit using gh run list
+        # This avoids Windows Git Bash path rewriting issues with gh api
+        CI_STATUS=$(gh run list \
+          --workflow="CI" \
+          --json conclusion,headSha \
+          --jq ".[] | select(.headSha == \"$GITHUB_SHA\") | .conclusion" \
+          | head -1)
+
+        echo "CI workflow status: $CI_STATUS"
+
+        if [ "$CI_STATUS" = "success" ]; then
+          echo "✅ CI workflow passed - proceeding with build"
+        elif [ "$CI_STATUS" = "failure" ]; then
+          echo "❌ CI workflow failed - aborting build"
+          echo ""
+          echo "🔍 Troubleshooting:"
+          echo "  1. Check CI workflow results: https://github.com/${{ github.repository }}/actions/runs"
+          echo "  2. Fix any failing tests or linting issues"
+          echo "  3. Push fixes and wait for CI to pass before retrying build"
+          echo "  4. Current commit: $GITHUB_SHA"
+          exit 1
+        elif [ -z "$CI_STATUS" ]; then
+          echo "⚠️ No CI workflow found for this commit"
+          echo ""
+          echo "🔍 Troubleshooting:"
+          echo "  1. Verify CI workflow is configured in .github/workflows/"
+          echo "  2. Check if commit triggered CI: https://github.com/${{ github.repository }}/actions"
+          echo "  3. Ensure commit is on correct branch with CI workflow"
+          echo "  4. Current commit: $GITHUB_SHA"
+          exit 1
+        else
+          echo "⏳ CI workflow status: $CI_STATUS (not completed)"
+          echo ""
+          echo "🔍 Action required:"
+          echo "  1. Wait for CI workflow to complete"
+          echo "  2. Check progress: https://github.com/${{ github.repository }}/actions"
+          echo "  3. Current commit: $GITHUB_SHA"
+          echo "  4. Retry build after CI completes successfully"
+          exit 1
+        fi
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      timeout-minutes: 3
+
     - name: Install uv
       uses: astral-sh/setup-uv@v6
       with:
         version: "latest"
         enable-cache: true
+      timeout-minutes: 3
 
     - name: Set up Python
       run: uv python install 3.11
 
     - name: Install dependencies
       run: |
+        echo "📦 Installing dependencies for quality checks..."
+        echo "Python version: $(uv run python --version)"
+        echo "UV version: $(uv --version)"
+
+        # Show lock file info for debugging
+        if [ -f "uv.lock" ]; then
+          echo "Lock file found: uv.lock ($(wc -l < uv.lock) lines)"
+        else
+          echo "⚠️ No lock file found - dependencies will be resolved freshly"
+        fi
+
+        # Install with verbose output for better debugging
+        echo "Installing development dependencies..."
         uv sync --dev
+
+        echo "Installing package in editable mode..."
         uv pip install -e .
+
+        # Verify installation
+        echo "✅ Verifying installation..."
+        uv run python -c "import coldpack; print(f'coldpack {coldpack.__version__} installed successfully')"
+      timeout-minutes: 5
 
     - name: Run quality checks
       run: |
         uv run ruff check . --output-format=github
         uv run ruff format --check --diff .
         uv run pytest --tb=short
-        uv run mypy src/ --ignore-missing-imports
+        uv run mypy src/
+      timeout-minutes: 10
 
   build:
     needs: quality-check  # Only build after quality check passes
@@ -52,14 +123,47 @@ jobs:
       with:
         version: "latest"
         enable-cache: true
+      timeout-minutes: 3
 
     - name: Set up Python
       run: uv python install 3.11
 
     - name: Install dependencies
       run: |
+        echo "📦 Installing dependencies for build..."
+        echo "Python version: $(uv run python --version)"
+        echo "UV version: $(uv --version)"
+
+        # Show environment info
+        echo "🔧 Build environment:"
+        echo "  Runner OS: ${{ runner.os }}"
+        echo "  GitHub SHA: $GITHUB_SHA"
+        echo "  Working directory: $(pwd)"
+
+        # Show lock file info for debugging
+        if [ -f "uv.lock" ]; then
+          echo "Lock file found: uv.lock ($(wc -l < uv.lock) lines)"
+          echo "Lock file hash: $(shasum uv.lock | cut -d' ' -f1)"
+        else
+          echo "⚠️ No lock file found - dependencies will be resolved freshly"
+        fi
+
+        # Install with better debugging
+        echo "Installing development dependencies..."
         uv sync --dev
+
+        echo "Installing package in editable mode..."
         uv pip install -e .
+
+        # Verify installation with more details
+        echo "✅ Verifying installation..."
+        uv run python -c "import coldpack; print(f'coldpack {coldpack.__version__} installed successfully')"
+        uv run python -c "import sys; print(f'Python executable: {sys.executable}')"
+
+        # Show installed packages for debugging
+        echo "📋 Key installed packages:"
+        uv pip list | grep -E "(coldpack|hatch|build|wheel)" || echo "  (filtering failed, showing all packages)"
+      timeout-minutes: 5
 
     - name: Validate tag format
       id: validate_tag
@@ -74,18 +178,81 @@ jobs:
 
         echo "Git tag: $TAG"
 
-        # Validate tag format (PEP 440 compliant)
-        if [[ $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\.dev[0-9]+|a[0-9]+|b[0-9]+|rc[0-9]+)?$ ]]; then
-          echo "✓ Tag format is valid: $TAG"
-        else
-          echo "✗ Invalid tag format: $TAG"
-          echo "Expected format: v{major}.{minor}.{patch}[.dev{N}|a{N}|b{N}|rc{N}]"
-          echo "Examples: v1.0.0, v1.0.0a1, v1.0.0b1, v1.0.0rc1, v1.0.0.dev1"
+        # Unified version validation function
+        validate_version_format() {
+          local version="$1"
+          local version_type="$2"
+
+          # Simplified regex patterns for better readability
+          local git_tag_pattern="^v[0-9]+\.[0-9]+\.[0-9]+(\.(dev[0-9]+|a[0-9]+|b[0-9]+|rc[0-9]+))?$"
+          local generated_version_pattern="^[0-9]+\.[0-9]+\.[0-9]+(\.(dev[0-9]+|a[0-9]+|b[0-9]+|rc[0-9]+))?(-[0-9]+-g[0-9a-f]+)?$"
+
+          if [[ "$version_type" == "git_tag" ]]; then
+            if [[ $version =~ $git_tag_pattern ]]; then
+              echo "✓ Git tag format is valid: $version"
+              return 0
+            else
+              echo "✗ Invalid git tag format: $version"
+              echo "Expected format: v{major}.{minor}.{patch}[.{dev|a|b|rc}{N}]"
+              echo "Valid examples:"
+              echo "  - Stable: v1.0.0, v2.1.3"
+              echo "  - Development: v1.0.0.dev1, v1.2.0.dev5"
+              echo "  - Alpha: v1.0.0.a1, v1.0.0.a2"
+              echo "  - Beta: v1.0.0.b1, v1.0.0.b2"
+              echo "  - Release Candidate: v1.0.0.rc1, v1.0.0.rc2"
+              return 1
+            fi
+          elif [[ "$version_type" == "generated" ]]; then
+            if [[ $version =~ $generated_version_pattern ]]; then
+              echo "✓ Generated version format is valid: $version"
+              return 0
+            else
+              echo "✗ Invalid generated version format: $version"
+              echo "Expected format: {major}.{minor}.{patch}[.{dev|a|b|rc}{N}][-{commits}-g{hash}]"
+              echo "Valid examples:"
+              echo "  - Stable: 1.0.0, 2.1.3"
+              echo "  - Development: 1.0.0.dev1, 1.2.0.dev5"
+              echo "  - With git suffix: 1.0.0-5-g1a2b3c4, 1.0.0.dev1-2-g5d6e7f8"
+              return 1
+            fi
+          fi
+        }
+
+        # Validate git tag format
+        if ! validate_version_format "$TAG" "git_tag"; then
           exit 1
         fi
 
         # Set outputs
         echo "git_tag=$TAG" >> $GITHUB_OUTPUT
+
+    - name: Validate stable release ancestry (for stable releases only)
+      if: "!contains(steps.validate_tag.outputs.git_tag, 'dev') && !contains(steps.validate_tag.outputs.git_tag, 'a') && !contains(steps.validate_tag.outputs.git_tag, 'b') && !contains(steps.validate_tag.outputs.git_tag, 'rc')"
+      shell: bash
+      run: |
+        echo "Validating stable release ancestry..."
+
+        # Fetch origin/main to ensure we have latest main branch
+        git fetch origin main
+
+        # Check if current tag commit is an ancestor of main
+        if git merge-base --is-ancestor $GITHUB_SHA origin/main; then
+          echo "✓ Tag commit is an ancestor of main branch - valid for stable release"
+        else
+          echo "✗ Tag commit is not an ancestor of main branch - stable releases must come from main"
+          echo ""
+          echo "📊 Branch information:"
+          echo "  Current commit: $GITHUB_SHA"
+          echo "  Main branch head: $(git rev-parse origin/main)"
+          echo "  Current branch: $(git branch --show-current)"
+          echo ""
+          echo "🔍 Troubleshooting:"
+          echo "  1. Ensure stable release tags are created from main branch"
+          echo "  2. If this is a hotfix, merge to main first before tagging"
+          echo "  3. For development releases, use .dev, .a, .b, or .rc suffixes"
+          echo "  4. Check branch history: git log --oneline --graph main..HEAD"
+          exit 1
+        fi
 
     - name: Validate dynamic version generation
       shell: bash
@@ -104,35 +271,124 @@ jobs:
           exit 0
         fi
 
-        # Verify version format is PEP 440 compliant (including development versions)
-        if [[ $GENERATED_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.dev[0-9]+|a[0-9]+|b[0-9]+|rc[0-9]+)?(-[0-9]+-g[0-9a-f]+)?$ ]]; then
-          echo "✓ Generated version is PEP 440 compliant: $GENERATED_VERSION"
-        else
-          echo "✗ Generated version is not PEP 440 compliant: $GENERATED_VERSION"
+        # Reuse unified validation function from previous step
+        validate_version_format() {
+          local version="$1"
+          local version_type="$2"
+
+          # Simplified regex patterns for better readability
+          local git_tag_pattern="^v[0-9]+\.[0-9]+\.[0-9]+(\.(dev[0-9]+|a[0-9]+|b[0-9]+|rc[0-9]+))?$"
+          local generated_version_pattern="^[0-9]+\.[0-9]+\.[0-9]+(\.(dev[0-9]+|a[0-9]+|b[0-9]+|rc[0-9]+))?(-[0-9]+-g[0-9a-f]+)?$"
+
+          if [[ "$version_type" == "git_tag" ]]; then
+            if [[ $version =~ $git_tag_pattern ]]; then
+              echo "✓ Git tag format is valid: $version"
+              return 0
+            else
+              echo "✗ Invalid git tag format: $version"
+              echo "Expected format: v{major}.{minor}.{patch}[.{dev|a|b|rc}{N}]"
+              echo "Valid examples:"
+              echo "  - Stable: v1.0.0, v2.1.3"
+              echo "  - Development: v1.0.0.dev1, v1.2.0.dev5"
+              echo "  - Alpha: v1.0.0.a1, v1.0.0.a2"
+              echo "  - Beta: v1.0.0.b1, v1.0.0.b2"
+              echo "  - Release Candidate: v1.0.0.rc1, v1.0.0.rc2"
+              return 1
+            fi
+          elif [[ "$version_type" == "generated" ]]; then
+            if [[ $version =~ $generated_version_pattern ]]; then
+              echo "✓ Generated version format is valid: $version"
+              return 0
+            else
+              echo "✗ Invalid generated version format: $version"
+              echo "Expected format: {major}.{minor}.{patch}[.{dev|a|b|rc}{N}][-{commits}-g{hash}]"
+              echo "Valid examples:"
+              echo "  - Stable: 1.0.0, 2.1.3"
+              echo "  - Development: 1.0.0.dev1, 1.2.0.dev5"
+              echo "  - With git suffix: 1.0.0-5-g1a2b3c4, 1.0.0.dev1-2-g5d6e7f8"
+              return 1
+            fi
+          fi
+        }
+
+        # Validate generated version format
+        if ! validate_version_format "$GENERATED_VERSION" "generated"; then
           exit 1
         fi
 
-        # Verify version is based on git tag (allow development versions)
+        # Enhanced version consistency verification
         GIT_TAG="${{ steps.validate_tag.outputs.git_tag }}"
         EXPECTED_VERSION=$(echo "$GIT_TAG" | sed 's/^v//')
 
-        # Extract base version from generated version (remove -N-gXXXXXXX suffix if present)
+        # Extract base version from generated version (remove git suffix if present)
         BASE_GENERATED_VERSION=$(echo "$GENERATED_VERSION" | sed 's/-[0-9]\{1,\}-g[0-9a-f]\{1,\}$//')
 
+        echo "Version consistency check:"
+        echo "  Git tag: $GIT_TAG"
+        echo "  Expected base version: $EXPECTED_VERSION"
+        echo "  Generated version: $GENERATED_VERSION"
+        echo "  Generated base version: $BASE_GENERATED_VERSION"
+
         if [ "$BASE_GENERATED_VERSION" = "$EXPECTED_VERSION" ]; then
-          echo "✓ Generated version is based on git tag: $GENERATED_VERSION (base: $BASE_GENERATED_VERSION)"
-        elif [[ "$GENERATED_VERSION" == "$EXPECTED_VERSION-"*"-g"* ]]; then
-          echo "✓ Generated version is development version of git tag: $GENERATED_VERSION"
+          echo "✓ Generated version is consistent with git tag"
         else
-          echo "✗ Version mismatch - Git tag: $GIT_TAG, Generated: $GENERATED_VERSION"
-          echo "Expected base version: $EXPECTED_VERSION, Got base: $BASE_GENERATED_VERSION"
+          echo "✗ Version consistency check failed"
+          echo ""
+          echo "📊 Version details:"
+          echo "  Git tag: $GIT_TAG"
+          echo "  Expected version: $EXPECTED_VERSION"
+          echo "  Generated version: $GENERATED_VERSION"
+          echo "  Generated base version: $BASE_GENERATED_VERSION"
+          echo "  Git describe output: $(git describe --tags --match='v*')"
+          echo ""
+          echo "🔍 Troubleshooting:"
+          echo "  1. Verify git tag format follows PEP 440: v{major}.{minor}.{patch}[.{dev|a|b|rc}{N}]"
+          echo "  2. Check if hatch-vcs is properly configured in pyproject.toml"
+          echo "  3. Ensure tag is properly annotated: git tag -a v1.0.0 -m 'Release v1.0.0'"
+          echo "  4. Verify working directory is clean and matches tagged commit"
           exit 1
         fi
 
     - name: Build wheel
       run: |
-        uv build --wheel
+        echo "🔨 Building wheel package..."
+        echo "Build environment details:"
+        echo "  Current directory: $(pwd)"
+        echo "  Python executable: $(uv run python -c 'import sys; print(sys.executable)')"
+        echo "  Python version: $(uv run python --version)"
+
+        # Show project configuration
+        echo "📋 Project configuration:"
+        if [ -f "pyproject.toml" ]; then
+          echo "  pyproject.toml found"
+          grep -E "^(name|version|build-system)" pyproject.toml | head -10 || echo "  (could not extract basic info)"
+        else
+          echo "  ⚠️ No pyproject.toml found"
+        fi
+
+        # Build with verbose output
+        echo "Building wheel..."
+        uv build --wheel --verbose
+
+        # Show build results
+        echo "✅ Build completed. Artifacts:"
         ls -la dist/
+
+        # Verify wheel content
+        if ls dist/*.whl 1> /dev/null 2>&1; then
+          WHEEL_FILE=$(ls dist/*.whl | head -1)
+          echo "📦 Wheel details:"
+          echo "  File: $(basename $WHEEL_FILE)"
+          echo "  Size: $(stat -c%s "$WHEEL_FILE" 2>/dev/null || stat -f%z "$WHEEL_FILE" 2>/dev/null || echo "unknown") bytes"
+          echo "  Wheel metadata:"
+          uv run python -m wheel unpack --dest /tmp/wheel_check "$WHEEL_FILE" 2>/dev/null && \
+          find /tmp/wheel_check -name "METADATA" -exec head -10 {} \; 2>/dev/null || \
+          echo "  (could not extract wheel metadata)"
+        else
+          echo "❌ No wheel file found in dist/"
+          exit 1
+        fi
+      timeout-minutes: 5
 
     - name: Verify wheel version consistency
       shell: bash
@@ -157,6 +413,7 @@ jobs:
         echo "Testing wheel installation and import..."
         uv pip install dist/*.whl --force-reinstall
         uv run python -c "import coldpack; print(f'coldpack imported successfully, version: {coldpack.__version__}')"
+      timeout-minutes: 3
 
     - name: Upload wheel artifacts
       uses: actions/upload-artifact@v4
@@ -183,33 +440,71 @@ jobs:
     - name: Final version validation before PyPI publish
       shell: bash
       run: |
+        echo "🔍 Final validation before PyPI publish..."
+
         # Get git tag and expected version
         GIT_TAG=$(echo ${{ github.ref }} | sed 's/refs\/tags\///')
         EXPECTED_VERSION=$(echo "$GIT_TAG" | sed 's/^v//')
-        echo "Git tag: $GIT_TAG"
-        echo "Expected PyPI version: $EXPECTED_VERSION"
+
+        echo "📊 Release information:"
+        echo "  Git reference: ${{ github.ref }}"
+        echo "  Git tag: $GIT_TAG"
+        echo "  Expected PyPI version: $EXPECTED_VERSION"
+        echo "  Current commit: $GITHUB_SHA"
+        echo "  Release type: $(if [[ "$GIT_TAG" =~ \.(dev|a|b|rc) ]]; then echo "pre-release"; else echo "stable"; fi)"
+
+        # Show environment context
+        echo "🔧 Publish environment:"
+        echo "  Runner OS: ${{ runner.os }}"
+        echo "  Working directory: $(pwd)"
+        echo "  Available artifacts:"
+        ls -la dist/ || echo "  No dist/ directory found"
 
         # Verify wheel has consistent version
-        echo "Verifying wheel version..."
+        echo "🔍 Verifying wheel version..."
+        WHEEL_COUNT=0
         for wheel in dist/*.whl; do
-          WHEEL_VERSION=$(echo "$wheel" | sed -n 's/.*coldpack-\([^-]*\)-.*/\1/p')
-          echo "  $wheel -> $WHEEL_VERSION"
+          if [ -f "$wheel" ]; then
+            WHEEL_COUNT=$((WHEEL_COUNT + 1))
+            WHEEL_VERSION=$(echo "$wheel" | sed -n 's/.*coldpack-\([^-]*\)-.*/\1/p')
+            echo "  ✓ $wheel -> $WHEEL_VERSION"
 
-          if [ "$WHEEL_VERSION" != "$EXPECTED_VERSION" ]; then
-            echo "✗ Wheel version mismatch: $wheel"
-            echo "  Expected: $EXPECTED_VERSION"
-            echo "  Got: $WHEEL_VERSION"
-            exit 1
+            if [ "$WHEEL_VERSION" != "$EXPECTED_VERSION" ]; then
+              echo "✗ Wheel version mismatch: $wheel"
+              echo "  Expected: $EXPECTED_VERSION"
+              echo "  Got: $WHEEL_VERSION"
+              echo ""
+              echo "🔍 Troubleshooting:"
+              echo "  1. Verify git tag format: $GIT_TAG"
+              echo "  2. Check wheel naming in build process"
+              echo "  3. Ensure version generation is consistent"
+              exit 1
+            fi
           fi
         done
 
-        echo "✓ All wheels have consistent version: $EXPECTED_VERSION"
+        if [ $WHEEL_COUNT -eq 0 ]; then
+          echo "❌ No wheel files found for publishing"
+          echo ""
+          echo "🔍 Troubleshooting:"
+          echo "  1. Check if build step completed successfully"
+          echo "  2. Verify artifacts were uploaded correctly"
+          echo "  3. Check dist/ directory contents"
+          exit 1
+        fi
 
-        # Final confirmation
+        echo "✅ All $WHEEL_COUNT wheel(s) have consistent version: $EXPECTED_VERSION"
+
+        # Final confirmation with comprehensive details
+        echo ""
         echo "🚀 Ready to publish to PyPI:"
         echo "  Git tag: $GIT_TAG"
         echo "  PyPI version: $EXPECTED_VERSION"
-        echo "  Wheel count: $(ls dist/*.whl | wc -l)"
+        echo "  Wheel count: $WHEEL_COUNT"
+        echo "  Package name: coldpack"
+        echo "  Release notes: $(if [[ "$GIT_TAG" =~ \.(dev|a) ]]; then echo "Generated automatically"; else echo "From release-drafter"; fi)"
+        echo ""
+        echo "📦 Final artifact list:"
         ls -la dist/
 
     - name: Publish to PyPI
@@ -253,13 +548,23 @@ jobs:
 
         if [ -n "$LAST_TAG" ]; then
           # Generate categorized changelog based on conventional commits
-          echo "## What's Changed" > release_notes.md
-          echo "" >> release_notes.md
+          # Initialize release notes (using variable instead of temp file)
+          RELEASE_NOTES="## What's Changed"$'\n'
 
-          # Get all commits since last tag
+          # Get all commits since last tag - preserve original format with hash
           COMMITS=$(git log --format="%H|%s" --no-merges ${LAST_TAG}..HEAD)
 
-          # Initialize category flags
+          # Initialize commit collections (replace temp files with variables)
+          FEATURES=""
+          FIXES=""
+          DOCS=""
+          PERF=""
+          CHORES=""
+          TESTS=""
+          CI=""
+          OTHER=""
+
+          # Initialize category flags (preserve original logic)
           HAS_FEATURES=false
           HAS_FIXES=false
           HAS_DOCS=false
@@ -269,121 +574,80 @@ jobs:
           HAS_CI=false
           HAS_OTHER=false
 
-          # Create temporary files for each category
-          mkdir -p /tmp/changelog
-          > /tmp/changelog/features.md
-          > /tmp/changelog/fixes.md
-          > /tmp/changelog/docs.md
-          > /tmp/changelog/perf.md
-          > /tmp/changelog/chores.md
-          > /tmp/changelog/tests.md
-          > /tmp/changelog/ci.md
-          > /tmp/changelog/other.md
-
-          # Categorize commits
+          # Categorize commits (preserve exact original logic)
           while IFS='|' read -r hash subject; do
             if [[ "$subject" =~ ^feat(\(.+\))?: ]]; then
-              echo "- $subject" >> /tmp/changelog/features.md
+              FEATURES+="- $subject"$'\n'
               HAS_FEATURES=true
             elif [[ "$subject" =~ ^fix(\(.+\))?: ]]; then
-              echo "- $subject" >> /tmp/changelog/fixes.md
+              FIXES+="- $subject"$'\n'
               HAS_FIXES=true
             elif [[ "$subject" =~ ^docs(\(.+\))?: ]]; then
-              echo "- $subject" >> /tmp/changelog/docs.md
+              DOCS+="- $subject"$'\n'
               HAS_DOCS=true
             elif [[ "$subject" =~ ^perf(\(.+\))?: ]]; then
-              echo "- $subject" >> /tmp/changelog/perf.md
+              PERF+="- $subject"$'\n'
               HAS_PERF=true
             elif [[ "$subject" =~ ^(chore|refactor|style)(\(.+\))?: ]]; then
-              echo "- $subject" >> /tmp/changelog/chores.md
+              CHORES+="- $subject"$'\n'
               HAS_CHORES=true
             elif [[ "$subject" =~ ^test(\(.+\))?: ]]; then
-              echo "- $subject" >> /tmp/changelog/tests.md
+              TESTS+="- $subject"$'\n'
               HAS_TESTS=true
             elif [[ "$subject" =~ ^ci(\(.+\))?: ]]; then
-              echo "- $subject" >> /tmp/changelog/ci.md
+              CI+="- $subject"$'\n'
               HAS_CI=true
             else
-              echo "- $subject" >> /tmp/changelog/other.md
+              OTHER+="- $subject"$'\n'
               HAS_OTHER=true
             fi
           done <<< "$COMMITS"
 
-          # Build categorized changelog
+          # Build categorized changelog (preserve exact original order and format)
           if [ "$HAS_FEATURES" = true ]; then
-            echo "### 🚀 Features" >> release_notes.md
-            echo "" >> release_notes.md
-            cat /tmp/changelog/features.md >> release_notes.md
-            echo "" >> release_notes.md
+            RELEASE_NOTES+=$'\n'"### 🚀 Features"$'\n\n'"$FEATURES"$'\n'
           fi
 
           if [ "$HAS_FIXES" = true ]; then
-            echo "### 🐛 Bug Fixes" >> release_notes.md
-            echo "" >> release_notes.md
-            cat /tmp/changelog/fixes.md >> release_notes.md
-            echo "" >> release_notes.md
+            RELEASE_NOTES+=$'\n'"### 🐛 Bug Fixes"$'\n\n'"$FIXES"$'\n'
           fi
 
           if [ "$HAS_DOCS" = true ]; then
-            echo "### 📚 Documentation" >> release_notes.md
-            echo "" >> release_notes.md
-            cat /tmp/changelog/docs.md >> release_notes.md
-            echo "" >> release_notes.md
+            RELEASE_NOTES+=$'\n'"### 📚 Documentation"$'\n\n'"$DOCS"$'\n'
           fi
 
           if [ "$HAS_PERF" = true ]; then
-            echo "### ⚡ Performance" >> release_notes.md
-            echo "" >> release_notes.md
-            cat /tmp/changelog/perf.md >> release_notes.md
-            echo "" >> release_notes.md
+            RELEASE_NOTES+=$'\n'"### ⚡ Performance"$'\n\n'"$PERF"$'\n'
           fi
 
           if [ "$HAS_CHORES" = true ]; then
-            echo "### 🔧 Maintenance" >> release_notes.md
-            echo "" >> release_notes.md
-            cat /tmp/changelog/chores.md >> release_notes.md
-            echo "" >> release_notes.md
+            RELEASE_NOTES+=$'\n'"### 🔧 Maintenance"$'\n\n'"$CHORES"$'\n'
           fi
 
           if [ "$HAS_TESTS" = true ]; then
-            echo "### 🧪 Testing" >> release_notes.md
-            echo "" >> release_notes.md
-            cat /tmp/changelog/tests.md >> release_notes.md
-            echo "" >> release_notes.md
+            RELEASE_NOTES+=$'\n'"### 🧪 Testing"$'\n\n'"$TESTS"$'\n'
           fi
 
           if [ "$HAS_CI" = true ]; then
-            echo "### 🔄 CI/CD" >> release_notes.md
-            echo "" >> release_notes.md
-            cat /tmp/changelog/ci.md >> release_notes.md
-            echo "" >> release_notes.md
+            RELEASE_NOTES+=$'\n'"### 🔄 CI/CD"$'\n\n'"$CI"$'\n'
           fi
 
           if [ "$HAS_OTHER" = true ]; then
-            echo "### Other Changes" >> release_notes.md
-            echo "" >> release_notes.md
-            cat /tmp/changelog/other.md >> release_notes.md
-            echo "" >> release_notes.md
+            RELEASE_NOTES+=$'\n'"### Other Changes"$'\n\n'"$OTHER"$'\n'
           fi
 
-          # Clean up temporary files
-          rm -rf /tmp/changelog
-
-          echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${LAST_TAG}...${{ github.ref_name }}" >> release_notes.md
+          RELEASE_NOTES+="**Full Changelog**: https://github.com/${{ github.repository }}/compare/${LAST_TAG}...${{ github.ref_name }}"
         else
-          echo "## What's Changed" > release_notes.md
-          echo "" >> release_notes.md
-          echo "### 🚀 Features" >> release_notes.md
-          echo "" >> release_notes.md
-          echo "- Initial development release" >> release_notes.md
-          echo "" >> release_notes.md
-          echo "**Full Changelog**: https://github.com/${{ github.repository }}/commits/${{ github.ref_name }}" >> release_notes.md
+          # Initial release case - preserve exact original format
+          RELEASE_NOTES="## What's Changed"$'\n\n'"### 🚀 Features"$'\n\n'"- Initial development release"$'\n\n'"**Full Changelog**: https://github.com/${{ github.repository }}/commits/${{ github.ref_name }}"
         fi
 
-        # Set output
-        echo "notes<<EOF" >> $GITHUB_OUTPUT
-        cat release_notes.md >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
+        # Set output (preserve original output method but eliminate temp file)
+        {
+          echo "notes<<EOF"
+          echo "$RELEASE_NOTES"
+          echo "EOF"
+        } >> $GITHUB_OUTPUT
 
     - name: Create GitHub Release (Dev/Alpha)
       uses: ncipollo/release-action@v1
