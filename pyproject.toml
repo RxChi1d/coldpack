@@ -106,6 +106,8 @@ warn_unused_ignores = true
 warn_no_return = true
 warn_unreachable = true
 strict_equality = true
+explicit_package_bases = true
+namespace_packages = true
 
 [[tool.mypy.overrides]]
 module = "tests.*"
@@ -144,6 +146,8 @@ dev = [
     "pre-commit>=4.2.0",
     "hatchling>=1.27.0",
     "hatch-vcs>=0.5.0",
+    "bandit[toml]>=1.8.6",
+    "safety>=3.6.0",
 ]
 
 [tool.hatch.version]

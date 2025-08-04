@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Any, Callable, Optional, Union
 
-import py7zz  # type: ignore
+import py7zz
 from loguru import logger
 
 from ..config.settings import SevenZipSettings

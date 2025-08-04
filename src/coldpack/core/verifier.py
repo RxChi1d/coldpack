@@ -296,7 +296,7 @@ class ArchiveVerifier:
             logger.debug(f"Checking 7z integrity: {archive_obj.name}")
 
             # Import py7zz for 7z operations
-            import py7zz  # type: ignore
+            import py7zz
 
             # Use py7zz test_archive function to verify integrity
             is_valid = py7zz.test_archive(str(archive_obj))
