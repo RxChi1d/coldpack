@@ -138,6 +138,7 @@ class SafeConsole:
                 test_chars.encode(sys.stdout.encoding)
                 return True
         except (UnicodeEncodeError, LookupError, AttributeError):
+            # Encoding test failed, fall back to other detection methods
             pass
 
         # Method 2: Modern terminal detection
