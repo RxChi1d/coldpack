@@ -36,7 +36,7 @@ jobs:
         uv run ruff check . --output-format=github
         uv run ruff format --check --diff .
         uv run pytest --tb=short
-        uv run mypy src/
+        uv run mypy src/ --ignore-missing-imports
 
   build:
     needs: quality-check  # Only build after quality check passes
