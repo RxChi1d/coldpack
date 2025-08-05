@@ -195,7 +195,7 @@ class ArchiveVerifier:
                         logger.success(f"{algorithm.upper()} hash verification passed")
                         results.append(
                             VerificationResult(
-                                f"{algorithm}_hash",
+                                algorithm,
                                 True,
                                 f"{algorithm.upper()} hash verification passed",
                             )
@@ -204,7 +204,7 @@ class ArchiveVerifier:
                         logger.error(f"{algorithm.upper()} hash verification failed")
                         results.append(
                             VerificationResult(
-                                f"{algorithm}_hash",
+                                algorithm,
                                 False,
                                 f"{algorithm.upper()} hash verification failed",
                             )
@@ -214,7 +214,7 @@ class ArchiveVerifier:
                     logger.error(f"{algorithm.upper()} hash verification failed: {e}")
                     results.append(
                         VerificationResult(
-                            f"{algorithm}_hash",
+                            algorithm,
                             False,
                             f"{algorithm.upper()} verification error: {e}",
                         )
@@ -295,41 +295,24 @@ class ArchiveVerifier:
         try:
             logger.debug(f"Checking 7z integrity: {archive_obj.name}")
 
-            # Import py7zz for 7z operations
-            import py7zz
+            # Use validate_7z_archive function from utils
+            from ..utils.sevenzip import validate_7z_archive
 
-            # Use py7zz test_archive function to verify integrity
-            is_valid = py7zz.test_archive(str(archive_obj))
+            is_valid = validate_7z_archive(str(archive_obj))
 
             if is_valid:
-                logger.success("7z integrity check passed")
-                return VerificationResult(
-                    "7z_integrity", True, "7z integrity check passed"
-                )
+                logger.success("7z integrity verified")
+                return VerificationResult("7z_integrity", True, "7z integrity verified")
             else:
                 return VerificationResult(
                     "7z_integrity", False, "7z integrity check failed"
                 )
 
-        except ImportError:
-            return VerificationResult(
-                "7z_integrity", False, "py7zz library not available for 7z verification"
-            )
-        except py7zz.FileNotFoundError:
+        except FileNotFoundError:
             return VerificationResult("7z_integrity", False, "Archive file not found")
-        except py7zz.CorruptedArchiveError:
-            return VerificationResult(
-                "7z_integrity", False, "Archive is corrupted or damaged"
-            )
-        except py7zz.UnsupportedFormatError:
-            return VerificationResult(
-                "7z_integrity", False, "Unsupported archive format"
-            )
-        except py7zz.Py7zzError as e:
-            return VerificationResult("7z_integrity", False, f"py7zz error: {e}")
         except Exception as e:
             return VerificationResult(
-                "7z_integrity", False, f"Unexpected verification error: {e}"
+                "7z_integrity", False, f"7z integrity check error: {str(e)}"
             )
 
     def get_verification_summary(self, results: list[VerificationResult]) -> dict:
