@@ -78,8 +78,11 @@ cpack list ~/cold-storage/documents.7z --filter "*.pdf" --limit 10
 ### Advanced Usage
 
 ```bash
-# Custom compression levels (0-9)
-cpack create large-dataset/ --level 9 --dict 512m --output-dir ~/archives
+# Custom compression levels (0-9) with memory limit
+cpack create large-dataset/ --level 9 --dict 512m --memory-limit 2g --output-dir ~/archives
+
+# Memory-constrained compression for limited systems
+cpack create documents/ --memory-limit 512m --output-dir ~/archives
 
 # Pre-verification before extraction
 cpack extract suspicious-archive.7z --verify --output-dir ~/safe-extraction

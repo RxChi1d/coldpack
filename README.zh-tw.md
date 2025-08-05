@@ -78,8 +78,11 @@ cpack list ~/cold-storage/documents.7z --filter "*.pdf" --limit 10
 ### 進階使用
 
 ```bash
-# 自訂壓縮等級（0-9）
-cpack create large-dataset/ --level 9 --dict 512m --output-dir ~/archives
+# 自訂壓縮等級（0-9）並設定記憶體限制
+cpack create large-dataset/ --level 9 --dict 512m --memory-limit 2g --output-dir ~/archives
+
+# 記憶體受限系統的壓縮
+cpack create documents/ --memory-limit 512m --output-dir ~/archives
 
 # 解壓縮前預驗證
 cpack extract suspicious-archive.7z --verify --output-dir ~/safe-extraction

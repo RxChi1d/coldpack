@@ -31,9 +31,12 @@ class SevenZipCompressor:
             settings: 7z compression settings
         """
         self.settings = settings or SevenZipSettings()
-        logger.debug(
-            f"7z compressor initialized with settings: level={self.settings.level}, dict={self.settings.dictionary_size}, threads={self.settings.threads}"
-        )
+
+        # Display initialization settings including memory limit if set
+        init_settings = f"level={self.settings.level}, dict={self.settings.dictionary_size}, threads={self.settings.threads}"
+        if self.settings.memory_limit:
+            init_settings += f", memory={self.settings.memory_limit}"
+        logger.debug(f"7z compressor initialized with settings: {init_settings}")
 
     def compress_directory(
         self,
@@ -65,20 +68,19 @@ class SevenZipCompressor:
         archive_obj.parent.mkdir(parents=True, exist_ok=True)
 
         logger.debug(f"Compressing directory: {source_path.name} → {archive_obj.name}")
-        logger.debug(
-            f"7z settings: level={self.settings.level}, dict={self.settings.dictionary_size}, threads={self.settings.threads}"
-        )
+        # Display settings info including memory limit if set
+        settings_info = f"level={self.settings.level}, dict={self.settings.dictionary_size}, threads={self.settings.threads}"
+        if self.settings.memory_limit:
+            settings_info += f", memory={self.settings.memory_limit}"
+        logger.debug(f"7z settings: {settings_info}")
 
         try:
-            # Create detailed configuration from settings instead of using preset
-            config = py7zz.Config(
-                level=self.settings.level,
-                dictionary_size=self.settings.dictionary_size,
-                threads=self.settings.threads,
-                compression=self.settings.method.lower(),
-                solid=self.settings.solid,
-                auto_compression=False,  # Disable auto compression to use our specified method
-            )
+            # Create configuration from settings using to_py7zz_config method
+            config_dict = self.settings.to_py7zz_config()
+            # Disable auto_compression to use our specified method
+            config_dict["auto_compression"] = False
+
+            config = py7zz.Config(**config_dict)
 
             # Use SevenZipFile with detailed config for precise control
             with py7zz.SevenZipFile(str(archive_obj), "w", config=config) as sz:
@@ -137,15 +139,12 @@ class SevenZipCompressor:
         )
 
         try:
-            # Create detailed configuration from settings instead of using preset
-            config = py7zz.Config(
-                level=self.settings.level,
-                dictionary_size=self.settings.dictionary_size,
-                threads=self.settings.threads,
-                compression=self.settings.method.lower(),
-                solid=self.settings.solid,
-                auto_compression=False,  # Disable auto compression to use our specified method
-            )
+            # Create configuration from settings using to_py7zz_config method
+            config_dict = self.settings.to_py7zz_config()
+            # Disable auto_compression to use our specified method
+            config_dict["auto_compression"] = False
+
+            config = py7zz.Config(**config_dict)
 
             # Use SevenZipFile with detailed config for precise control
             with py7zz.SevenZipFile(str(archive_obj), "w", config=config) as sz:
@@ -245,7 +244,9 @@ class SevenZipCompressor:
 
 
 def optimize_7z_compression_settings(
-    source_size: int, threads: Union[int, bool] = True
+    source_size: int,
+    threads: Union[int, bool] = True,
+    memory_limit: Optional[str] = None,
 ) -> SevenZipSettings:
     """Optimize 7z compression settings based on precise source directory size.
 
@@ -261,6 +262,7 @@ def optimize_7z_compression_settings(
     Args:
         source_size: Size of source directory in bytes
         threads: Thread configuration (True=all cores, False=single-thread, int=specific count)
+        memory_limit: Memory limit for compression (e.g., '1g', '512m', '256k')
 
     Returns:
         Optimized SevenZipSettings based on precise size thresholds
@@ -283,6 +285,7 @@ def optimize_7z_compression_settings(
             threads=threads,
             solid=True,
             method="LZMA2",
+            memory_limit=memory_limit,
         )
         logger.debug("Using tiny file optimization (< 256 KiB)")
 
@@ -294,6 +297,7 @@ def optimize_7z_compression_settings(
             threads=threads,
             solid=True,
             method="LZMA2",
+            memory_limit=memory_limit,
         )
         logger.debug("Using small file optimization (256 KiB – 1 MiB)")
 
@@ -305,6 +309,7 @@ def optimize_7z_compression_settings(
             threads=threads,
             solid=True,
             method="LZMA2",
+            memory_limit=memory_limit,
         )
         logger.debug("Using small-medium file optimization (1 – 8 MiB)")
 
@@ -316,6 +321,7 @@ def optimize_7z_compression_settings(
             threads=threads,
             solid=True,
             method="LZMA2",
+            memory_limit=memory_limit,
         )
         logger.debug("Using medium file optimization (8 – 64 MiB)")
 
@@ -327,6 +333,7 @@ def optimize_7z_compression_settings(
             threads=threads,
             solid=True,
             method="LZMA2",
+            memory_limit=memory_limit,
         )
         logger.debug("Using large file optimization (64 – 512 MiB)")
 
@@ -338,6 +345,7 @@ def optimize_7z_compression_settings(
             threads=threads,
             solid=True,
             method="LZMA2",
+            memory_limit=memory_limit,
         )
         logger.debug("Using very large file optimization (512 MiB – 2 GiB)")
 
@@ -349,6 +357,7 @@ def optimize_7z_compression_settings(
             threads=threads,
             solid=True,
             method="LZMA2",
+            memory_limit=memory_limit,
         )
         logger.debug("Using huge file optimization (> 2 GiB)")
 

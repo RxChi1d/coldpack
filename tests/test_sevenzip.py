@@ -101,6 +101,40 @@ class TestSevenZipSettings:
         with pytest.raises(ValueError):
             SevenZipSettings(method="INVALID")
 
+    def test_memory_limit_validation(self):
+        """Test memory_limit parameter validation."""
+        # Valid memory limits
+        settings = SevenZipSettings(memory_limit="1g")
+        assert settings.memory_limit == "1g"
+
+        settings = SevenZipSettings(memory_limit="512m")
+        assert settings.memory_limit == "512m"
+
+        settings = SevenZipSettings(memory_limit="256k")
+        assert settings.memory_limit == "256k"
+
+        settings = SevenZipSettings(memory_limit="1024")
+        assert settings.memory_limit == "1024"
+
+        # None should be allowed
+        settings = SevenZipSettings(memory_limit=None)
+        assert settings.memory_limit is None
+
+        # Invalid formats should raise error
+        with pytest.raises(ValueError, match="memory_limit must be in format"):
+            SevenZipSettings(memory_limit="invalid")
+
+        with pytest.raises(ValueError, match="memory_limit must be in format"):
+            SevenZipSettings(memory_limit="1x")
+
+        # Zero or negative should raise error
+        with pytest.raises(ValueError, match="memory_limit must be a positive number"):
+            SevenZipSettings(memory_limit="0m")
+
+        # Exceeding limits should raise error
+        with pytest.raises(ValueError, match="memory_limit cannot exceed 64GB"):
+            SevenZipSettings(memory_limit="65g")
+
     def test_to_py7zz_config(self):
         """Test conversion to py7zz config dictionary."""
         settings = SevenZipSettings(
@@ -111,6 +145,49 @@ class TestSevenZipSettings:
         expected = {
             "level": 7,
             "compression": "lzma",  # Changed from "method" to "compression" and lowercase
+            "dictionary_size": "64m",
+            "solid": False,
+            "threads": 4,
+        }
+        assert config == expected
+
+    def test_to_py7zz_config_with_memory_limit(self):
+        """Test conversion to py7zz config dictionary with memory_limit."""
+        settings = SevenZipSettings(
+            level=7,
+            dictionary_size="64m",
+            threads=4,
+            solid=False,
+            method="LZMA",
+            memory_limit="1g",
+        )
+        config = settings.to_py7zz_config()
+
+        expected = {
+            "level": 7,
+            "compression": "lzma",
+            "dictionary_size": "64m",
+            "solid": False,
+            "threads": 4,
+            "memory_limit": "1g",
+        }
+        assert config == expected
+
+    def test_to_py7zz_config_without_memory_limit(self):
+        """Test conversion to py7zz config dictionary without memory_limit."""
+        settings = SevenZipSettings(
+            level=7,
+            dictionary_size="64m",
+            threads=4,
+            solid=False,
+            method="LZMA",
+            memory_limit=None,
+        )
+        config = settings.to_py7zz_config()
+
+        expected = {
+            "level": 7,
+            "compression": "lzma",
             "dictionary_size": "64m",
             "solid": False,
             "threads": 4,
@@ -402,6 +479,27 @@ class TestOptimization:
         # Test with auto-detect threads (default)
         settings = optimize_7z_compression_settings(1024 * 1024)
         assert settings.threads is True  # All cores
+
+    def test_optimize_with_memory_limit(self):
+        """Test optimization with memory_limit parameter."""
+        # Test with memory limit
+        settings = optimize_7z_compression_settings(1024 * 1024, memory_limit="512m")
+        assert settings.level == 5  # Small-medium range
+        assert settings.dictionary_size == "4m"
+        assert settings.memory_limit == "512m"
+
+        # Test without memory limit
+        settings = optimize_7z_compression_settings(1024 * 1024)
+        assert settings.memory_limit is None
+
+        # Test with all parameters
+        settings = optimize_7z_compression_settings(
+            1024 * 1024, threads=2, memory_limit="1g"
+        )
+        assert settings.level == 5
+        assert settings.dictionary_size == "4m"
+        assert settings.threads == 2
+        assert settings.memory_limit == "1g"
 
 
 class TestUtilityFunctions:
