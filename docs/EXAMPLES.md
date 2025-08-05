@@ -29,6 +29,10 @@ echo "Annual report data" > sample_documents/reports/annual.txt
 cpack create sample_documents/
 # Output: Creates sample_documents/sample_documents.7z with full verification
 
+# Create archive with memory limit for resource-constrained systems
+cpack create sample_documents/ --memory-limit 512m
+# Output: Creates archive with 512MB memory limit
+
 # Verify the archive integrity
 cpack verify sample_documents/sample_documents.7z
 # Output: ✓ 4-layer verification complete

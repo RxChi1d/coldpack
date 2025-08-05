@@ -31,6 +31,7 @@ cpack create [OPTIONS] SOURCE
 ```bash
 --level, -l LEVEL               # Compression level 0-9 (default: dynamic)
 --dict, -d SIZE                 # Dictionary size: 128k-512m (default: dynamic)
+--memory-limit, -m SIZE         # Memory limit: 1g, 512m, 256k (default: no limit)
 --threads, -t COUNT             # Thread count (default: all cores)
 --output-dir, -o DIRECTORY      # Output directory (default: current)
 --name, -n NAME                 # Archive name (default: source name)
@@ -75,8 +76,14 @@ cpack create /path/to/source --output-dir /backup --name critical-data
 # Maximum compression for archival storage
 cpack create large-dataset/ --level 9 --dict 512m
 
+# Memory-constrained compression for limited systems
+cpack create documents/ --memory-limit 512m
+
+# High-performance compression with memory limit
+cpack create large-dataset/ --level 9 --dict 512m --memory-limit 2g
+
 # Fast compression for temporary archives
-cpack create temp-files/ --level 3 --dict 1m
+cpack create temp-files/ --level 3 --dict 1m --memory-limit 256m
 
 # Multi-format input processing
 cpack create existing-archive.zip --output-dir /cold-storage
@@ -456,6 +463,7 @@ coldpack supports configuration through environment variables and configuration 
 ```bash
 COLDPACK_DEFAULT_OUTPUT=/backup        # Default output directory
 COLDPACK_COMPRESSION_LEVEL=7           # Default compression level (0-9)
+COLDPACK_MEMORY_LIMIT=1g               # Default memory limit
 COLDPACK_THREADS=4                     # Thread count (default: all cores)
 ```
 
@@ -482,16 +490,16 @@ For comprehensive configuration options, see [Architecture Guide](ARCHITECTURE.m
 ### Production Archival
 ```bash
 # Maximum compression for long-term storage
-cpack create critical-data/ --level 9 --dict 512m --output-dir /archive
+cpack create critical-data/ --level 9 --dict 512m --memory-limit 4g --output-dir /archive
 
-# Backup with high PAR2 redundancy
-cpack create database-backup/ --par2-redundancy 15 --output-dir /backup
+# Memory-efficient backup with high PAR2 redundancy
+cpack create database-backup/ --par2-redundancy 15 --memory-limit 1g --output-dir /backup
 ```
 
 ### Development Workflows
 ```bash
-# Fast compression for CI/CD
-cpack create build-artifacts/ --level 3 --dict 4m --no-verify-par2
+# Fast compression for CI/CD with memory constraints
+cpack create build-artifacts/ --level 3 --dict 4m --memory-limit 512m --no-verify-par2
 
 # Verification in automated testing
 cpack verify /backup/*.7z --quiet && echo "All backups verified"

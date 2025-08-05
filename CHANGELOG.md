@@ -7,16 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- **Compression Configuration**: Enhanced SevenZipSettings with memory_limit support and improved to_py7zz_config() method
+
+## [0.3.1] - 2025-08-05
+
 ### Added
+- **Memory Limit Control**: New `--memory-limit` parameter for controlling py7zz memory usage during compression (supports formats like '1g', '512m', '256k')
 - **SafeConsole System**: Intelligent Unicode-safe console wrapper with automatic terminal capability detection and fallback character mapping for improved cross-platform Unicode support
 
 ### Changed
 - **Multicore Performance**: Upgraded py7zz to v1.0.1 with improved multicore thread handling (threads=0 now correctly uses all CPU cores)
 - **Console Architecture**: Refactored console output system with centralized SafeConsole wrapper for better Unicode compatibility and maintainability
-- **Build System Reliability**: Enhanced build and release process for improved stability and error prevention
+- **Build System Reliability**: Enhanced build and release process with CI status verification, security enhancements, and comprehensive error handling
+- **Development Workflow**: Added local CI simulation scripts (quick-check.sh, ci-local.sh) for faster development feedback and pre-push validation
 
 ### Fixed
 - **Thread Parameter Handling**: Fixed py7zz multicore settings where threads=0 was incorrectly treated as single-thread instead of all cores
+- **Version Validation**: Corrected regex patterns to strictly enforce PEP 440 compliant formats (`v1.0.0rc1`) and removed support for non-standard formats (`v1.0.0.rc1`)
 - **CI Compatibility**: Improved test module imports and mypy configuration for better CI environment compatibility
 
 ## [0.3.0] - 2025-08-03
@@ -105,7 +112,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Core Functionality**: Initial implementation of multi-format archive processing
 - **Verification System**: Basic integrity checking and PAR2 recovery infrastructure
 
-[Unreleased]: https://github.com/RxChi1d/coldpack/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/RxChi1d/coldpack/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/RxChi1d/coldpack/releases/tag/v0.3.1
 [0.3.0]: https://github.com/RxChi1d/coldpack/releases/tag/v0.3.0
 [0.2.0]: https://github.com/RxChi1d/coldpack/releases/tag/v0.2.0
 [0.2.0a2]: https://github.com/RxChi1d/coldpack/releases/tag/v0.2.0a2
