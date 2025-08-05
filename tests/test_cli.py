@@ -259,6 +259,172 @@ class TestCreateCommand:
                 assert result.exit_code == 0
                 assert "PAR2 tools not found" in result.stdout
 
+    @patch("coldpack.cli.ColdStorageArchiver")
+    @patch("coldpack.cli.check_par2_availability")
+    def test_create_with_memory_limit(
+        self, mock_par2_check, mock_archiver, runner, temp_source_dir
+    ):
+        """Test create command with memory_limit parameter."""
+        from coldpack.core.archiver import ArchiveResult
+
+        # Mock PAR2 as available
+        mock_par2_check.return_value = True
+
+        # Mock archiver
+        mock_archiver_instance = MagicMock()
+        mock_archiver.return_value = mock_archiver_instance
+
+        # Create a successful ArchiveResult
+        success_result = ArchiveResult(
+            success=True, message="Archive created successfully", created_files=[]
+        )
+        mock_archiver_instance.create_archive.return_value = success_result
+
+        with tempfile.TemporaryDirectory() as output_dir:
+            result = runner.invoke(
+                app,
+                [
+                    "create",
+                    str(temp_source_dir),
+                    "--output-dir",
+                    output_dir,
+                    "--memory-limit",
+                    "512m",
+                ],
+            )
+
+            # Should succeed
+            assert result.exit_code == 0
+            mock_archiver_instance.create_archive.assert_called_once()
+
+    @patch("coldpack.cli.ColdStorageArchiver")
+    @patch("coldpack.cli.check_par2_availability")
+    def test_create_with_memory_limit_and_compression_params(
+        self, mock_par2_check, mock_archiver, runner, temp_source_dir
+    ):
+        """Test create command with memory_limit and other compression parameters."""
+        from coldpack.core.archiver import ArchiveResult
+
+        # Mock PAR2 as available
+        mock_par2_check.return_value = True
+
+        # Mock archiver
+        mock_archiver_instance = MagicMock()
+        mock_archiver.return_value = mock_archiver_instance
+
+        # Create a successful ArchiveResult
+        success_result = ArchiveResult(
+            success=True, message="Archive created successfully", created_files=[]
+        )
+        mock_archiver_instance.create_archive.return_value = success_result
+
+        with tempfile.TemporaryDirectory() as output_dir:
+            result = runner.invoke(
+                app,
+                [
+                    "create",
+                    str(temp_source_dir),
+                    "--output-dir",
+                    output_dir,
+                    "--level",
+                    "9",
+                    "--dict",
+                    "256m",
+                    "--memory-limit",
+                    "2g",
+                    "--threads",
+                    "8",
+                ],
+            )
+
+            # Should succeed
+            assert result.exit_code == 0
+            mock_archiver_instance.create_archive.assert_called_once()
+
+    def test_create_invalid_memory_limit_format(self, runner, temp_source_dir):
+        """Test create with invalid memory_limit format."""
+        result = runner.invoke(
+            app, ["create", str(temp_source_dir), "--memory-limit", "invalid"]
+        )
+        assert result.exit_code == ExitCodes.INVALID_FORMAT
+        # Remove ANSI color codes for assertion
+        clean_output = (
+            result.stdout.replace("\x1b[31m", "")
+            .replace("\x1b[0m", "")
+            .replace("\x1b[1;31m", "")
+        )
+        assert "memory-limit must be in format" in clean_output
+
+    def test_create_invalid_memory_limit_zero(self, runner, temp_source_dir):
+        """Test create with zero memory_limit."""
+        result = runner.invoke(
+            app, ["create", str(temp_source_dir), "--memory-limit", "0m"]
+        )
+        assert result.exit_code == ExitCodes.INVALID_FORMAT
+        # Remove ANSI color codes for assertion
+        clean_output = (
+            result.stdout.replace("\x1b[31m", "")
+            .replace("\x1b[0m", "")
+            .replace("\x1b[1;31m", "")
+        )
+        assert "memory-limit must be a positive number" in clean_output
+
+    def test_create_invalid_memory_limit_exceeds_64gb(self, runner, temp_source_dir):
+        """Test create with memory_limit exceeding 64GB."""
+        result = runner.invoke(
+            app, ["create", str(temp_source_dir), "--memory-limit", "65g"]
+        )
+        assert result.exit_code == ExitCodes.INVALID_FORMAT
+        # Remove ANSI color codes for assertion
+        clean_output = (
+            result.stdout.replace("\x1b[31m", "")
+            .replace("\x1b[0m", "")
+            .replace("\x1b[1;31m", "")
+        )
+        assert "memory-limit cannot exceed 64GB" in clean_output
+
+    def test_create_memory_limit_valid_formats(self, runner, temp_source_dir):
+        """Test create with various valid memory_limit formats."""
+        from coldpack.core.archiver import ArchiveResult
+
+        valid_formats = ["1g", "512m", "256k", "1024"]
+
+        with (
+            patch("coldpack.cli.ColdStorageArchiver") as mock_archiver,
+            patch("coldpack.cli.check_par2_availability") as mock_par2_check,
+        ):
+            # Mock PAR2 as available
+            mock_par2_check.return_value = True
+
+            # Mock archiver
+            mock_archiver_instance = MagicMock()
+            mock_archiver.return_value = mock_archiver_instance
+
+            # Create a successful ArchiveResult
+            success_result = ArchiveResult(
+                success=True,
+                message="Archive created successfully",
+                created_files=[],
+            )
+            mock_archiver_instance.create_archive.return_value = success_result
+
+            for memory_format in valid_formats:
+                with tempfile.TemporaryDirectory() as output_dir:
+                    result = runner.invoke(
+                        app,
+                        [
+                            "create",
+                            str(temp_source_dir),
+                            "--output-dir",
+                            output_dir,
+                            "--memory-limit",
+                            memory_format,
+                        ],
+                    )
+
+                    # Should succeed for all valid formats
+                    assert result.exit_code == 0, f"Failed for format: {memory_format}"
+
 
 class TestExtractCommand:
     """Test extract command functionality."""

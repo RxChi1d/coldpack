@@ -389,7 +389,7 @@ class TestArchiveVerifier:
 
     def test_discover_hash_files_no_files(self, verifier, temp_archive):
         """Test hash file discovery with no hash files."""
-        hash_files = verifier._discover_hash_files(temp_archive)
+        hash_files = verifier._discover_hash_files(temp_archive, set())
 
         # Should return empty dict when no hash files exist
         assert hash_files == {}
@@ -406,7 +406,7 @@ class TestArchiveVerifier:
             sha256_file.write_text("dummy hash")
             blake3_file.write_text("dummy hash")
 
-            hash_files = verifier._discover_hash_files(archive_path)
+            hash_files = verifier._discover_hash_files(archive_path, set())
 
             assert "sha256" in hash_files
             assert "blake3" in hash_files
@@ -415,7 +415,7 @@ class TestArchiveVerifier:
 
     def test_discover_par2_file_no_file(self, verifier, temp_archive):
         """Test PAR2 file discovery with no PAR2 file."""
-        par2_file = verifier._discover_par2_file(temp_archive)
+        par2_file = verifier._discover_par2_file(temp_archive, set())
 
         # Should return None when no PAR2 file exists
         assert par2_file is None
@@ -430,7 +430,7 @@ class TestArchiveVerifier:
             par2_file = Path(temp_dir) / "test.par2"
             par2_file.write_text("dummy par2 content")
 
-            discovered_par2 = verifier._discover_par2_file(archive_path)
+            discovered_par2 = verifier._discover_par2_file(archive_path, set())
 
             assert discovered_par2 == par2_file
 
