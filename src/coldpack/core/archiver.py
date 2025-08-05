@@ -432,7 +432,9 @@ class ColdStorageArchiver:
         else:
             # Optimize 7z compression settings based on source size
             optimized_settings = optimize_7z_compression_settings(
-                source_size, self.sevenzip_settings.threads
+                source_size,
+                self.sevenzip_settings.threads,
+                self.sevenzip_settings.memory_limit,
             )
             # Note: the optimize function already logs the optimized settings
 

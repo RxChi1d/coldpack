@@ -67,6 +67,10 @@ class SevenZipSettings(BaseModel):
     )
     solid: bool = Field(default=True, description="Enable solid compression")
     method: str = Field(default="LZMA2", description="Compression method")
+    memory_limit: Optional[str] = Field(
+        default=None,
+        description="Memory limit for compression (e.g., '1g', '512m', '256k')",
+    )
     manual_settings: bool = Field(
         default=False,
         description="Whether settings are manually specified (disables dynamic optimization)",
@@ -110,15 +114,57 @@ class SevenZipSettings(BaseModel):
             "threads must be int, bool True (all cores), or bool False (single-thread)"
         )
 
+    @field_validator("memory_limit")
+    @classmethod
+    def validate_memory_limit(cls, v: Optional[str]) -> Optional[str]:
+        """Validate memory_limit parameter."""
+        if v is None:
+            return v
+
+        import re
+
+        # Accept formats like: 1g, 512m, 256k, 1024 (bytes)
+        pattern = r"^(\d+)([kmg]?)$"
+        match = re.match(pattern, v.lower())
+
+        if not match:
+            raise ValueError(
+                "memory_limit must be in format like '1g', '512m', '256k', or '1024' (for bytes)"
+            )
+
+        number_str, unit = match.groups()
+        number = int(number_str)
+
+        if number <= 0:
+            raise ValueError("memory_limit must be a positive number")
+
+        # Validate reasonable limits
+        if unit == "g" and number > 64:
+            raise ValueError("memory_limit cannot exceed 64GB")
+        elif unit == "m" and number > 65536:
+            raise ValueError("memory_limit cannot exceed 65536MB")
+        elif unit == "k" and number > 67108864:
+            raise ValueError("memory_limit cannot exceed 67108864KB")
+        elif unit == "" and number > 68719476736:
+            raise ValueError("memory_limit cannot exceed 68719476736 bytes (64GB)")
+
+        return v.lower()
+
     def to_py7zz_config(self) -> dict[str, Any]:
         """Convert settings to py7zz Config compatible dictionary."""
-        return {
+        config = {
             "level": self.level,
             "compression": self.method.lower(),  # py7zz uses lowercase compression names
             "dictionary_size": self.dictionary_size,
             "solid": self.solid,
             "threads": self.threads,
         }
+
+        # Add memory_limit only if specified
+        if self.memory_limit is not None:
+            config["memory_limit"] = self.memory_limit
+
+        return config
 
 
 class ArchiveMetadata(BaseModel):

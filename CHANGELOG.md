@@ -8,11 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Memory Limit Control**: New `--memory-limit` parameter for controlling py7zz memory usage during compression (supports formats like '1g', '512m', '256k')
 - **SafeConsole System**: Intelligent Unicode-safe console wrapper with automatic terminal capability detection and fallback character mapping for improved cross-platform Unicode support
 
 ### Changed
 - **Multicore Performance**: Upgraded py7zz to v1.0.1 with improved multicore thread handling (threads=0 now correctly uses all CPU cores)
 - **Console Architecture**: Refactored console output system with centralized SafeConsole wrapper for better Unicode compatibility and maintainability
+- **Compression Configuration**: Enhanced SevenZipSettings with memory_limit support and improved to_py7zz_config() method
 - **Build System Reliability**: Enhanced build and release process for improved stability and error prevention
 
 ### Fixed

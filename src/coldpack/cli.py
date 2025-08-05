@@ -200,6 +200,14 @@ def create(
         show_default="dynamic",
         rich_help_panel="Compression Options",
     ),
+    memory_limit: Optional[str] = typer.Option(
+        None,
+        "--memory-limit",
+        "-m",
+        help="Memory limit for compression (e.g., '1g', '512m', '256k')",
+        show_default="no limit",
+        rich_help_panel="Compression Options",
+    ),
     no_par2: bool = typer.Option(
         False,
         "--no-par2",
@@ -262,6 +270,7 @@ def create(
         threads: Number of threads (0=auto)
         level: 7z compression level (0-9, dynamic optimization if not specified)
         dict_size: 7z dictionary size (128k-512m, dynamic optimization if not specified)
+        memory_limit: Memory limit for compression (e.g., '1g', '512m', '256k')
         no_par2: Skip PAR2 recovery file generation
         no_verify: Skip all integrity verification (overrides individual controls)
         no_verify_7z: Skip 7z integrity verification during archive creation
@@ -295,6 +304,42 @@ def create(
         if dict_size.lower() not in valid_dict_sizes:
             console.print(
                 f"[red]Error: --dict must be one of: {', '.join(sorted(valid_dict_sizes))}[/red]"
+            )
+            raise typer.Exit(ExitCodes.INVALID_FORMAT)
+
+    # Validate memory_limit parameter
+    if memory_limit is not None:
+        import re
+
+        pattern = r"^(\d+)([kmg]?)$"
+        match = re.match(pattern, memory_limit.lower())
+
+        if not match:
+            console.print(
+                "[red]Error: --memory-limit must be in format like '1g', '512m', '256k', or '1024' (for bytes)[/red]"
+            )
+            raise typer.Exit(ExitCodes.INVALID_FORMAT)
+
+        number_str, unit = match.groups()
+        number = int(number_str)
+
+        if number <= 0:
+            console.print("[red]Error: --memory-limit must be a positive number[/red]")
+            raise typer.Exit(ExitCodes.INVALID_FORMAT)
+
+        # Validate reasonable limits
+        if unit == "g" and number > 64:
+            console.print("[red]Error: --memory-limit cannot exceed 64GB[/red]")
+            raise typer.Exit(ExitCodes.INVALID_FORMAT)
+        elif unit == "m" and number > 65536:
+            console.print("[red]Error: --memory-limit cannot exceed 65536MB[/red]")
+            raise typer.Exit(ExitCodes.INVALID_FORMAT)
+        elif unit == "k" and number > 67108864:
+            console.print("[red]Error: --memory-limit cannot exceed 67108864KB[/red]")
+            raise typer.Exit(ExitCodes.INVALID_FORMAT)
+        elif unit == "" and number > 68719476736:
+            console.print(
+                "[red]Error: --memory-limit cannot exceed 68719476736 bytes (64GB)[/red]"
             )
             raise typer.Exit(ExitCodes.INVALID_FORMAT)
 
@@ -375,7 +420,7 @@ def create(
         settings_threads = True if threads == 0 else threads
 
         # Check if manual 7z parameters are provided
-        if level is not None or dict_size is not None:
+        if level is not None or dict_size is not None or memory_limit is not None:
             # Manual configuration - disable dynamic optimization
             manual_level = level if level is not None else 5  # 7z default
             manual_dict = (
@@ -386,11 +431,15 @@ def create(
                 level=manual_level,
                 dictionary_size=manual_dict,
                 threads=settings_threads,
+                memory_limit=memory_limit.lower() if memory_limit is not None else None,
                 manual_settings=True,  # Mark as manual to disable dynamic optimization
             )
-            console.print(
-                f"[cyan]Using manual 7z settings: level={manual_level}, dict={manual_dict}[/cyan]"
-            )
+
+            # Display manual settings
+            settings_info = f"level={manual_level}, dict={manual_dict}"
+            if memory_limit is not None:
+                settings_info += f", memory={memory_limit.lower()}"
+            console.print(f"[cyan]Using manual 7z settings: {settings_info}[/cyan]")
             console.print(
                 "[cyan]Dynamic optimization disabled due to manual parameters[/cyan]"
             )
@@ -401,6 +450,7 @@ def create(
                 level=5,  # Will be overridden
                 dictionary_size="16m",  # Will be overridden
                 threads=settings_threads,
+                memory_limit=None,  # No memory limit for dynamic optimization
             )
             console.print(
                 "[cyan]Using dynamic 7z optimization based on source size[/cyan]"
