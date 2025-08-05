@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2025-08-05
+
 ### Added
 - **SafeConsole System**: Intelligent Unicode-safe console wrapper with automatic terminal capability detection and fallback character mapping for improved cross-platform Unicode support
 
@@ -17,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Thread Parameter Handling**: Fixed py7zz multicore settings where threads=0 was incorrectly treated as single-thread instead of all cores
+- **Version Validation**: Corrected regex patterns to strictly enforce PEP 440 compliant formats (`v1.0.0rc1`) and removed support for non-standard formats (`v1.0.0.rc1`)
 - **CI Compatibility**: Improved test module imports and mypy configuration for better CI environment compatibility
 
 ## [0.3.0] - 2025-08-03
@@ -105,7 +108,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Core Functionality**: Initial implementation of multi-format archive processing
 - **Verification System**: Basic integrity checking and PAR2 recovery infrastructure
 
-[Unreleased]: https://github.com/RxChi1d/coldpack/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/RxChi1d/coldpack/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/RxChi1d/coldpack/releases/tag/v0.3.1
 [0.3.0]: https://github.com/RxChi1d/coldpack/releases/tag/v0.3.0
 [0.2.0]: https://github.com/RxChi1d/coldpack/releases/tag/v0.2.0
 [0.2.0a2]: https://github.com/RxChi1d/coldpack/releases/tag/v0.2.0a2
