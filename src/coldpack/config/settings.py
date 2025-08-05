@@ -330,13 +330,19 @@ class ArchiveMetadata(BaseModel):
             else:
                 threads_serialized = threads_value
 
-            return {
+            sevenzip_dict = {
                 "level": self.sevenzip_settings.level,
                 "dictionary_size": self.sevenzip_settings.dictionary_size,
                 "threads": threads_serialized,
                 "solid": self.sevenzip_settings.solid,
                 "method": self.sevenzip_settings.method,
             }
+
+            # Add memory_limit if specified
+            if self.sevenzip_settings.memory_limit is not None:
+                sevenzip_dict["memory_limit"] = self.sevenzip_settings.memory_limit
+
+            return sevenzip_dict
         return {}
 
     def save_to_toml(self, file_path: Path) -> None:

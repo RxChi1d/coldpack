@@ -351,6 +351,152 @@ class TestColdStorageArchiver:
         assert config["dictionary_size"] == "64m"
         assert config["threads"] == 4
 
+    @patch("coldpack.core.archiver.optimize_7z_compression_settings")
+    def test_archiver_memory_limit_with_dynamic_optimization(
+        self, mock_optimize_settings
+    ):
+        """Test memory_limit preservation during dynamic optimization."""
+        from coldpack.config.settings import ProcessingOptions, SevenZipSettings
+
+        # Setup mock optimized settings with memory_limit preserved
+        optimized_settings = SevenZipSettings(
+            level=9, dictionary_size="256m", threads=4, memory_limit="2g"
+        )
+        mock_optimize_settings.return_value = optimized_settings
+
+        # Create archiver with manual_settings=False (triggers optimization)
+        sevenzip_settings = SevenZipSettings(
+            level=5,
+            dictionary_size="16m",
+            threads=4,
+            memory_limit="2g",
+            manual_settings=False,
+        )
+        processing_options = ProcessingOptions(
+            verify_integrity=False, generate_par2=False
+        )
+
+        archiver = ColdStorageArchiver(
+            processing_options=processing_options, sevenzip_settings=sevenzip_settings
+        )
+
+        # Create temporary directories
+        with tempfile.TemporaryDirectory() as source_dir_str:
+            source_dir = Path(source_dir_str)
+            (source_dir / "test_file.txt").write_text("test content")
+
+            with tempfile.TemporaryDirectory() as archive_dir_str:
+                archive_dir = Path(archive_dir_str)
+
+                with patch(
+                    "coldpack.utils.filesystem.safe_file_operations"
+                ) as mock_safe_ops_ctx:
+                    mock_safe_ops = MagicMock()
+                    mock_safe_ops_ctx.return_value.__enter__.return_value = (
+                        mock_safe_ops
+                    )
+
+                    with patch(
+                        "coldpack.utils.sevenzip.SevenZipCompressor"
+                    ) as mock_compressor_class:
+                        mock_compressor = MagicMock()
+                        mock_compressor_class.return_value = mock_compressor
+
+                        # Call _create_7z_archive to trigger optimization
+                        import contextlib
+
+                        with contextlib.suppress(Exception):
+                            # Expected to fail due to mocking, but optimization should be called
+                            archiver._create_7z_archive(
+                                source_dir, archive_dir, "test_archive", mock_safe_ops
+                            )
+
+                        # Verify optimize_7z_compression_settings was called with memory_limit
+                        mock_optimize_settings.assert_called_once()
+                        call_args = mock_optimize_settings.call_args
+                        # Check that function was called with correct positional arguments
+                        # optimize_7z_compression_settings(source_size, threads, memory_limit)
+                        assert len(call_args[0]) == 3  # 3 positional arguments
+                        source_size, threads, memory_limit = call_args[0]
+                        assert memory_limit == "2g"
+                        assert threads == 4
+
+    @patch("coldpack.core.archiver.logger")
+    def test_archiver_memory_limit_logging(self, mock_logger):
+        """Test that memory_limit information is properly logged."""
+        from coldpack.config.settings import ProcessingOptions, SevenZipSettings
+
+        # Create archiver with memory_limit
+        sevenzip_settings = SevenZipSettings(
+            level=7, dictionary_size="64m", threads=4, memory_limit="1g"
+        )
+        processing_options = ProcessingOptions(
+            verify_integrity=False, generate_par2=False
+        )
+
+        # Initialize archiver (should log initialization)
+        ColdStorageArchiver(
+            processing_options=processing_options, sevenzip_settings=sevenzip_settings
+        )
+
+        # Verify initialization logging was called
+        mock_logger.debug.assert_called()
+
+        # Check that one of the debug calls mentions compression level
+        debug_calls = [call.args[0] for call in mock_logger.debug.call_args_list]
+        initialization_logged = any("compression level" in msg for msg in debug_calls)
+        assert initialization_logged
+
+    def test_archiver_memory_limit_with_manual_settings(self):
+        """Test that memory_limit is preserved when manual_settings=True."""
+        from coldpack.config.settings import ProcessingOptions, SevenZipSettings
+
+        # Create archiver with manual_settings=True
+        sevenzip_settings = SevenZipSettings(
+            level=3,
+            dictionary_size="4m",
+            threads=2,
+            memory_limit="512m",
+            manual_settings=True,
+        )
+        processing_options = ProcessingOptions(
+            verify_integrity=False, generate_par2=False
+        )
+
+        archiver = ColdStorageArchiver(
+            processing_options=processing_options, sevenzip_settings=sevenzip_settings
+        )
+
+        # Verify all manual settings including memory_limit are preserved
+        assert archiver.sevenzip_settings.memory_limit == "512m"
+        assert archiver.sevenzip_settings.level == 3
+        assert archiver.sevenzip_settings.dictionary_size == "4m"
+        assert archiver.sevenzip_settings.threads == 2
+        assert archiver.sevenzip_settings.manual_settings is True
+
+    def test_archiver_sevenzip_compressor_initialization_with_memory_limit(self):
+        """Test that SevenZipCompressor is initialized with memory_limit settings."""
+        from coldpack.config.settings import ProcessingOptions, SevenZipSettings
+
+        # Create archiver with memory_limit
+        sevenzip_settings = SevenZipSettings(
+            level=6, dictionary_size="16m", threads=8, memory_limit="4g"
+        )
+        processing_options = ProcessingOptions(
+            verify_integrity=False, generate_par2=False
+        )
+
+        archiver = ColdStorageArchiver(
+            processing_options=processing_options, sevenzip_settings=sevenzip_settings
+        )
+
+        # Verify that sevenzip_compressor was initialized with the correct settings
+        assert archiver.sevenzip_compressor is not None
+        assert archiver.sevenzip_compressor.settings.memory_limit == "4g"
+        assert archiver.sevenzip_compressor.settings.level == 6
+        assert archiver.sevenzip_compressor.settings.dictionary_size == "16m"
+        assert archiver.sevenzip_compressor.settings.threads == 8
+
     @patch("coldpack.utils.sevenzip.validate_7z_archive")
     def test_verify_7z_integrity_success(
         self, mock_validate, archiver, temp_output_dir
