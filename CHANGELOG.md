@@ -7,7 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- **Compression Configuration**: Enhanced SevenZipSettings with memory_limit support and improved to_py7zz_config() method
+## [0.4.0] - 2025-08-06
+
+### Added
+- **Memory Limit Control**: New `--memory-limit` parameter for `cpack create` command supporting standard formats ('1g', '512m', '256k') to control compression memory usage
+- **Enhanced Test Infrastructure**: Comprehensive test suite with 296 passing tests and 29 dedicated memory limit validation test cases
+
+### Fixed
+- **Development Workflow Reliability**: Resolved CI pipeline instabilities and improved automated release management with proper PR categorization and labeling
+
+### Security
+- **Security Analysis Enhancement**: Upgraded security scanning infrastructure with Python 3.12 and optimized CodeQL workflows for better performance
 
 ## [0.3.1] - 2025-08-05
 
@@ -112,7 +122,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Core Functionality**: Initial implementation of multi-format archive processing
 - **Verification System**: Basic integrity checking and PAR2 recovery infrastructure
 
-[Unreleased]: https://github.com/RxChi1d/coldpack/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/RxChi1d/coldpack/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/RxChi1d/coldpack/releases/tag/v0.4.0
 [0.3.1]: https://github.com/RxChi1d/coldpack/releases/tag/v0.3.1
 [0.3.0]: https://github.com/RxChi1d/coldpack/releases/tag/v0.3.0
 [0.2.0]: https://github.com/RxChi1d/coldpack/releases/tag/v0.2.0
