@@ -195,7 +195,7 @@ class ArchiveVerifier:
                         logger.success(f"{algorithm.upper()} hash verification passed")
                         results.append(
                             VerificationResult(
-                                f"{algorithm}_hash",
+                                algorithm,
                                 True,
                                 f"{algorithm.upper()} hash verification passed",
                             )
@@ -204,7 +204,7 @@ class ArchiveVerifier:
                         logger.error(f"{algorithm.upper()} hash verification failed")
                         results.append(
                             VerificationResult(
-                                f"{algorithm}_hash",
+                                algorithm,
                                 False,
                                 f"{algorithm.upper()} hash verification failed",
                             )
@@ -214,7 +214,7 @@ class ArchiveVerifier:
                     logger.error(f"{algorithm.upper()} hash verification failed: {e}")
                     results.append(
                         VerificationResult(
-                            f"{algorithm}_hash",
+                            algorithm,
                             False,
                             f"{algorithm.upper()} verification error: {e}",
                         )
@@ -232,18 +232,25 @@ class ArchiveVerifier:
 
     def verify_par2_recovery(
         self,
-        par2_file: Union[str, Path],
+        archive_path: Union[str, Path],
+        par2_file: Union[str, Path, None],
         par2_settings: Optional["PAR2Settings"] = None,
     ) -> VerificationResult:
         """Verify PAR2 recovery files.
 
         Args:
-            par2_file: Path to the main PAR2 file
+            archive_path: Path to the archive file
+            par2_file: Path to the main PAR2 file (or None if not available)
             par2_settings: Optional PAR2Settings from metadata for original parameters
 
         Returns:
             Verification result
         """
+        if par2_file is None:
+            return VerificationResult(
+                "par2_recovery", False, "PAR2 recovery files not available"
+            )
+
         par2_obj = Path(par2_file)
 
         try:
@@ -295,41 +302,30 @@ class ArchiveVerifier:
         try:
             logger.debug(f"Checking 7z integrity: {archive_obj.name}")
 
-            # Import py7zz for 7z operations
-            import py7zz
+            # Check if file exists first
+            if not archive_obj.exists():
+                return VerificationResult(
+                    "7z_integrity", False, "Archive file not found"
+                )
 
-            # Use py7zz test_archive function to verify integrity
-            is_valid = py7zz.test_archive(str(archive_obj))
+            # Use validate_7z_archive function from utils
+            from ..utils.sevenzip import validate_7z_archive
+
+            is_valid = validate_7z_archive(str(archive_obj))
 
             if is_valid:
-                logger.success("7z integrity check passed")
-                return VerificationResult(
-                    "7z_integrity", True, "7z integrity check passed"
-                )
+                logger.success("7z integrity verified")
+                return VerificationResult("7z_integrity", True, "7z integrity verified")
             else:
                 return VerificationResult(
                     "7z_integrity", False, "7z integrity check failed"
                 )
 
-        except ImportError:
-            return VerificationResult(
-                "7z_integrity", False, "py7zz library not available for 7z verification"
-            )
-        except py7zz.FileNotFoundError:
+        except FileNotFoundError:
             return VerificationResult("7z_integrity", False, "Archive file not found")
-        except py7zz.CorruptedArchiveError:
-            return VerificationResult(
-                "7z_integrity", False, "Archive is corrupted or damaged"
-            )
-        except py7zz.UnsupportedFormatError:
-            return VerificationResult(
-                "7z_integrity", False, "Unsupported archive format"
-            )
-        except py7zz.Py7zzError as e:
-            return VerificationResult("7z_integrity", False, f"py7zz error: {e}")
         except Exception as e:
             return VerificationResult(
-                "7z_integrity", False, f"Unexpected verification error: {e}"
+                "7z_integrity", False, f"7z integrity check error: {str(e)}"
             )
 
     def get_verification_summary(self, results: list[VerificationResult]) -> dict:
@@ -423,7 +419,12 @@ class ArchiveVerifier:
 
         # Search locations for hash files
         hash_search_locations = [
-            # Same directory as archive
+            # Same directory as archive - using archive stem (e.g., test.sha256 from test.7z)
+            (
+                archive_obj.parent / f"{archive_name}.sha256",
+                archive_obj.parent / f"{archive_name}.blake3",
+            ),
+            # Same directory as archive - using full archive name (e.g., test.7z.sha256)
             (
                 archive_obj.with_suffix(archive_obj.suffix + ".sha256"),
                 archive_obj.with_suffix(archive_obj.suffix + ".blake3"),
@@ -478,7 +479,9 @@ class ArchiveVerifier:
 
         # Search locations for PAR2 files
         par2_search_locations = [
-            # Same directory as archive
+            # Same directory as archive - using archive stem (e.g., test.par2 from test.7z)
+            archive_obj.parent / f"{archive_name}.par2",
+            # Same directory as archive - using full archive name (e.g., test.7z.par2)
             archive_obj.with_suffix(archive_obj.suffix + ".par2"),
             # In metadata subdirectory of archive directory
             archive_obj.parent / "metadata" / f"{archive_obj.name}.par2",
@@ -535,13 +538,18 @@ class ArchiveVerifier:
             archive_obj: Path to archive file
 
         Returns:
-            Archive format ('7z' only)
+            Archive format ('7z', 'zip', 'tar', 'unknown')
         """
-        if archive_obj.suffix.lower() == ".7z":
-            return "7z"
+        suffix = archive_obj.suffix.lower()
 
-        # Default fallback - assume 7z
-        return "7z"
+        if suffix == ".7z":
+            return "7z"
+        elif suffix == ".zip":
+            return "zip"
+        elif suffix in [".tar", ".tgz"] or archive_obj.name.endswith(".tar.gz"):
+            return "tar"
+        else:
+            return "unknown"
 
     def _adjust_skip_layers_for_format(
         self, archive_format: str, skip_layers: set[str]
