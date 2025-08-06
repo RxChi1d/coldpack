@@ -247,7 +247,7 @@ class TestArchiveVerifier:
         assert result.success is False
         assert "not found" in result.message.lower()
 
-    @patch("coldpack.core.verifier.PAR2Manager")
+    @patch("coldpack.utils.par2.PAR2Manager")
     def test_verify_par2_recovery_success(
         self, mock_par2_manager_class, verifier, temp_archive
     ):
@@ -255,7 +255,7 @@ class TestArchiveVerifier:
         # Mock PAR2Manager
         mock_par2_manager = MagicMock()
         mock_par2_manager_class.return_value = mock_par2_manager
-        mock_par2_manager.verify_recovery_data.return_value = True
+        mock_par2_manager.verify_recovery_files.return_value = True
 
         with tempfile.NamedTemporaryFile(suffix=".par2", delete=False) as par2_file:
             par2_path = Path(par2_file.name)
@@ -266,11 +266,11 @@ class TestArchiveVerifier:
 
             assert result.layer == "par2_recovery"
             assert result.success is True
-            assert "verified" in result.message.lower()
+            assert "passed" in result.message.lower()
         finally:
             par2_path.unlink()
 
-    @patch("coldpack.core.verifier.PAR2Manager")
+    @patch("coldpack.utils.par2.PAR2Manager")
     def test_verify_par2_recovery_failure(
         self, mock_par2_manager_class, verifier, temp_archive
     ):
@@ -278,7 +278,7 @@ class TestArchiveVerifier:
         # Mock PAR2Manager
         mock_par2_manager = MagicMock()
         mock_par2_manager_class.return_value = mock_par2_manager
-        mock_par2_manager.verify_recovery_data.return_value = False
+        mock_par2_manager.verify_recovery_files.return_value = False
 
         with tempfile.NamedTemporaryFile(suffix=".par2", delete=False) as par2_file:
             par2_path = Path(par2_file.name)
@@ -353,7 +353,7 @@ class TestArchiveVerifier:
 
     @patch("coldpack.core.verifier.ArchiveVerifier._discover_hash_files")
     @patch("coldpack.core.verifier.ArchiveVerifier._discover_par2_file")
-    @patch("coldpack.core.verifier.ArchiveVerifier.verify_complete")
+    @patch("coldpack.core.verifier.ArchiveVerifier._verify_complete_with_skip")
     def test_verify_auto(
         self,
         mock_verify_complete,
@@ -384,8 +384,24 @@ class TestArchiveVerifier:
         # Should call complete verification with discovered files
         mock_verify_complete.assert_called_once()
         call_args = mock_verify_complete.call_args
-        assert call_args[1]["hash_files"] is not None
-        assert call_args[1]["par2_file"] is not None
+        # Check that hash_files and par2_file were passed (can be positional or keyword args)
+        if len(call_args[0]) > 1:  # positional args
+            hash_files_arg = (
+                call_args[0][1]
+                if len(call_args[0]) > 1
+                else call_args[1].get("hash_files")
+            )
+            par2_file_arg = (
+                call_args[0][2]
+                if len(call_args[0]) > 2
+                else call_args[1].get("par2_file")
+            )
+        else:  # keyword args
+            hash_files_arg = call_args[1].get("hash_files")
+            par2_file_arg = call_args[1].get("par2_file")
+
+        assert hash_files_arg is not None
+        assert par2_file_arg is not None
 
     def test_discover_hash_files_no_files(self, verifier, temp_archive):
         """Test hash file discovery with no hash files."""

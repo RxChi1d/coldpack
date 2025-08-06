@@ -169,7 +169,7 @@ class TestColdStorageArchiver:
                 # If it fails due to missing external tools, that's expected in test environment
                 pytest.skip("External tools not available in test environment")
 
-    @patch("coldpack.utils.filesystem.check_disk_space")
+    @patch("coldpack.core.archiver.check_disk_space")
     def test_create_archive_insufficient_disk_space(
         self, mock_check_disk, archiver, temp_source_dir, temp_output_dir
     ):
@@ -179,7 +179,7 @@ class TestColdStorageArchiver:
         # Mock insufficient disk space by raising exception
         mock_check_disk.side_effect = InsufficientSpaceError("Not enough space")
 
-        with pytest.raises((InsufficientSpaceError, ArchivingError)):
+        with pytest.raises(ArchivingError, match="Insufficient disk space"):
             archiver.create_archive(temp_source_dir, temp_output_dir)
 
     def test_create_archive_existing_output_no_force(
@@ -197,7 +197,7 @@ class TestColdStorageArchiver:
         with pytest.raises(ArchivingError, match="Archive directory already exists"):
             archiver.create_archive(temp_source_dir, temp_output_dir)
 
-    @patch("coldpack.utils.filesystem.check_disk_space")
+    @patch("coldpack.core.archiver.check_disk_space")
     def test_create_archive_success_minimal(
         self, mock_check_disk, archiver, temp_source_dir, temp_output_dir
     ):
@@ -299,22 +299,22 @@ class TestColdStorageArchiver:
         archive_name = "test"
 
         with patch(
-            "coldpack.utils.sevenzip.SevenZipCompressor"
-        ) as mock_compressor_class:
-            # Mock compressor to raise exception
-            mock_compressor = MagicMock()
-            mock_compressor_class.return_value = mock_compressor
-            mock_compressor.compress_directory.side_effect = Exception(
-                "Compression failed"
-            )
+            "coldpack.utils.filesystem.safe_file_operations"
+        ) as mock_safe_ops_ctx:
+            mock_safe_ops = MagicMock()
+            mock_safe_ops_ctx.return_value.__enter__.return_value = mock_safe_ops
 
+            # Mock the SevenZipCompressor class in archiver module to always return a broken instance
             with patch(
-                "coldpack.utils.filesystem.safe_file_operations"
-            ) as mock_safe_ops_ctx:
-                mock_safe_ops = MagicMock()
-                mock_safe_ops_ctx.return_value.__enter__.return_value = mock_safe_ops
+                "coldpack.core.archiver.SevenZipCompressor"
+            ) as mock_compressor_class:
+                mock_compressor = MagicMock()
+                mock_compressor.compress_directory.side_effect = Exception(
+                    "Compression failed"
+                )
+                mock_compressor_class.return_value = mock_compressor
 
-                with pytest.raises(ArchivingError, match="Failed to create 7z archive"):
+                with pytest.raises(ArchivingError, match="7z archive creation failed"):
                     archiver._create_7z_archive(
                         source_dir=temp_source_dir,
                         archive_dir=archive_dir,
@@ -527,10 +527,16 @@ class TestColdStorageArchiver:
         with pytest.raises(ArchivingError, match="7z integrity verification failed"):
             archiver._verify_7z_integrity(archive_path)
 
-    @patch("coldpack.utils.hashing.DualHasher")
-    @patch("coldpack.utils.hashing.HashVerifier")
+    @patch("coldpack.utils.hashing.compute_sha256_hash")
+    @patch("coldpack.utils.hashing.generate_hash_files")
+    @patch("coldpack.utils.hashing.HashVerifier.verify_file_hash")
     def test_generate_and_verify_single_hash_success(
-        self, mock_verifier_class, mock_hasher_class, archiver, temp_output_dir
+        self,
+        mock_verify_file_hash,
+        mock_generate_hash_files,
+        mock_compute_sha256,
+        archiver,
+        temp_output_dir,
     ):
         """Test successful hash generation and verification."""
         archive_path = temp_output_dir / "test.7z"
@@ -540,15 +546,18 @@ class TestColdStorageArchiver:
         metadata_dir = temp_output_dir / "metadata"
         metadata_dir.mkdir()
 
-        # Mock hasher
-        mock_hasher = MagicMock()
-        mock_hasher_class.return_value = mock_hasher
-        mock_hasher.compute_file_hash.return_value = "dummy_hash"
+        # Mock hash computation
+        mock_compute_sha256.return_value = "dummy_hash_value"
 
-        # Mock verifier
-        mock_verifier = MagicMock()
-        mock_verifier_class.return_value = mock_verifier
-        mock_verifier.verify_file_hash.return_value = True
+        # Mock hash file generation
+        hash_file_path = metadata_dir / "test.7z.sha256"
+        mock_generate_hash_files.return_value = {"sha256": hash_file_path}
+
+        # Mock verifier - note: uses static method
+        mock_verify_file_hash.return_value = True
+
+        # Enable verification in archiver settings
+        archiver.processing_options.verify_integrity = True
 
         mock_safe_ops = MagicMock()
 
@@ -562,12 +571,15 @@ class TestColdStorageArchiver:
         assert result_file is not None
         assert result_file.suffix == ".sha256"
 
-        mock_hasher.compute_file_hash.assert_called_once()
-        mock_verifier.verify_file_hash.assert_called_once()
+        mock_compute_sha256.assert_called_once_with(archive_path)
+        mock_generate_hash_files.assert_called_once()
+        mock_verify_file_hash.assert_called_once_with(
+            archive_path, hash_file_path, "sha256"
+        )
 
-    @patch("coldpack.utils.hashing.DualHasher")
+    @patch("coldpack.utils.hashing.compute_sha256_hash")
     def test_generate_and_verify_single_hash_failure(
-        self, mock_hasher_class, archiver, temp_output_dir
+        self, mock_compute_sha256, archiver, temp_output_dir
     ):
         """Test hash generation failure."""
         archive_path = temp_output_dir / "test.7z"
@@ -577,14 +589,14 @@ class TestColdStorageArchiver:
         metadata_dir = temp_output_dir / "metadata"
         metadata_dir.mkdir()
 
-        # Mock hasher to raise exception
-        mock_hasher = MagicMock()
-        mock_hasher_class.return_value = mock_hasher
-        mock_hasher.compute_file_hash.side_effect = Exception("Hash computation failed")
+        # Mock hash computation to raise exception
+        mock_compute_sha256.side_effect = Exception("Hash computation failed")
 
         mock_safe_ops = MagicMock()
 
-        with pytest.raises(ArchivingError, match="Failed to generate sha256 hash"):
+        with pytest.raises(
+            ArchivingError, match="SHA256 hash generation/verification failed"
+        ):
             archiver._generate_and_verify_single_hash(
                 archive_path=archive_path,
                 metadata_dir=metadata_dir,
@@ -592,7 +604,7 @@ class TestColdStorageArchiver:
                 safe_ops=mock_safe_ops,
             )
 
-    @patch("coldpack.utils.par2.PAR2Manager")
+    @patch("coldpack.core.archiver.PAR2Manager")
     def test_generate_and_verify_par2_files_success(
         self, mock_par2_manager_class, archiver, temp_output_dir
     ):
@@ -609,11 +621,12 @@ class TestColdStorageArchiver:
         mock_par2_manager_class.return_value = mock_par2_manager
 
         par2_files = [
-            metadata_dir / "test.par2",
-            metadata_dir / "test.vol000+01.par2",
+            metadata_dir / "test.7z.par2",
+            metadata_dir / "test.7z.vol0+1.par2",
         ]
+
         mock_par2_manager.create_recovery_files.return_value = par2_files
-        mock_par2_manager.verify_recovery_data.return_value = True
+        mock_par2_manager.verify_recovery_files.return_value = True
 
         mock_safe_ops = MagicMock()
 
@@ -623,9 +636,9 @@ class TestColdStorageArchiver:
 
         assert result_files == par2_files
         mock_par2_manager.create_recovery_files.assert_called_once()
-        mock_par2_manager.verify_recovery_data.assert_called_once()
+        mock_par2_manager.verify_recovery_files.assert_called_once()
 
-    @patch("coldpack.utils.par2.PAR2Manager")
+    @patch("coldpack.core.archiver.PAR2Manager")
     def test_generate_and_verify_par2_files_failure(
         self, mock_par2_manager_class, archiver, temp_output_dir
     ):
@@ -646,9 +659,7 @@ class TestColdStorageArchiver:
 
         mock_safe_ops = MagicMock()
 
-        with pytest.raises(
-            ArchivingError, match="Failed to generate PAR2 recovery files"
-        ):
+        with pytest.raises(ArchivingError, match="PAR2 generation/verification failed"):
             archiver._generate_and_verify_par2_files(
                 archive_path=archive_path,
                 metadata_dir=metadata_dir,

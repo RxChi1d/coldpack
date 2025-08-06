@@ -226,8 +226,8 @@ class ArchiveRepairer:
 
         try:
             return self.par2_manager.verify_recovery_files(par2_obj)
-        except PAR2Error as e:
-            raise RepairError(f"PAR2 verification failed: {e}") from e
+        except Exception:
+            return False
 
     def _get_original_file_from_par2(self, par2_file: Path) -> Optional[Path]:
         """Extract original file path from PAR2 file name.
@@ -236,7 +236,7 @@ class ArchiveRepairer:
             par2_file: Path to PAR2 file
 
         Returns:
-            Path to original file or None if cannot be determined
+            Path to original file or None if cannot be determined or doesn't exist
         """
         try:
             # PAR2 files are typically named: original_file.par2
@@ -253,7 +253,9 @@ class ArchiveRepairer:
                     # Standard case - same directory
                     original_file = par2_file.parent / original_name
 
-                return original_file
+                # Check if the inferred original file actually exists
+                if original_file.exists():
+                    return original_file
 
             return None
 
