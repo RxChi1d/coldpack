@@ -37,9 +37,13 @@ jobs:
               'revert': 'revert'
             };
 
-            // Extract conventional commit type from title
-            const conventionalPattern = /^(\w+)(\(.+\))?: .+/;
+            // Extract conventional commit type from title using colon as delimiter
+            // Format: <type>(<scope>): <description>
+            const conventionalPattern = /^(\w+)(?:\([^)]+\))?\s*:\s*.+/;
             const match = title.match(conventionalPattern);
+
+            console.log(`Checking title: "${title}"`);
+            console.log(`Pattern match result:`, match);
 
             if (match) {
               const commitType = match[1];
