@@ -951,11 +951,8 @@ class TestKeyboardInterruptCleanup:
             # Should exit with 130 (SIGINT standard exit code: 128 + 2)
             # When KeyboardInterrupt propagates properly, the runner returns 130
             assert result.exit_code == 130
-            # The cancellation message might be in stdout or stderr
-            output_text = result.stdout + (result.stderr or "")
-            assert (
-                "Operation cancelled by user" in output_text or result.exit_code == 130
-            )
+            # The main goal is verifying KeyboardInterrupt propagation via exit code
+            # Message verification is secondary since it might be in stdout or handled differently
 
     def test_archiver_safe_operations_cleanup_on_keyboard_interrupt(
         self, temp_test_files
