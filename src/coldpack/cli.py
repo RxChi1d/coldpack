@@ -487,8 +487,10 @@ def create(
                 raise typer.Exit(ExitCodes.COMPRESSION_FAILED)
 
     except KeyboardInterrupt:
-        console.print("\n[yellow]Operation cancelled by user[/yellow]")
-        raise typer.Exit(ExitCodes.GENERAL_ERROR) from None
+        # Allow the KeyboardInterrupt to propagate to trigger cleanup in archiver layer
+        # The archiver's safe_file_operations context manager will handle cleanup
+        # Final user message will be shown by cli_main()
+        raise
     except Exception as e:
         logger.error(f"Archive creation failed: {e}")
         console.print(f"[red]Error: {e}[/red]")
