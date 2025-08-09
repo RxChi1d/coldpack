@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: 2025 coldpack contributors
+SPDX-License-Identifier: MIT
+-->
+
 # Contributing to coldpack
 
 Thank you for your interest in contributing to coldpack! This document provides guidelines for contributing to the project.

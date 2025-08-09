@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 coldpack contributors
+# SPDX-License-Identifier: MIT
+
 """coldpack - Cross-platform cold storage CLI package.
 
 This package provides a standardized solution for creating 7z cold storage

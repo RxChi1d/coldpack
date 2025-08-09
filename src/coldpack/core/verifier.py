@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 coldpack contributors
+# SPDX-License-Identifier: MIT
+
 """5-layer verification system for comprehensive archive integrity checking."""
 
 from pathlib import Path

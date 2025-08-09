@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 coldpack contributors
+# SPDX-License-Identifier: MIT
+
 """Dual hash system (SHA-256 + BLAKE3) for comprehensive file verification."""
 
 import hashlib

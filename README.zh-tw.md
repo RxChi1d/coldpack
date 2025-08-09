@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: 2025 coldpack contributors
+SPDX-License-Identifier: MIT
+-->
+
 # coldpack
 
 [![PyPI version](https://badge.fury.io/py/coldpack.svg)](https://badge.fury.io/py/coldpack)

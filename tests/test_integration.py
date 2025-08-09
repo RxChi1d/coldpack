@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 coldpack contributors
+# SPDX-License-Identifier: MIT
+
 """Integration tests for coldpack core functionality."""
 
 import pytest

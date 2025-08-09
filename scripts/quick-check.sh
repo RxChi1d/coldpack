@@ -2,6 +2,7 @@
 
 # Quick CI checks for local development
 # This script performs lightweight checks that can be run frequently during development
+# Includes: formatting, linting, REUSE compliance, and type checking
 
 set -e  # Exit on any error
 
@@ -78,6 +79,20 @@ check_linting() {
     fi
 }
 
+# Function to run REUSE compliance check
+check_reuse_compliance() {
+    print_status "Checking REUSE compliance..."
+
+    if uv run reuse lint; then
+        print_success "REUSE compliance check passed"
+    else
+        print_error "REUSE compliance check failed"
+        print_warning "Files are missing proper licensing information"
+        print_warning "Run 'uv run reuse lint' to see detailed issues"
+        return 1
+    fi
+}
+
 # Function to run type checking
 check_types() {
     print_status "Running type checking with mypy..."
@@ -112,6 +127,7 @@ main() {
     setup_environment || exit_code=1
     check_formatting || exit_code=1
     check_linting || exit_code=1
+    check_reuse_compliance || exit_code=1
     check_types || exit_code=1
 
     echo

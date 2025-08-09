@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 coldpack contributors
+# SPDX-License-Identifier: MIT
+
 name: CI
 
 on:
@@ -36,6 +39,9 @@ jobs:
 
     - name: Run ruff format check
       run: uv run ruff format --check --diff .
+
+    - name: Run REUSE compliance check
+      run: uv run reuse lint
 
   security:
     runs-on: ubuntu-latest

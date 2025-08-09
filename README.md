@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: 2025 coldpack contributors
+SPDX-License-Identifier: MIT
+-->
+
 # coldpack
 
 [![PyPI version](https://badge.fury.io/py/coldpack.svg)](https://badge.fury.io/py/coldpack)
@@ -163,7 +168,8 @@ See [CLAUDE.md](CLAUDE.md) for complete development instructions.
 
 ## License & Support
 
-**License**: MIT - See [LICENSE](LICENSE) for details
+**License**: MIT - See [LICENSE](LICENSE) and [LICENSES/MIT.txt](LICENSES/MIT.txt) for details
+**Third-party Dependencies**: This project does not redistribute 7-Zip binaries; runtime dependencies (py7zz, PAR2 tools) are installed by users and governed by their upstream licenses.
 
 **Documentation**:
 - [Installation Guide](docs/INSTALLATION.md) - Setup instructions

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 coldpack contributors
+# SPDX-License-Identifier: MIT
+
 [build-system]
 requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
@@ -5,12 +8,30 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/coldpack"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"LICENSE" = "LICENSE"
+"LICENSES/MIT.txt" = "LICENSES/MIT.txt"
+"LICENSES/CC0-1.0.txt" = "LICENSES/CC0-1.0.txt"
+"REUSE.toml" = "REUSE.toml"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/",
+    "tests/",
+    "LICENSE",
+    "LICENSES/",
+    "REUSE.toml",
+    "README.md",
+    "CHANGELOG.md",
+    "pyproject.toml"
+]
+
 [project]
 name = "coldpack"
 dynamic = ["version"]
 description = "Professional 7z Cold Storage Solution with Revolutionary Architecture - Advanced CLI tool for creating standardized 7z archives with comprehensive verification, PAR2 recovery, and intelligent cross-platform compatibility."
 readme = "README.md"
-license = {text = "MIT"}
+license = {file = "LICENSE"}
 requires-python = ">=3.9"
 authors = [
     {name = "coldpack contributors"},
@@ -148,6 +169,7 @@ dev = [
     "hatch-vcs>=0.5.0",
     "bandit[toml]>=1.8.6",
     "safety>=3.6.0",
+    "reuse>=5.0.2",
 ]
 
 [tool.hatch.version]

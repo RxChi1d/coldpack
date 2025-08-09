@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 coldpack contributors
+# SPDX-License-Identifier: MIT
+
 """End-to-end integration tests for memory_limit parameter functionality.
 
 This module tests the complete flow of memory_limit parameter from CLI input

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 coldpack contributors
+# SPDX-License-Identifier: MIT
+
 """Tests for coldpack extractor functionality."""
 
 from pathlib import Path

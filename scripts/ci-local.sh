@@ -173,7 +173,7 @@ show_help() {
     echo "  --help         Show this help message"
     echo
     echo "This script simulates the complete CI workflow locally, including:"
-    echo "  1. Quick checks (formatting, linting, type checking)"
+    echo "  1. Quick checks (formatting, linting, REUSE compliance, type checking)"
     echo "  2. Security scanning (bandit, safety)"
     echo "  3. Comprehensive testing with coverage"
     echo "  4. Python version compatibility checks"
@@ -220,7 +220,7 @@ main() {
     local exit_code=0
 
     # Step 1: Run quick checks (delegate to quick-check.sh)
-    print_section "Step 1: Quick Checks (Lint, Format, Type)"
+    print_section "Step 1: Quick Checks (Lint, Format, REUSE Compliance, Type)"
     chmod +x scripts/quick-check.sh
     if ./scripts/quick-check.sh; then
         print_success "Quick checks completed successfully"
