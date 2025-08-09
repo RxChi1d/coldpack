@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 coldpack contributors
+# SPDX-License-Identifier: MIT
+
 """PAR2 repair functionality for archive recovery operations."""
 
 from pathlib import Path

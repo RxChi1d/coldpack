@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 coldpack contributors
+# SPDX-License-Identifier: MIT
+
 """Windows compatibility utilities for coldpack.
 
 This module provides Windows-specific compatibility checks and utilities,

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 coldpack contributors
+# SPDX-License-Identifier: MIT
+
 """Typer-based CLI interface for coldpack cold storage archiver."""
 
 import sys

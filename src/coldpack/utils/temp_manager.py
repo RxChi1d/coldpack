@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 coldpack contributors
+# SPDX-License-Identifier: MIT
+
 """Enhanced temporary file and directory management with Windows-safe cleanup.
 
 This module provides comprehensive temporary file management with:

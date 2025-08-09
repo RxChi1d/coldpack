@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: 2025 coldpack contributors
+SPDX-License-Identifier: MIT
+-->
+
 # Changelog
 
 All notable changes to coldpack will be documented in this file.

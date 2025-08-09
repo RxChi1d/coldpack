@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 coldpack contributors
+# SPDX-License-Identifier: MIT
+
 """Tests for 7z compression utilities using py7zz."""
 
 from unittest.mock import Mock, patch

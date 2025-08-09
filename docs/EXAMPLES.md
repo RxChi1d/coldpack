@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: 2025 coldpack contributors
+SPDX-License-Identifier: MIT
+-->
+
 # Usage Examples
 
 Usage scenarios and workflows for coldpack.

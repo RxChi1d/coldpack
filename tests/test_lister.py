@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 coldpack contributors
+# SPDX-License-Identifier: MIT
+
 """Tests for coldpack archive listing functionality with new py7zz.run_7z implementation."""
 
 from datetime import datetime

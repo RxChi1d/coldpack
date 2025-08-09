@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 coldpack contributors
+# SPDX-License-Identifier: MIT
+
 """Tests for configuration modules."""
 
 from coldpack.config.constants import DEFAULT_COMPRESSION_LEVEL, SUPPORTED_INPUT_FORMATS

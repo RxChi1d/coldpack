@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 coldpack contributors
+# SPDX-License-Identifier: MIT
+
 """Main cold storage archiver that coordinates the entire archiving pipeline."""
 
 from pathlib import Path

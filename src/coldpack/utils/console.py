@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 coldpack contributors
+# SPDX-License-Identifier: MIT
+
 """Rich Console utilities with Windows compatibility.
 
 This module provides Windows-compatible Rich Console instances that handle

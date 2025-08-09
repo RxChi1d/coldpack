@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 coldpack contributors
+# SPDX-License-Identifier: MIT
+
 name: Build and Publish
 
 on:
@@ -335,6 +338,15 @@ jobs:
           uv run python -m wheel unpack --dest /tmp/wheel_check "$WHEEL_FILE" 2>/dev/null && \
           find /tmp/wheel_check -name "METADATA" -exec head -10 {} \; 2>/dev/null || \
           echo "  (could not extract wheel metadata)"
+
+          # Verify license files are included in wheel
+          echo "📄 License files in wheel:"
+          uv run python -m zipfile -l "$WHEEL_FILE" | grep -E "LICENSE|REUSE" || {
+            echo "❌ Missing license files in wheel!"
+            echo "Expected files: LICENSE, REUSE.toml, LICENSES/MIT.txt, LICENSES/CC0-1.0.txt"
+            exit 1
+          }
+          echo "✅ License files verified in wheel"
         else
           echo "❌ No wheel file found in dist/"
           exit 1

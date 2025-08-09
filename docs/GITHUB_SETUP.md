@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: 2025 coldpack contributors
+SPDX-License-Identifier: MIT
+-->
+
 # GitHub Repository Setup Guide
 
 This document provides instructions for setting up the coldpack GitHub repository with all necessary configurations for automated workflows, security, and community features.
