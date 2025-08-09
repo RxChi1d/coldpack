@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 from typing import Any, Optional
 
+import rich.box
 import typer
 from loguru import logger
 from rich.table import Table
@@ -19,7 +20,7 @@ from .core.extractor import MultiFormatExtractor
 from .core.lister import ArchiveLister, ListingError, UnsupportedFormatError
 from .core.repairer import ArchiveRepairer
 from .core.verifier import ArchiveVerifier
-from .utils.console import create_windows_compatible_console, safe_print
+from .utils.console import get_console, safe_print
 from .utils.filesystem import format_file_size, get_file_size
 from .utils.par2 import PAR2Manager, check_par2_availability, install_par2_instructions
 from .utils.progress import ProgressTracker
@@ -34,8 +35,8 @@ app = typer.Typer(
     context_settings={"help_option_names": ["-h", "--help"]},
 )
 
-# Initialize Rich console with Windows compatibility
-console = create_windows_compatible_console()
+# Initialize Rich console with full Unicode compatibility
+console = get_console()
 
 
 def version_callback(value: bool) -> None:
@@ -371,7 +372,7 @@ def create(
 
     # Check Windows PAR2 Unicode compatibility for PAR2-related operations
     if not no_par2:
-        check_par2_related_paths_compatibility(source, output_dir, console)
+        check_par2_related_paths_compatibility(source, output_dir, console._console)
 
     try:
         # Check PAR2 availability if needed
@@ -462,8 +463,8 @@ def create(
             sevenzip_settings=sevenzip_settings,
         )
 
-        # Create progress tracker
-        with ProgressTracker(console):
+        # Create progress tracker with underlying Rich console
+        with ProgressTracker(console._console):
             console.print(
                 f"[cyan]Creating cold storage 7z archive from: {source}[/cyan]"
             )
@@ -473,14 +474,17 @@ def create(
             result = archiver.create_archive(source, output_dir, name, "7z")
 
             if result.success:
-                safe_print(console, "[green]✓ Archive created successfully![/green]")
+                safe_print(
+                    console._console, "[green]✓ Archive created successfully![/green]"
+                )
 
                 # Display summary
                 display_archive_summary(result)
 
             else:
                 safe_print(
-                    console, f"[red]✗ Archive creation failed: {result.message}[/red]"
+                    console._console,
+                    f"[red]✗ Archive creation failed: {result.message}[/red]",
                 )
                 if verbose and result.error_details:
                     console.print(f"[red]Details: {result.error_details}[/red]")
@@ -566,7 +570,7 @@ def extract(
         output_dir = Path.cwd()
 
     # Check Windows PAR2 Unicode compatibility (extract may use PAR2 for verification)
-    check_par2_related_paths_compatibility(archive, output_dir, console)
+    check_par2_related_paths_compatibility(archive, output_dir, console._console)
 
     try:
         console.print(f"[cyan]Extracting archive: {archive}[/cyan]")
@@ -604,7 +608,8 @@ def extract(
                 # Overall result
                 if passed_layers == total_layers:
                     safe_print(
-                        console, "[green]✓ Archive integrity fully verified[/green]"
+                        console._console,
+                        "[green]✓ Archive integrity fully verified[/green]",
                     )
                 else:
                     console.print(
@@ -615,7 +620,7 @@ def extract(
                     )
 
             except Exception as e:
-                safe_print(console, f"[red]✗ Verification failed: {e}[/red]")
+                safe_print(console._console, f"[red]✗ Verification failed: {e}[/red]")
                 console.print("[yellow]Continuing with extraction attempt...[/yellow]")
 
         # Step 2: Try to load coldpack metadata (standard compliant archives)
@@ -685,7 +690,9 @@ def extract(
 
                 raise typer.Exit(ExitCodes.EXTRACTION_FAILED) from direct_extract_error
 
-        safe_print(console, "[green]✓ Extraction completed successfully![/green]")
+        safe_print(
+            console._console, "[green]✓ Extraction completed successfully![/green]"
+        )
         console.print(f"[green]Extracted to: {extracted_path}[/green]")
 
     except typer.Exit:
@@ -773,7 +780,7 @@ def verify(
     # Check Windows PAR2 Unicode compatibility (verify uses PAR2 verification)
     from .utils.windows_compat import check_windows_par2_unicode_compatibility
 
-    check_windows_par2_unicode_compatibility(archive, console)
+    check_windows_par2_unicode_compatibility(archive, console._console)
 
     try:
         verifier = ArchiveVerifier()
@@ -868,7 +875,7 @@ def repair(
     # Check Windows PAR2 Unicode compatibility (repair uses PAR2 tools)
     from .utils.windows_compat import check_windows_par2_unicode_compatibility
 
-    check_windows_par2_unicode_compatibility(file_path, console)
+    check_windows_par2_unicode_compatibility(file_path, console._console)
 
     # Determine if it's a PAR2 file or archive file
     par2_file = None
@@ -957,13 +964,13 @@ def repair(
         result = repairer.repair_archive(par2_file)
 
         if result.success:
-            safe_print(console, f"[green]✓ {result.message}[/green]")
+            safe_print(console._console, f"[green]✓ {result.message}[/green]")
             if result.repaired_files:
                 console.print(
                     f"[green]Repaired files: {', '.join(result.repaired_files)}[/green]"
                 )
         else:
-            safe_print(console, f"[red]✗ {result.message}[/red]")
+            safe_print(console._console, f"[red]✗ {result.message}[/red]")
             if verbose and result.error_details:
                 console.print(f"[red]Details: {result.error_details}[/red]")
             raise typer.Exit(ExitCodes.GENERAL_ERROR)
@@ -1012,7 +1019,7 @@ def info(
     # Check Windows PAR2 Unicode compatibility (info may display PAR2 information)
     from .utils.windows_compat import check_windows_par2_unicode_compatibility
 
-    check_windows_par2_unicode_compatibility(path, console)
+    check_windows_par2_unicode_compatibility(path, console._console)
 
     try:
         if path.suffix == ".par2":
@@ -1029,35 +1036,145 @@ def info(
 
 
 def display_archive_summary(result: Any) -> None:
-    """Display archive creation summary."""
+    """Display enhanced archive creation summary with clean, professional layout."""
     if not result.metadata:
         return
 
-    table = Table(
-        title="Archive Summary", show_header=True, header_style="bold magenta"
-    )
-    table.add_column("Property", style="cyan", no_wrap=True)
-    table.add_column("Value", style="green")
-
     metadata = result.metadata
 
-    table.add_row("Archive", str(metadata.archive_path.name))
-    table.add_row("Original Size", format_file_size(metadata.original_size))
-    table.add_row("Compressed Size", format_file_size(metadata.compressed_size))
-    table.add_row("Compression Ratio", f"{metadata.compression_percentage:.1f}%")
-    table.add_row("Files", str(metadata.file_count))
-    # Display 7z compression level
-    if metadata.sevenzip_settings:
-        table.add_row("Compression Level", str(metadata.sevenzip_settings.level))
+    # Detect Unicode support and choose appropriate styling
+    unicode_supported = getattr(console, "_unicode_supported", True)
 
+    # Choose appropriate box style and separators based on Unicode support
+    if unicode_supported:
+        box_style = rich.box.ROUNDED
+        separator_char = "─"
+        separator_style = "bright_blue"
+    else:
+        box_style = rich.box.ASCII2  # Clean ASCII alternative
+        separator_char = "-"
+        separator_style = "blue"
+
+    # Add visual separator for better visibility
+    console.print()
+    console.print(separator_char * 70, style=separator_style)
+    console.print()
+
+    # Create clean professional table with appropriate box style
+    table = Table(
+        title="[bold bright_blue]Archive Creation Summary[/bold bright_blue]",
+        show_header=True,
+        header_style="bold magenta",
+        box=box_style,
+        expand=False,
+        min_width=60,
+    )
+    table.add_column("Property", style="cyan", no_wrap=True, min_width=18)
+    table.add_column("Value", style="white", min_width=20)
+    table.add_column("Details", style="dim white", min_width=15)
+
+    # Basic archive information
+    table.add_row("Archive Name", str(metadata.archive_path.name), "")
+    table.add_row("Original Size", format_file_size(metadata.original_size), "")
+    table.add_row("Compressed Size", format_file_size(metadata.compressed_size), "")
+
+    # Enhanced compression ratio display with explanation
+    compression_ratio = metadata.compression_percentage
+    if compression_ratio > 0:
+        ratio_display = f"{compression_ratio:.1f}% saved"
+        ratio_detail = "Compression effective"
+    else:
+        ratio_display = f"{abs(compression_ratio):.1f}% larger"
+        ratio_detail = "Archive overhead"
+    table.add_row("Compression", ratio_display, ratio_detail)
+
+    # Content statistics
+    table.add_row("File Count", str(metadata.file_count), "")
+    if hasattr(metadata, "directory_count") and metadata.directory_count > 0:
+        table.add_row("Directory Count", str(metadata.directory_count), "")
+
+    # Average file size calculation
+    if metadata.file_count > 0:
+        avg_size = metadata.original_size / metadata.file_count
+        table.add_row("Average File Size", format_file_size(avg_size), "")
+
+    # Processing performance
+    if (
+        hasattr(metadata, "processing_time_seconds")
+        and metadata.processing_time_seconds > 0
+    ):
+        processing_time = metadata.processing_time_seconds
+        if processing_time < 1:
+            time_display = f"{processing_time * 1000:.0f}ms"
+        else:
+            time_display = f"{processing_time:.1f}s"
+
+        # Calculate processing speed
+        if processing_time > 0:
+            speed_mb_per_sec = (
+                metadata.original_size / (1024 * 1024)
+            ) / processing_time
+            speed_detail = (
+                f"{speed_mb_per_sec:.1f} MB/s"
+                if speed_mb_per_sec >= 0.1
+                else "< 0.1 MB/s"
+            )
+        else:
+            speed_detail = ""
+
+        table.add_row("Processing Time", time_display, speed_detail)
+
+    # Creation timestamp
+    if hasattr(metadata, "created_at_iso") and metadata.created_at_iso:
+        from datetime import datetime
+
+        try:
+            created_dt = datetime.fromisoformat(
+                metadata.created_at_iso.replace("Z", "+00:00")
+            )
+            time_str = created_dt.strftime("%Y-%m-%d %H:%M:%S")
+            table.add_row("Created", time_str, "")
+        except (ValueError, AttributeError):
+            pass
+
+    # Compression settings
+    if metadata.sevenzip_settings:
+        level = metadata.sevenzip_settings.level
+        dict_size = getattr(metadata.sevenzip_settings, "dictionary_size", "default")
+        table.add_row("Compression Level", f"Level {level}", f"Dict: {dict_size}")
+
+    # Security hashes with better formatting
     if metadata.verification_hashes:
         for algorithm, hash_value in metadata.verification_hashes.items():
-            table.add_row(f"{algorithm.upper()} Hash", hash_value[:16] + "...")
+            # Show first 12 and last 8 characters for better readability
+            if len(hash_value) > 24:
+                display_hash = f"{hash_value[:12]}...{hash_value[-8:]}"
+            else:
+                display_hash = hash_value[:20] + "..."
+            table.add_row(
+                f"{algorithm.upper()} Hash",
+                display_hash,
+                f"{len(hash_value)} chars",
+            )
 
+    # Recovery files
     if metadata.par2_files:
-        table.add_row("PAR2 Files", str(len(metadata.par2_files)))
+        par2_count = len(metadata.par2_files)
+        redundancy = (
+            getattr(metadata.par2_settings, "redundancy_percent", 10)
+            if hasattr(metadata, "par2_settings")
+            else 10
+        )
+        table.add_row(
+            "PAR2 Recovery", f"{par2_count} files", f"{redundancy}% redundancy"
+        )
 
     console.print(table)
+
+    # Add final separator using the same style as the opening
+    console.print()
+    console.print(separator_char * 70, style=separator_style)
+    console.print()
 
 
 def display_verification_results(results: Any) -> None:
@@ -1098,7 +1215,9 @@ def display_verification_results(results: Any) -> None:
             console.print("[red]Failed Verification Details:[/red]")
             for result in failed_results:
                 layer_name = result.layer.replace("_", " ").title()
-                safe_print(console, f"[red]• {layer_name}:[/red] {result.message}")
+                safe_print(
+                    console._console, f"[red]• {layer_name}:[/red] {result.message}"
+                )
 
                 # Show additional details if available
                 if hasattr(result, "details") and result.details:
@@ -1518,10 +1637,13 @@ def display_archive_listing(result: dict, verbose: bool = False) -> None:
     ):
         console.print("\n[dim]Tips:[/dim]")
         safe_print(
-            console, "[dim]  • Use --filter '*.ext' to filter by file type[/dim]"
+            console._console,
+            "[dim]  • Use --filter '*.ext' to filter by file type[/dim]",
         )
-        safe_print(console, "[dim]  • Use --dirs-only to show only directories[/dim]")
-        safe_print(console, "[dim]  • Use --summary-only for overview[/dim]")
+        safe_print(
+            console._console, "[dim]  • Use --dirs-only to show only directories[/dim]"
+        )
+        safe_print(console._console, "[dim]  • Use --summary-only for overview[/dim]")
 
 
 def list_archive(
@@ -1601,7 +1723,7 @@ def list_archive(
     # Check Windows PAR2 Unicode compatibility (list may access PAR2 metadata)
     from .utils.windows_compat import check_windows_par2_unicode_compatibility
 
-    check_windows_par2_unicode_compatibility(path, console)
+    check_windows_par2_unicode_compatibility(path, console._console)
 
     try:
         lister = ArchiveLister()
