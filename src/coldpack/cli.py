@@ -1135,6 +1135,8 @@ def display_archive_summary(result: Any) -> None:
             time_str = created_dt.strftime("%Y-%m-%d %H:%M:%S")
             table.add_row("Created", time_str, "")
         except (ValueError, AttributeError):
+            # Skip timestamp display if parsing fails or created_at_iso is None
+            # This is expected for archives without timestamp metadata
             pass
 
     # Compression settings
@@ -1754,7 +1756,8 @@ def list_archive(
                     console.print()
 
             except Exception:
-                # If quick info fails, proceed anyway
+                # Skip archive size warnings if quick info fails (corrupted archive, unsupported format, etc.)
+                # This is expected behavior - we still proceed to attempt full listing
                 pass
 
         # List archive contents
