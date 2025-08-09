@@ -131,22 +131,27 @@ class SafeConsole:
 
     def _detect_unicode_support(self) -> bool:
         """Detect terminal Unicode support using multiple methods."""
-        # Method 1: Direct encoding test
+        # Method 1: Direct encoding test - check if we can encode Unicode chars
         try:
-            test_chars = "✓✗⚠ℹ→"
+            test_chars = "✓✗⚠ℹ→─╭╰├┤"  # Include box drawing chars
             if hasattr(sys.stdout, "encoding") and sys.stdout.encoding:
+                encoding = sys.stdout.encoding.lower()
+                # ASCII and similar encodings don't support Unicode
+                if encoding in ("ascii", "cp1252", "latin1", "iso-8859-1"):
+                    return False
+                # Try to encode test characters
                 test_chars.encode(sys.stdout.encoding)
                 return True
         except (UnicodeEncodeError, LookupError, AttributeError):
-            # Encoding test failed, fall back to other detection methods
+            # Encoding test failed, try other detection methods
             pass
 
-        # Method 2: Modern terminal detection
-        if self._detect_modern_terminal():
+        # Method 2: Silent output test (more reliable than terminal detection)
+        if self._test_unicode_output():
             return True
 
-        # Method 3: Silent output test
-        return self._test_unicode_output()
+        # Method 3: Modern terminal detection (last resort)
+        return self._detect_modern_terminal()
 
     def _detect_modern_terminal(self) -> bool:
         """Detect modern terminal environments."""

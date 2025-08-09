@@ -695,6 +695,8 @@ class ArchiveVerifier:
             result = self.verify_7z_integrity(archive_path)
             return result.success
         except Exception:
+            # Return False if any verification error occurs (corrupted archive, access denied, etc.)
+            # This provides a simple boolean check for archive integrity
             return False
 
 

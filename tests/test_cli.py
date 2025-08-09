@@ -1067,5 +1067,171 @@ class TestKeyboardInterruptCleanup:
             extractor.extract(test_archive, output_dir)
 
 
+class TestDisplayArchiveSummary:
+    """Test enhanced archive summary display functionality."""
+
+    def test_display_archive_summary_with_full_metadata(self):
+        """Test display_archive_summary with comprehensive metadata."""
+        from unittest.mock import MagicMock, patch
+
+        from coldpack.cli import display_archive_summary
+        from coldpack.config.settings import (
+            ArchiveMetadata,
+            PAR2Settings,
+            SevenZipSettings,
+        )
+
+        # Create comprehensive metadata
+        sevenzip_settings = SevenZipSettings(
+            level=5, dictionary_size="16m", threads=True
+        )
+        par2_settings = PAR2Settings(redundancy_percent=15)
+
+        metadata = ArchiveMetadata(
+            source_path=Path("/test/source"),
+            archive_path=Path("/test/output/test.7z"),
+            archive_name="test",
+            file_count=10,
+            directory_count=3,
+            original_size=1048576,  # 1MB
+            compressed_size=524288,  # 512KB
+            compression_ratio=0.5,
+            processing_time_seconds=2.5,
+            created_at_iso="2025-08-08T12:00:00",
+            sevenzip_settings=sevenzip_settings,
+            par2_settings=par2_settings,
+            verification_hashes={
+                "sha256": "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456",
+                "blake3": "9876543210abcdef9876543210abcdef9876543210abcdef9876543210abcdef",
+            },
+            par2_files=["test.7z.par2", "test.7z.vol00+01.par2"],
+        )
+
+        # Create result object with metadata
+        result = MagicMock()
+        result.metadata = metadata
+
+        # Mock console to capture output
+        with patch("coldpack.cli.console") as mock_console:
+            display_archive_summary(result)
+
+            # Verify console.print was called (table display and separators)
+            assert mock_console.print.call_count >= 3  # separators + table
+
+            # Verify table creation and content
+            calls = mock_console.print.call_args_list
+            table_call = None
+            for call in calls:
+                if call[0] and hasattr(call[0][0], "add_row"):  # Find the table call
+                    table_call = call[0][0]
+                    break
+
+            assert table_call is not None, "Table should be created and printed"
+
+    def test_display_archive_summary_with_minimal_metadata(self):
+        """Test display_archive_summary with minimal metadata."""
+        from unittest.mock import MagicMock, patch
+
+        from coldpack.cli import display_archive_summary
+        from coldpack.config.settings import ArchiveMetadata
+
+        # Create minimal metadata
+        metadata = ArchiveMetadata(
+            source_path=Path("/test/source"),
+            archive_path=Path("/test/output/minimal.7z"),
+            archive_name="minimal",
+            file_count=1,
+            original_size=100,
+            compressed_size=80,
+            compression_ratio=0.8,
+        )
+
+        result = MagicMock()
+        result.metadata = metadata
+
+        # Mock console to capture output
+        with patch("coldpack.cli.console") as mock_console:
+            display_archive_summary(result)
+
+            # Should still display table with available information
+            assert mock_console.print.call_count >= 3  # separators + table
+
+    def test_display_archive_summary_with_negative_compression_ratio(self):
+        """Test display_archive_summary with negative compression ratio (file grew)."""
+        from unittest.mock import MagicMock, patch
+
+        from coldpack.cli import display_archive_summary
+        from coldpack.config.settings import ArchiveMetadata
+
+        # Create metadata with negative compression (file grew)
+        metadata = ArchiveMetadata(
+            source_path=Path("/test/source"),
+            archive_path=Path("/test/output/negative.7z"),
+            archive_name="negative",
+            file_count=2,
+            original_size=50,
+            compressed_size=100,
+            compression_ratio=2.0,  # File doubled in size
+        )
+
+        result = MagicMock()
+        result.metadata = metadata
+
+        # Mock console to capture output
+        with patch("coldpack.cli.console") as mock_console:
+            display_archive_summary(result)
+
+            # Should handle negative compression ratio gracefully
+            assert mock_console.print.call_count >= 3
+
+    def test_display_archive_summary_no_metadata(self):
+        """Test display_archive_summary with no metadata returns early."""
+        from unittest.mock import MagicMock, patch
+
+        from coldpack.cli import display_archive_summary
+
+        # Create result with no metadata
+        result = MagicMock()
+        result.metadata = None
+
+        # Mock console to capture output
+        with patch("coldpack.cli.console") as mock_console:
+            display_archive_summary(result)
+
+            # Should return early and not print anything
+            mock_console.print.assert_not_called()
+
+    def test_display_archive_summary_hash_formatting(self):
+        """Test hash display formatting in archive summary."""
+        from unittest.mock import MagicMock, patch
+
+        from coldpack.cli import display_archive_summary
+        from coldpack.config.settings import ArchiveMetadata
+
+        # Create metadata with various hash lengths
+        metadata = ArchiveMetadata(
+            source_path=Path("/test/source"),
+            archive_path=Path("/test/output/hash.7z"),
+            archive_name="hash",
+            file_count=1,
+            original_size=100,
+            compressed_size=80,
+            verification_hashes={
+                "sha256": "abcd1234" + "0" * 56,  # 64 char hash
+                "blake3": "xyz789" + "1" * 58,  # 64 char hash
+                "md5": "short12345",  # Short hash (< 20 chars)
+            },
+        )
+
+        result = MagicMock()
+        result.metadata = metadata
+
+        with patch("coldpack.cli.console") as mock_console:
+            display_archive_summary(result)
+
+            # Should format hashes appropriately
+            assert mock_console.print.call_count >= 3
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
