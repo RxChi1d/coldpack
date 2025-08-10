@@ -45,7 +45,7 @@ Navigate to **Settings > Branches** and create protection rules for the `main` b
    - **PyPI project name**: `coldpack`
    - **Owner**: `rxchi1d`
    - **Repository name**: `coldpack`
-   - **Workflow filename**: `build.yml`
+   - **Workflow filename**: `release.yml`
    - **Environment name**: `pypi`
 
 #### In GitHub Repository
