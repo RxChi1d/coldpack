@@ -12,6 +12,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2025-08-10
+
+### Added
+- **Open Source Compliance**: Complete REUSE 3.3 specification implementation with proper licensing information for all files, ensuring enterprise-grade license clarity and safe distribution
+
+### Changed
+- **Archive Summary Display**: Redesigned creation summary with professional 3-column layout, rich metrics (processing time, speed, average file size, timestamps), and intelligent terminal compatibility for better user experience
+- **Core Dependencies**: Updated py7zz to v1.1.0 for enhanced archive processing capabilities and potential performance improvements
+
+### Fixed
+- **Interrupt Handling**: Resolved issue where Ctrl+C during `cpack create` operations left residual files and directories without proper cleanup
+
 ## [0.4.0] - 2025-08-06
 
 ### Added
@@ -127,7 +139,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Core Functionality**: Initial implementation of multi-format archive processing
 - **Verification System**: Basic integrity checking and PAR2 recovery infrastructure
 
-[Unreleased]: https://github.com/RxChi1d/coldpack/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/RxChi1d/coldpack/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/RxChi1d/coldpack/releases/tag/v0.5.0
 [0.4.0]: https://github.com/RxChi1d/coldpack/releases/tag/v0.4.0
 [0.3.1]: https://github.com/RxChi1d/coldpack/releases/tag/v0.3.1
 [0.3.0]: https://github.com/RxChi1d/coldpack/releases/tag/v0.3.0
