@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.9"
 resolution-markers = [
     "python_full_version >= '3.13'",
@@ -1164,16 +1164,16 @@ wheels = [
 
 [[package]]
 name = "par2cmdline-turbo"
-version = "1.3.0"
+version = "1.4.0"
 source = { registry = "https://pypi.org/simple" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/dd/bd/7f39e5a766662663d9ff02db76fd4f0bca49a3e9b1344f99a40a0a91e7e7/par2cmdline_turbo-1.3.0-py3-none-macosx_10_9_x86_64.whl", hash = "sha256:5a614ff85593efdb6654cb397fdb2e8e8ff115fef7a295f363e8bec732ba8e95", size = 364974, upload-time = "2025-05-17T13:31:51.169Z" },
-    { url = "https://files.pythonhosted.org/packages/17/56/6d3348230648fed9d0ceb90377a7b730fff7ee62c5caaf15d37988aeebdb/par2cmdline_turbo-1.3.0-py3-none-macosx_11_0_arm64.whl", hash = "sha256:6e2a037f3db805a3ede4f82aebfecca2d2c653f09910bca6e7531d05d7c7b87a", size = 235867, upload-time = "2025-05-17T13:31:53.053Z" },
-    { url = "https://files.pythonhosted.org/packages/87/74/1c2127727879dc93aa322802d551aa9083f49fe219fadce707870eb20056/par2cmdline_turbo-1.3.0-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:c01ffedb6f1573fb33d8665a29e4f2e65a5753249563fd5cb4b99110524bbae9", size = 951876, upload-time = "2025-05-17T13:31:55.055Z" },
-    { url = "https://files.pythonhosted.org/packages/42/13/04b582bbf451b652623d2505baea96a4b459fb0de9c9dc38f6075c8f4ae6/par2cmdline_turbo-1.3.0-py3-none-manylinux_2_17_armv7l.whl", hash = "sha256:fdca7092936d98494177a8f1b5e82995f99e2c027d2ebfa0c3051061e81fa7d8", size = 789952, upload-time = "2025-05-17T13:31:57.388Z" },
-    { url = "https://files.pythonhosted.org/packages/5a/5b/4ac8dac3829935000b01da80380fbf352aeb6b4eb5e8a38acf08f455fd83/par2cmdline_turbo-1.3.0-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:5c3337d7c5139b9feff3fa1242e65f55754018f433253e6b082702998c56f31a", size = 1178283, upload-time = "2025-05-17T13:31:59.581Z" },
-    { url = "https://files.pythonhosted.org/packages/22/65/c3e56dcea492fcea043d375078146a6451483109739e2ad011e37da91e23/par2cmdline_turbo-1.3.0-py3-none-win_amd64.whl", hash = "sha256:22b7efa6cae104d8cdbebc6c645c49c84ecaa6b2ee04f5dcf5be66224e6e5974", size = 645187, upload-time = "2025-05-17T13:32:01.347Z" },
-    { url = "https://files.pythonhosted.org/packages/f4/ad/01bfc8b1ad0c41be276781e8a57fae4106a6216e0aa1384301c23708aa85/par2cmdline_turbo-1.3.0-py3-none-win_arm64.whl", hash = "sha256:90d9023bd57eeebf5ea310f9eefef4e662a2688b3c190e93ae5f3636518ebf03", size = 454058, upload-time = "2025-05-17T13:32:03.626Z" },
+    { url = "https://files.pythonhosted.org/packages/d1/3e/10dff05affead132c22833e9148b64fa000c84f508a865f80b5071ee3cc9/par2cmdline_turbo-1.4.0-py3-none-macosx_10_9_x86_64.whl", hash = "sha256:d131c43ab102d39439fc9e9ae782a72d64981b19d47b1a7be16fc5f4846b0534", size = 1088116, upload-time = "2026-03-10T14:33:23.764Z" },
+    { url = "https://files.pythonhosted.org/packages/56/7e/22f8b5f6e55337dbd0abcad39f0744eb0e5629a19ef37d6dadf92a33ced7/par2cmdline_turbo-1.4.0-py3-none-macosx_11_0_arm64.whl", hash = "sha256:e61415e96a9c61a449f3335732b784752e751ecd7381792bd301b5a801cf01fb", size = 402460, upload-time = "2026-03-10T14:33:25.461Z" },
+    { url = "https://files.pythonhosted.org/packages/bc/fa/c3cc8d81b376003e1ac122e5c73b7819c69b40bf9bced89bea84cd893146/par2cmdline_turbo-1.4.0-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:66b2b4f211eaebe501d3be095c2fe7a98198bbd57308bc1cb9f49dd8c82b67d2", size = 960727, upload-time = "2026-03-10T14:33:26.902Z" },
+    { url = "https://files.pythonhosted.org/packages/37/97/40b71a3c509a28463d247943cdb50991a87a76a64e181a98809b14468bd2/par2cmdline_turbo-1.4.0-py3-none-manylinux_2_17_armv7l.whl", hash = "sha256:e2d87ba1d714a1102a74a995739aa68360cc8a108fb934a2dc44e315b50100fa", size = 808968, upload-time = "2026-03-10T14:33:28.617Z" },
+    { url = "https://files.pythonhosted.org/packages/b9/a7/e0fc2455338569cb511f0ff3965b04f58820a4ea3430baa407a61f2b2206/par2cmdline_turbo-1.4.0-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:3116ea29d28e564a4c9cf4d57bea4869f197f03efca7c5d5aecaaff336b5fe77", size = 1201368, upload-time = "2026-03-10T14:33:30.911Z" },
+    { url = "https://files.pythonhosted.org/packages/69/f6/d7c9060cc087fa375f5e4f327ec07e1a876ab8e69b6b6b82e024de4c2a82/par2cmdline_turbo-1.4.0-py3-none-win_amd64.whl", hash = "sha256:b69a1bb82cae254e49c7d001be95c58fd41c6995c906fd6c6a603618f90faa08", size = 649997, upload-time = "2026-03-10T14:33:32.606Z" },
+    { url = "https://files.pythonhosted.org/packages/90/8c/5ced010e0e1439d1c38f52a02a61e6e697f1734d1cd3b479ca55544fdf60/par2cmdline_turbo-1.4.0-py3-none-win_arm64.whl", hash = "sha256:3f9bc004db5ddf6a1375513b2802ab7edb1464864c30d240ed1d37ee3b5f4a2a", size = 458844, upload-time = "2026-03-10T14:33:34.66Z" },
 ]
 
 [[package]]
